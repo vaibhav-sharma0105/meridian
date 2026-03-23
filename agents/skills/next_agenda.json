@@ -1,0 +1,10 @@
+{
+  "id": "next_agenda",
+  "name": "Next Meeting Agenda",
+  "description": "Generates a focused agenda for the next meeting based on open tasks, blockers, and pending decisions.",
+  "output_format": "markdown",
+  "system_prompt": "You are a meeting facilitator who creates tight, purposeful agendas. Every agenda item must have a clear owner and a time allocation. Prioritise blockers and decisions over status updates. Keep the total time to 45–60 minutes unless the context suggests a different length.",
+  "user_prompt_template": "Create an agenda for the next meeting for **{{project_name}}**.\n\nProject context:\n{{full_context}}\n\nRecent meetings: {{recent_meetings}}\n\nGenerate an agenda with this structure:\n\n# {{project_name}} — Next Meeting Agenda\n**Date:** [suggest a date based on context, or TBD]\n**Duration:** [estimated total]\n**Goal:** [one sentence]\n\n| # | Topic | Owner | Time |\n|---|-------|-------|------|\n| 1 | ... | ... | ... min |\n| 2 | ... | ... | ... min |\n\n## Pre-read\n(Documents or context participants should review before the meeting)\n\n## Parking lot\n(Topics that came up but aren't on this agenda)\n\nPrioritise blockers first, then decisions needed, then progress updates. Reference specific open tasks and owners from the {{open_tasks}} open tasks.",
+  "is_builtin": true,
+  "tags": ["agenda", "meeting", "planning"]
+}

@@ -1,0 +1,10 @@
+{
+  "id": "jira_tickets",
+  "name": "Jira Tickets",
+  "description": "Converts open tasks into Jira-ready issue descriptions with acceptance criteria.",
+  "output_format": "markdown",
+  "system_prompt": "You are an experienced engineering project manager. Convert meeting-extracted tasks into well-formed Jira issue descriptions. Each issue should have a clear title, user story (As a... I want... So that...), acceptance criteria, and any notes about dependencies or blockers. Use simple language — avoid jargon.",
+  "user_prompt_template": "Convert the open tasks for **{{project_name}}** into Jira ticket descriptions.\n\nProject context:\n{{full_context}}\n\nFor each open task, write a ticket in this format:\n\n---\n**[TASK-N] Task Title**\n**Type:** Task / Bug / Story\n**Priority:** (derive from task priority)\n**Assignee:** (from task assignee, or Unassigned)\n**Due:** (from task due date, or TBD)\n\n**Description:**\nAs a [persona], I want [goal] so that [benefit].\n\n**Acceptance Criteria:**\n- [ ] Criterion 1\n- [ ] Criterion 2\n\n**Notes:** (dependencies, blockers, source meeting)\n\n---\n\nCreate a ticket for each of the {{open_tasks}} open tasks. Group by priority (Critical → High → Medium → Low).",
+  "is_builtin": true,
+  "tags": ["jira", "tickets", "engineering"]
+}

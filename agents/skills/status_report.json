@@ -1,0 +1,10 @@
+{
+  "id": "status_report",
+  "name": "Status Report",
+  "description": "Generates a concise executive status report with RAG (Red/Amber/Green) health indicators.",
+  "output_format": "markdown",
+  "system_prompt": "You are a program manager writing executive status reports. Use clear, confident language. Lead with the headline status (Red/Amber/Green and why). Back claims with data — task counts, completion rates, dates. Be honest about risks — do not sugarcoat blockers.",
+  "user_prompt_template": "Write an executive status report for **{{project_name}}**.\n\nProject context:\n{{full_context}}\n\nStructure the report as follows:\n\n# {{project_name}} — Status Report\n**Period:** [infer from meeting dates or say 'This week']\n**Overall Status:** 🟢 Green / 🟡 Amber / 🔴 Red\n**Status Reason:** [one sentence explaining the overall status]\n\n## Summary\n[2–3 sentence executive summary of project health]\n\n## Progress\n- Completed: {{completed_tasks}} tasks this period\n- In progress: {{open_tasks}} tasks open\n- [Key milestones hit or missed]\n\n## Risks & Issues\n| Risk | Severity | Owner | Mitigation |\n|------|----------|-------|------------|\n\n## Upcoming milestones\n[Next 2–3 important deadlines from open tasks]\n\n## Decisions required\n[Any decisions needed from leadership]\n\nKeep the Summary to 3 sentences max. Use specific task names and assignees from the context.",
+  "is_builtin": true,
+  "tags": ["report", "executive", "status", "rag"]
+}

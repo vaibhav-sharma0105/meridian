@@ -1,0 +1,409 @@
+{
+  "app": {
+    "name": "Meridian",
+    "tagline": "Every minute before and after a meeting should be worth more than the meeting itself."
+  },
+  "nav": {
+    "allTasks": "All Tasks",
+    "meetings": "Meetings",
+    "notifications": "Notifications",
+    "settings": "Settings",
+    "newProject": "New Project"
+  },
+  "onboarding": {
+    "welcome": {
+      "headline": "Your meetings, finally working for you.",
+      "subline": "Meridian turns any transcript into structured tasks, project context, and AI-powered outputs — in seconds.",
+      "cta": "Get started",
+      "skip": "Skip setup"
+    },
+    "aiSetup": {
+      "title": "Connect your AI",
+      "provider": "AI Provider",
+      "baseUrl": "Base URL",
+      "apiKey": "API Key",
+      "verify": "Verify connection",
+      "verifying": "Verifying...",
+      "fetchModels": "Fetch available models",
+      "selectModel": "Select a model",
+      "ollamaToggle": "Use Ollama for document search",
+      "ollamaUrl": "Ollama URL",
+      "checkOllama": "Check Ollama status",
+      "ollamaNotDetected": "Ollama not detected. Document semantic search will use keyword search until Ollama is running.",
+      "step": "Step 2 of 4"
+    },
+    "firstProject": {
+      "title": "Create your first project",
+      "namePlaceholder": "Project name",
+      "descriptionPlaceholder": "Description (optional)",
+      "create": "Create project",
+      "step": "Step 3 of 4",
+      "color": "Color",
+      "description": "Description",
+      "name": "Project name"
+    },
+    "firstTranscript": {
+      "title": "Paste your first meeting",
+      "placeholder": "Paste a transcript, AI summary, or meeting notes here...",
+      "platform": "Platform",
+      "connectPlatform": "Or connect a platform →",
+      "extract": "Extract tasks",
+      "finish": "Finish setup",
+      "step": "Step 4 of 4",
+      "analyze": "Analyze transcript",
+      "minWords": "Minimum 50 words required",
+      "noProject": "No project selected",
+      "processing": "Processing...",
+      "success": "Tasks extracted successfully!",
+      "transcript": "Transcript",
+      "transcriptPlaceholder": "Paste transcript, notes, or AI summary here..."
+    }
+  },
+  "tasks": {
+    "title": "Tasks",
+    "new": "New task",
+    "noTasks": "No tasks yet",
+    "noTasksDesc": "Paste a meeting transcript to extract tasks automatically, or create one manually.",
+    "filters": {
+      "all": "All",
+      "open": "Open",
+      "inProgress": "In Progress",
+      "done": "Done",
+      "clearAll": "Clear all filters",
+      "search": "Search tasks..."
+    },
+    "views": {
+      "list": "List",
+      "kanban": "Kanban",
+      "table": "Table"
+    },
+    "confidence": {
+      "committed": "Committed",
+      "inferred": "Inferred",
+      "unassigned": "Unassigned"
+    },
+    "status": {
+      "open": "Open",
+      "in_progress": "In Progress",
+      "done": "Done",
+      "cancelled": "Cancelled"
+    },
+    "tags": {
+      "blocker": "Blocker",
+      "decision": "Decision",
+      "deliverable": "Deliverable",
+      "follow-up": "Follow-up",
+      "dependency": "Dependency",
+      "research": "Research",
+      "review": "Review",
+      "approval": "Approval"
+    },
+    "duplicate": "Possible duplicate",
+    "unassigned": "Unassigned",
+    "overdue": "Overdue",
+    "dueIn": "Due in {{days}} days",
+    "bulk": {
+      "selected": "{{count}} tasks selected",
+      "assignTo": "Assign to",
+      "setDueDate": "Set due date",
+      "addTag": "Add tag",
+      "moveTo": "Move to project",
+      "markDone": "Mark done",
+      "delete": "Delete"
+    },
+    "kanban": {
+      "open": "Open",
+      "in_progress": "In Progress",
+      "done": "Done"
+    },
+    "addTask": "Add task",
+    "allStatuses": "All statuses",
+    "assignee": "Assignee",
+    "clearFilters": "Clear filters",
+    "description": "Description",
+    "dueDate": "Due date",
+    "filterAssignee": "Filter by assignee",
+    "markDone": "Mark done",
+    "noProject": "No project selected",
+    "noProjectDesc": "Select a project from the sidebar to view its tasks.",
+    "priority": "Priority",
+    "searchPlaceholder": "Search tasks...",
+    "status": "Status",
+    "tags": "Tags",
+    "titlePlaceholder": "Task title"
+  },
+  "meetings": {
+    "title": "Meetings",
+    "new": "New meeting",
+    "ingest": "Paste transcript",
+    "titleLabel": "Meeting title",
+    "titlePlaceholder": "e.g. Sprint planning, Q4 review",
+    "transcriptLabel": "Transcript",
+    "platform": {
+      "manual": "Manual",
+      "zoom": "Zoom",
+      "google_meet": "Google Meet",
+      "teams": "Microsoft Teams",
+      "slack": "Slack",
+      "webex": "Webex"
+    },
+    "healthScore": "Health Score",
+    "attendees": "Attendees",
+    "extractedTasks": "Extracted Tasks",
+    "summary": "Summary",
+    "tooShort": "Transcript too short — paste the full meeting text",
+    "noTasks": "No tasks detected — the transcript may be a status update with no action items",
+    "extracting": "Extracting tasks...",
+    "noMeetings": "No meetings yet",
+    "noMeetingsDesc": "Paste a transcript to ingest your first meeting.",
+    "analyzeAndIngest": "Analyze & ingest",
+    "decisions": "Decisions",
+    "duration": "Duration (minutes)",
+    "ingestSuccess": "Meeting ingested — {{count}} tasks extracted",
+    "integrationGuide": "Integration guide",
+    "platform": "Platform",
+    "processing": "Processing transcript...",
+    "transcript": "Transcript",
+    "transcriptHint": "Paste the full transcript for best results (minimum 50 words)",
+    "transcriptPlaceholder": "Paste meeting transcript, notes, or AI-generated summary here..."
+  },
+  "documents": {
+    "title": "Documents",
+    "upload": "Upload document",
+    "addUrl": "Add URL",
+    "search": "Search documents...",
+    "noDocuments": "No documents yet",
+    "noDocumentsDesc": "Upload PDFs, docs, or paste a URL to add context to this project.",
+    "embed": "Generate embeddings for semantic search",
+    "deleteTitle": "Delete document?",
+    "deleteMessage": "This will permanently remove the document and its embeddings from this project.",
+    "browse": "Browse files",
+    "dropOrClick": "Drop a file here, or click to browse",
+    "fetch": "Fetch",
+    "file": "File",
+    "noProject": "Select a project to manage documents",
+    "noResults": "No documents match your search",
+    "pastePlaceholder": "Paste text content here...",
+    "save": "Save",
+    "searchPlaceholder": "Search documents...",
+    "text": "Paste text",
+    "titlePlaceholder": "Document title (optional)",
+    "types": {
+      "pdf": "PDF",
+      "docx": "Word Document",
+      "txt": "Text File",
+      "md": "Markdown",
+      "pptx": "Presentation",
+      "csv": "CSV",
+      "xlsx": "Excel",
+      "url": "Web Page"
+    },
+    "errors": {
+      "tooLarge": "This file is {{size}}MB — maximum is 50MB",
+      "passwordProtected": "This PDF is password-protected — please unlock it first",
+      "urlNotFound": "Could not fetch URL ({{status}})",
+      "duplicateUrl": "This URL is already in your documents — add anyway?"
+    }
+  },
+  "ai": {
+    "title": "AI Chat",
+    "placeholder": "Ask anything about this project...",
+    "inputPlaceholder": "Ask anything about this project...",
+    "noProject": "Select a project to start chatting",
+    "send": "Send",
+    "stop": "Stop generating",
+    "copy": "Copy",
+    "saveNote": "Save as note",
+    "typing": "Thinking...",
+    "clear": "Clear",
+    "emptyHint": "Ask about tasks, blockers, or generate a status update",
+    "outputTemplates": "Output templates",
+    "scope": {
+      "project": "Project: {{name}}",
+      "meeting": "Meeting",
+      "all": "All projects"
+    },
+    "templates": {
+      "2x2": "2×2 Update",
+      "jira": "Jira Ticket",
+      "agenda": "Next Agenda",
+      "status": "Status Report",
+      "freeform": "Free-form"
+    },
+    "context": {
+      "tasks": "{{count}} tasks",
+      "docs": "{{count}} docs",
+      "meetings": "{{count}} meetings"
+    },
+    "emptyProject": "Add a meeting transcript first — I'll have more to work with",
+    "offline": "Offline — AI features unavailable. Local data still accessible.",
+    "charCount": "{{count}}/4000",
+    "charWarning": "Approaching character limit"
+  },
+  "analytics": {
+    "title": "Analytics",
+    "healthScore": "Meeting Health",
+    "velocity": "Project Velocity",
+    "followThrough": "Follow-through Rate",
+    "activeAssignees": "Active Assignees",
+    "thisWeek": "tasks this week",
+    "vsLastWeek": "vs last week",
+    "thisMonth": "this month",
+    "completionRate": "completion rate",
+    "velocityChart": "Task Velocity (last 8 weeks)",
+    "workloadHeatmap": "Assignee Workload",
+    "healthHistory": "Meeting Health History",
+    "followThroughTimeline": "Follow-through Timeline",
+    "noData": "Not enough data yet",
+    "avgMeetingHealth": "Avg Meeting Health",
+    "completed": "Completed",
+    "done": "Done",
+    "inProgress": "In Progress",
+    "meetings": "Meetings",
+    "noProject": "Select a project to view analytics",
+    "remaining": "Remaining",
+    "tasksCompleted": "Tasks completed",
+    "totalTasks": "Total tasks",
+    "workload": "Workload"
+  },
+  "settings": {
+    "title": "Settings",
+    "aiSettings": "AI settings",
+    "darkMode": "Dark mode",
+    "lightMode": "Light mode",
+    "tabs": {
+      "ai": "AI & Models",
+      "integrations": "Integrations",
+      "notifications": "Notifications",
+      "appearance": "Appearance",
+      "data": "Data",
+      "about": "About"
+    },
+    "theme": {
+      "label": "Theme",
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    },
+    "language": "Language",
+    "notifications": {
+      "desktop": "Desktop notifications",
+      "emailDigest": "Email digest",
+      "emailAddress": "Email address",
+      "warningDays": "Warn days before due"
+    },
+    "data": {
+      "exportAll": "Export all data",
+      "importData": "Import data",
+      "backupNow": "Backup now",
+      "backupHistory": "Backup history",
+      "backupSuccess": "Database backed up successfully"
+    },
+    "about": {
+      "version": "Version",
+      "checkUpdates": "Check for updates",
+      "changelog": "Changelog",
+      "upToDate": "Meridian is up to date",
+      "updateAvailable": "Update available: v{{version}}"
+    },
+    "ai": {
+      "provider": "Provider",
+      "baseUrl": "Base URL",
+      "apiKey": "API Key (stored in OS keychain)",
+      "model": "Model",
+      "save": "Save & Activate",
+      "verify": "Verify connection",
+      "ollamaSection": "Ollama (Local Document Search)",
+      "ollamaUrl": "Ollama URL",
+      "ollamaModel": "Embedding model"
+    }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "markAllRead": "Mark all read",
+    "empty": "No notifications",
+    "taskDue": "Due in {{days}} days",
+    "taskOverdue": "Overdue by {{days}} days"
+  },
+  "integrations": {
+    "title": "Integrations",
+    "zoom": "Zoom",
+    "googleMeet": "Google Meet",
+    "teams": "Microsoft Teams",
+    "markConfigured": "Mark as configured",
+    "testConnection": "Test connection",
+    "comingSoon": "Coming in v0.2",
+    "copyGuideLink": "Copy guide link"
+  },
+  "export": {
+    "title": "Export data",
+    "description": "Export your project data as a JSON file for backup or migration.",
+    "export": "Export"
+  },
+  "import": {
+    "title": "Import data",
+    "description": "Import a previously exported Meridian JSON file.",
+    "browse": "Browse",
+    "import": "Import",
+    "noFile": "No file selected"
+  },
+  "projects": {
+    "archive": "Archive project",
+    "archiveConfirmMessage": "This will archive the project. Tasks and meetings will be preserved.",
+    "archiveConfirmTitle": "Archive {{name}}?",
+    "color": "Color",
+    "create": "Create project",
+    "description": "Description",
+    "name": "Project name",
+    "namePlaceholder": "e.g. Q1 Launch, Product Redesign",
+    "settings": "Project settings"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "add": "Add",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "update": "Update",
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "skip": "Skip",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "confirm": "Confirm",
+    "search": "Search",
+    "noResults": "No results",
+    "saved": "Saved",
+    "saveFailed": "Save failed — click to retry",
+    "confirm_delete": "Are you sure you want to delete this?",
+    "yes": "Yes",
+    "no": "No",
+    "optional": "Optional",
+    "required": "Required",
+    "copyLink": "Copy link",
+    "copied": "Copied!"
+  },
+  "commandPalette": {
+    "placeholder": "Type a command or search...",
+    "navigation": "Navigation",
+    "actions": "Actions",
+    "ai": "AI",
+    "recent": "Recent",
+    "noResults": "No results — try a different keyword",
+    "projects": "Projects",
+    "goToProject": "Go to {{name}}",
+    "goToAllTasks": "Go to All Tasks",
+    "openSettings": "Open Settings",
+    "openNotifications": "Open Notifications",
+    "newProject": "New Project",
+    "pasteTranscript": "Paste new transcript",
+    "newTask": "New task in {{project}}",
+    "exportProject": "Export current project",
+    "generate2x2": "Generate 2×2 update",
+    "generateAgenda": "Generate next agenda",
+    "askAI": "Ask AI about {{project}}"
+  }
+}

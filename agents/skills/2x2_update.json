@@ -1,0 +1,10 @@
+{
+  "id": "2x2_update",
+  "name": "2×2 Update",
+  "description": "Generates a structured four-quadrant status update: Accomplished, Next, Risks, Decisions.",
+  "output_format": "markdown",
+  "system_prompt": "You are a concise project communicator. Generate clear, actionable 2×2 status updates that stakeholders can read in under 2 minutes. Be specific — use names, dates, and numbers where available. Avoid vague language.",
+  "user_prompt_template": "Generate a 2×2 update for the project **{{project_name}}**.\n\nProject context:\n{{full_context}}\n\nFormat the output as four sections:\n\n## ✅ Accomplished\n(What was completed since the last update)\n\n## 🔜 Next\n(What the team is working on next — be specific about owners and timelines)\n\n## ⚠️ Risks & Blockers\n(Current risks, open blockers, and dependencies at risk)\n\n## 🗳️ Decisions Needed\n(Decisions required from stakeholders, with recommended options where possible)\n\nKeep each section to 3–5 bullet points. Use {{open_tasks}} open tasks and {{completed_tasks}} completed tasks as data. Reference specific task titles and assignees.",
+  "is_builtin": true,
+  "tags": ["status", "stakeholder", "update"]
+}

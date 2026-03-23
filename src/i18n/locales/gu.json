@@ -1,0 +1,325 @@
+{
+  "app": {
+    "name": "Meridian",
+    "tagline": "મીટિંગ પહેલા અને પછીની દરેક મિનિટ, મીટિંગ કરતા વધુ કિંમતી હોવી જોઈએ."
+  },
+  "nav": {
+    "allTasks": "બધા કાર્ય",
+    "meetings": "મીટિંગ",
+    "notifications": "સૂચનાઓ",
+    "settings": "સેટિંગ્સ",
+    "newProject": "નવો પ્રોજેક્ટ"
+  },
+  "onboarding": {
+    "welcome": {
+      "headline": "તમારી મીટિંગ, આખરે તમારા માટે કામ કરે છે.",
+      "subline": "Meridian કોઈ પણ ટ્રાન્સ્ક્રિપ્ટને સ્ટ્રક્ચર્ડ કાર્ય, પ્રોજેક્ટ સંદર્ભ અને AI-સંચાલિત આઉટપુટમાં ફેરવે છે — સેકન્ડોમાં.",
+      "cta": "શરૂ કરો",
+      "skip": "સેટઅપ છોડો"
+    },
+    "aiSetup": {
+      "title": "તમારું AI જોડો",
+      "provider": "AI પ્રદાતા",
+      "baseUrl": "બેઝ URL",
+      "apiKey": "API કી",
+      "verify": "કનેક્શન ચકાસો",
+      "verifying": "ચકાસી રહ્યા છે...",
+      "fetchModels": "ઉપલબ્ધ મોડલ મેળવો",
+      "selectModel": "એક મોડલ પસંદ કરો",
+      "ollamaToggle": "દસ્તાવેજ શોધ માટે Ollama વાપરો",
+      "ollamaUrl": "Ollama URL",
+      "checkOllama": "Ollama સ્થિતિ ચકાસો",
+      "ollamaNotDetected": "Ollama મળ્યું નહિ. Ollama ચાલુ ન થાય ત્યાં સુધી કીવર્ડ શોધ વપરાશે.",
+      "step": "પગલું 2 / 4"
+    },
+    "firstProject": {
+      "title": "તમારો પ્રથમ પ્રોજેક્ટ બનાવો",
+      "namePlaceholder": "પ્રોજેક્ટ નામ",
+      "descriptionPlaceholder": "વર્ણન (વૈકલ્પિક)",
+      "create": "પ્રોજેક્ટ બનાવો",
+      "step": "પગલું 3 / 4"
+    },
+    "firstTranscript": {
+      "title": "તમારી પ્રથમ મીટિંગ પેસ્ટ કરો",
+      "placeholder": "ટ્રાન્સ્ક્રિપ્ટ, AI સારાંશ અથવા મીટિંગ નોટ્સ અહીં પેસ્ટ કરો...",
+      "platform": "પ્લેટફોર્મ",
+      "connectPlatform": "અથવા પ્લેટફોર્મ કનેક્ટ કરો →",
+      "extract": "કાર્ય કાઢો",
+      "finish": "સેટઅપ પૂર્ણ કરો",
+      "step": "પગલું 4 / 4"
+    }
+  },
+  "tasks": {
+    "title": "કાર્ય",
+    "new": "નવું કાર્ય",
+    "noTasks": "હજી કોઈ કાર્ય નથી",
+    "noTasksDesc": "કાર્ય આપોઆપ કાઢવા માટે મીટિંગ ટ્રાન્સ્ક્રિપ્ટ પેસ્ટ કરો.",
+    "filters": {
+      "all": "બધા",
+      "open": "ખુલ્લા",
+      "inProgress": "ચાલુ",
+      "done": "પૂર્ણ",
+      "clearAll": "બધા ફિલ્ટર સાફ કરો",
+      "search": "કાર્ય શોધો..."
+    },
+    "views": {
+      "list": "યાદી",
+      "kanban": "કાન્બાન",
+      "table": "કોષ્ટક"
+    },
+    "confidence": {
+      "committed": "પ્રતિબદ્ધ",
+      "inferred": "અનુમાનિત",
+      "unassigned": "અસાઇન નથી"
+    },
+    "status": {
+      "open": "ખુલ્લું",
+      "in_progress": "ચાલુ",
+      "done": "પૂર્ણ",
+      "cancelled": "રદ"
+    },
+    "tags": {
+      "blocker": "અવરોધ",
+      "decision": "નિર્ણય",
+      "deliverable": "ડિલિવરેબલ",
+      "follow-up": "ફોલો-અપ",
+      "dependency": "નિર્ભરતા",
+      "research": "સંશોધન",
+      "review": "સમીક્ષા",
+      "approval": "મંજૂરી"
+    },
+    "duplicate": "સંભવિત ડુપ્લિકેટ",
+    "unassigned": "અસાઇન નથી",
+    "overdue": "મોડું",
+    "dueIn": "{{days}} દિવસમાં બાકી",
+    "bulk": {
+      "selected": "{{count}} કાર્ય પસંદ",
+      "assignTo": "સોંપો",
+      "setDueDate": "બાકી તારીખ સેટ કરો",
+      "addTag": "ટૅગ ઉમેરો",
+      "moveTo": "પ્રોજેક્ટમાં ખસેડો",
+      "markDone": "પૂર્ણ ચિહ્નિત કરો",
+      "delete": "કાઢો"
+    },
+    "kanban": {
+      "open": "ખુલ્લા",
+      "in_progress": "ચાલુ",
+      "done": "પૂર્ણ"
+    }
+  },
+  "meetings": {
+    "title": "મીટિંગ",
+    "new": "નવી મીટિંગ",
+    "ingest": "ટ્રાન્સ્ક્રિપ્ટ પેસ્ટ કરો",
+    "titleLabel": "મીટિંગ શીર્ષક",
+    "titlePlaceholder": "દા.ત. સ્પ્રિન્ટ પ્લાનિંગ, Q4 સમીક્ષા",
+    "transcriptLabel": "ટ્રાન્સ્ક્રિપ્ટ",
+    "platform": {
+      "manual": "મેન્યુઅલ",
+      "zoom": "Zoom",
+      "google_meet": "Google Meet",
+      "teams": "Microsoft Teams",
+      "slack": "Slack",
+      "webex": "Webex"
+    },
+    "healthScore": "હેલ્થ સ્કોર",
+    "attendees": "હાજરી",
+    "extractedTasks": "કાઢેલ કાર્ય",
+    "summary": "સારાંશ",
+    "tooShort": "ટ્રાન્સ્ક્રિપ્ટ ઘણી ટૂંકી છે — સંપૂર્ણ ટ્રાન્સ્ક્રિપ્ટ પેસ્ટ કરો",
+    "noTasks": "કોઈ કાર્ય મળ્યા નહિ — ટ્રાન્સ્ક્રિપ્ટ સ્ટેટસ અપડેટ હોઈ શકે",
+    "extracting": "કાર્ય કાઢી રહ્યા છે...",
+    "noMeetings": "હજી કોઈ મીટિંગ નથી",
+    "noMeetingsDesc": "પ્રથમ મીટિંગ ઉમેરવા ટ્રાન્સ્ક્રિપ્ટ પેસ્ટ કરો."
+  },
+  "documents": {
+    "title": "દસ્તાવેજ",
+    "upload": "દસ્તાવેજ અપલોડ કરો",
+    "addUrl": "URL ઉમેરો",
+    "search": "દસ્તાવેજ શોધો...",
+    "noDocuments": "હજી કોઈ દસ્તાવેજ નથી",
+    "noDocumentsDesc": "PDF, ડૉક્સ અપલોડ કરો અથવા URL પેસ્ટ કરો.",
+    "embed": "સિમેન્ટિક સર્ચ માટે એમ્બેડિંગ બનાવો",
+    "deleteTitle": "દસ્તાવેજ કાઢી નાખો?",
+    "deleteMessage": "આ દસ્તાવેજ અને તેની એમ્બેડિંગ કાયમ માટે દૂર કરશે.",
+    "types": {
+      "pdf": "PDF",
+      "docx": "Word દસ્તાવેજ",
+      "txt": "ટેક્સ્ટ ફાઇલ",
+      "md": "Markdown",
+      "pptx": "પ્રેઝન્ટેશન",
+      "csv": "CSV",
+      "xlsx": "Excel",
+      "url": "વેબ પેજ"
+    },
+    "errors": {
+      "tooLarge": "આ ફાઇલ {{size}}MB છે — મહત્તમ 50MB",
+      "passwordProtected": "આ PDF પાસવર્ડ સુરક્ષિત છે — પ્રથમ અનલૉક કરો",
+      "urlNotFound": "URL મળ્યો નહિ ({{status}})",
+      "duplicateUrl": "આ URL પહેલેથી તમારા દસ્તાવેજોમાં છે — છતાં ઉમેરો?"
+    }
+  },
+  "ai": {
+    "title": "AI ચેટ",
+    "placeholder": "આ પ્રોજેક્ટ વિશે કંઈ પૂછો...",
+    "inputPlaceholder": "આ પ્રોજેક્ટ વિશે કંઈ પૂછો...",
+    "noProject": "ચેટ શરૂ કરવા માટે પ્રોજેક્ટ પસંદ કરો",
+    "send": "મોકલો",
+    "stop": "ઉત્પન્ન કરવાનું બંધ કરો",
+    "copy": "નકલ",
+    "saveNote": "નોટ તરીકે સાચવો",
+    "typing": "વિચારી રહ્યો છું...",
+    "clear": "સાફ કરો",
+    "emptyHint": "કાર્યો, અવરોધો વિશે પૂછો અથવા સ્ટેટસ અપડેટ બનાવો",
+    "outputTemplates": "આઉટપુટ ટેમ્પ્લેટ",
+    "scope": {
+      "project": "પ્રોજેક્ટ: {{name}}",
+      "meeting": "મીટિંગ",
+      "all": "બધા પ્રોજેક્ટ"
+    },
+    "templates": {
+      "2x2": "2×2 અપડેટ",
+      "jira": "Jira ટિકિટ",
+      "agenda": "આગળનો એજન્ડા",
+      "status": "સ્ટેટસ રિપોર્ટ",
+      "freeform": "ફ્રી-ફોર્મ"
+    },
+    "context": {
+      "tasks": "{{count}} કાર્ય",
+      "docs": "{{count}} દસ્તાવેજ",
+      "meetings": "{{count}} મીટિંગ"
+    },
+    "emptyProject": "પ્રથમ મીટિંગ ટ્રાન્સ્ક્રિપ્ટ ઉમેરો — પછી હું વધુ સારી મદદ કરી શકીશ",
+    "offline": "ઓફલાઇન — AI સુવિધાઓ અનુપલબ્ધ. સ્થાનિક ડેટા હજી ઉપલબ્ધ છે.",
+    "charCount": "{{count}}/4000",
+    "charWarning": "અક્ષર મર્યાદાની નજીક"
+  },
+  "analytics": {
+    "title": "વિશ્લેષણ",
+    "healthScore": "મીટિંગ આરોગ્ય",
+    "velocity": "પ્રોજેક્ટ ઝડપ",
+    "followThrough": "ફોલો-થ્રૂ દર",
+    "activeAssignees": "સક્રિય અસાઇની",
+    "thisWeek": "આ સપ્તાહ",
+    "vsLastWeek": "ગત સપ્તાહ કરતા",
+    "thisMonth": "આ મહિને",
+    "completionRate": "પૂર્ણ થવાનો દર",
+    "velocityChart": "કાર્ય ઝડપ (છેલ્લા 8 સપ્તાહ)",
+    "workloadHeatmap": "અસાઇની વર્કલોડ",
+    "healthHistory": "મીટિંગ હેલ્થ ઇતિહાસ",
+    "followThroughTimeline": "ફોલો-થ્રૂ ટાઇમલાઇન",
+    "noData": "હજી પૂરતો ડેટા નથી"
+  },
+  "settings": {
+    "title": "સેટિંગ્સ",
+    "tabs": {
+      "ai": "AI અને મૉડલ",
+      "integrations": "એકીકરણ",
+      "notifications": "સૂચનાઓ",
+      "appearance": "દેખાવ",
+      "data": "ડેટા",
+      "about": "વિશે"
+    },
+    "theme": {
+      "label": "થીમ",
+      "light": "પ્રકાશ",
+      "dark": "અંધારો",
+      "system": "સિસ્ટમ"
+    },
+    "language": "ભાષા",
+    "notifications": {
+      "desktop": "ડેસ્કટોપ સૂચનાઓ",
+      "emailDigest": "ઈમેઈલ ડાઇજેસ્ટ",
+      "emailAddress": "ઈમેઈલ સરનામું",
+      "warningDays": "બાકી તારીખ પહેલા ચેતવણી દિવસ"
+    },
+    "data": {
+      "exportAll": "બધો ડેટા નિકાસ",
+      "importData": "ડેટા આયાત",
+      "backupNow": "અત્યારે બૅકઅપ",
+      "backupHistory": "બૅકઅપ ઇતિહાસ",
+      "backupSuccess": "ડેટાબેઝ સફળતાપૂર્વક બૅકઅપ થઈ ગયો"
+    },
+    "about": {
+      "version": "સંસ્કરણ",
+      "checkUpdates": "અપડેટ ચકાસો",
+      "changelog": "ફેરફાર લૉગ",
+      "upToDate": "Meridian અદ્યતન છે",
+      "updateAvailable": "અપડેટ ઉપલબ્ધ: v{{version}}"
+    },
+    "ai": {
+      "provider": "પ્રદાતા",
+      "baseUrl": "બેઝ URL",
+      "apiKey": "API કી (OS કીચેઇનમાં)",
+      "model": "મૉડલ",
+      "save": "સાચવો અને સક્રિય કરો",
+      "verify": "કનેક્શન ચકાસો",
+      "ollamaSection": "Ollama (સ્થાનિક દસ્તાવેજ શોધ)",
+      "ollamaUrl": "Ollama URL",
+      "ollamaModel": "એમ્બેડિંગ મૉડલ"
+    }
+  },
+  "notifications": {
+    "title": "સૂચનાઓ",
+    "markAllRead": "બધા વાંચ્યા ચિહ્નિત",
+    "empty": "કોઈ સૂચના નથી",
+    "taskDue": "{{days}} દિવસમાં બાકી",
+    "taskOverdue": "{{days}} દિવસ મોડું"
+  },
+  "integrations": {
+    "title": "એકીકરણ",
+    "zoom": "Zoom",
+    "googleMeet": "Google Meet",
+    "teams": "Microsoft Teams",
+    "markConfigured": "ગોઠવ્યું ચિહ્નિત",
+    "testConnection": "કનેક્શન ટેસ્ટ",
+    "comingSoon": "v0.2 માં આવે",
+    "copyGuideLink": "ગાઇડ લિંક કૉપિ"
+  },
+  "common": {
+    "save": "સાચવો",
+    "cancel": "રદ",
+    "delete": "કાઢો",
+    "edit": "ફેરફાર",
+    "create": "બનાવો",
+    "update": "અપડેટ",
+    "close": "બંધ",
+    "back": "પાછળ",
+    "next": "આગળ",
+    "skip": "છોડો",
+    "loading": "લોડ થઈ રહ્યું છે...",
+    "error": "ભૂલ",
+    "success": "સફળ",
+    "confirm": "પુષ્ટિ",
+    "search": "શોધ",
+    "noResults": "કોઈ પરિણામ નથી",
+    "saved": "સચવાઈ ગયું",
+    "saveFailed": "સાચવવામાં નિષ્ફળ — ફરી પ્રયાસ",
+    "confirm_delete": "શું તમે ખરેખર કાઢવા માંગો છો?",
+    "yes": "હા",
+    "no": "ના",
+    "optional": "વૈકલ્પિક",
+    "required": "જરૂરી",
+    "copyLink": "લિંક કૉપિ",
+    "copied": "કૉપિ થઈ!"
+  },
+  "commandPalette": {
+    "placeholder": "કોઈ આદેશ ટાઇપ કરો અથવા શોધો...",
+    "navigation": "નેવિગેશન",
+    "actions": "ક્રિયાઓ",
+    "ai": "AI",
+    "recent": "તાજેતરના",
+    "noResults": "કોઈ પરિણામ નથી — અલગ કીવર્ડ અજમાવો",
+    "goToProject": "{{name}} પર જાઓ",
+    "goToAllTasks": "બધા કાર્ય પર જાઓ",
+    "openSettings": "સેટિંગ્સ ખોલો",
+    "openNotifications": "સૂચનાઓ ખોલો",
+    "newProject": "નવો પ્રોજેક્ટ",
+    "pasteTranscript": "નવી ટ્રાન્સ્ક્રિપ્ટ પેસ્ટ",
+    "newTask": "{{project}} માં નવું કાર્ય",
+    "exportProject": "વર્તમાન પ્રોજેક્ટ નિકાસ",
+    "generate2x2": "2×2 અપડેટ બનાવો",
+    "generateAgenda": "આગળનો એજન્ડા બનાવો",
+    "askAI": "{{project}} વિશે AI ને પૂછો"
+  }
+}

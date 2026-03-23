@@ -1,0 +1,37 @@
+[package]
+name = "meridian"
+version = "0.1.0"
+description = "Meridian - AI-powered meeting intelligence"
+authors = ["Meridian"]
+edition = "2021"
+
+[lib]
+name = "meridian_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-notification = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-shell = "2"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.31", features = ["bundled"] }
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+keyring = "2"
+anyhow = "1"
+thiserror = "1"
+zip = "0.6"
+dirs-next = "2"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
