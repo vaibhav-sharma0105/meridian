@@ -1,5 +1,6 @@
 pub mod ai;
 pub mod commands;
+pub mod connectors;
 pub mod db;
 pub mod models;
 pub mod utils;
@@ -78,6 +79,17 @@ pub fn run() {
             // Updater
             commands::updater::check_for_updates,
             commands::updater::backup_database,
+            // Connections
+            commands::connections::connect_zoom,
+            commands::connections::connect_gmail,
+            commands::connections::get_connection,
+            commands::connections::disconnect_provider,
+            commands::connections::sync_connections,
+            commands::connections::get_pending_imports,
+            commands::connections::count_pending_imports,
+            commands::connections::approve_import,
+            commands::connections::dismiss_import,
+            commands::connections::open_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

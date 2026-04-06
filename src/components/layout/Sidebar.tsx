@@ -1,15 +1,18 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  Bell, Settings, Plus, LayoutList, CalendarDays,
-  Sun, Moon, Monitor, ChevronRight,
+  Bell, Settings, Settings2, Plus, LayoutList, CalendarDays,
+  Sun, Moon, Monitor, ChevronRight, Link2,
 } from "lucide-react";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useNotificationStore } from "@/stores/notificationStore";
 import { useProjects } from "@/hooks/useProjects";
+import { usePendingImports } from "@/hooks/usePendingImports";
 import ProjectCreate from "@/components/projects/ProjectCreate";
+import ProjectSettings from "@/components/projects/ProjectSettings";
 import { setAppSetting } from "@/lib/tauri";
+import type { Project } from "@/lib/tauri";
 
 // Meridian Logo SVG
 function MeridianLogo() {
@@ -28,7 +31,9 @@ export default function Sidebar() {
   const { activeProjectId, setActiveProject } = useProjectStore();
   const { theme, setTheme, setNotificationCenterOpen, setSettingsOpen, activeView, setActiveView } = useUIStore();
   const { unreadCount } = useNotificationStore();
+  const { pendingCount } = usePendingImports();
   const [showCreateProject, setShowCreateProject] = useState(false);
+  const [settingsProject, setSettingsProject] = useState<Project | null>(null);
 
   const cycleTheme = async () => {
     const next = theme === "light" ? "dark" : theme === "dark" ? "system" : "light";
@@ -60,14 +65,15 @@ export default function Sidebar() {
       {/* Project List */}
       <div className="flex-1 overflow-y-auto px-2 py-1">
         {projects.map((project) => (
-          <button
+          <div
             key={project.id}
-            onClick={() => { setActiveProject(project.id); setActiveView("tasks"); }}
-            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors group ${
+            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors group cursor-pointer ${
               activeProjectId === project.id
                 ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300"
                 : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
             }`}
+            onClick={() => { setActiveProject(project.id); setActiveView("tasks"); }}
+            onContextMenu={(e) => { e.preventDefault(); setSettingsProject(project); }}
           >
             <div
               className="w-2.5 h-2.5 rounded-full flex-shrink-0"
@@ -83,7 +89,14 @@ export default function Sidebar() {
                 {project.open_task_count}
               </span>
             )}
-          </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setSettingsProject(project); }}
+              className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-opacity flex-shrink-0"
+              title={t("projects.settings")}
+            >
+              <Settings2 className="w-3.5 h-3.5 text-zinc-400" />
+            </button>
+          </div>
         ))}
 
         {projects.length === 0 && (
@@ -125,18 +138,27 @@ export default function Sidebar() {
         >
           <div className="relative">
             <Bell className="w-4 h-4" />
-            {unreadCount > 0 && (
+            {(unreadCount + pendingCount) > 0 && (
               <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center">
-                {unreadCount > 9 ? "9+" : unreadCount}
+                {(unreadCount + pendingCount) > 9 ? "9+" : unreadCount + pendingCount}
               </span>
             )}
           </div>
           {t("nav.notifications")}
         </button>
 
+        {/* Connections */}
+        <button
+          onClick={() => setSettingsOpen(true, "connections")}
+          className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+        >
+          <Link2 className="w-4 h-4" />
+          Connections
+        </button>
+
         {/* Settings */}
         <button
-          onClick={() => setSettingsOpen(true)}
+          onClick={() => setSettingsOpen(true, "ai")}
           className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
         >
           <Settings className="w-4 h-4" />
@@ -161,6 +183,13 @@ export default function Sidebar() {
       {/* Modals */}
       {showCreateProject && (
         <ProjectCreate onClose={() => setShowCreateProject(false)} />
+      )}
+      {settingsProject && (
+        <ProjectSettings
+          project={settingsProject}
+          open={true}
+          onClose={() => setSettingsProject(null)}
+        />
       )}
     </div>
   );

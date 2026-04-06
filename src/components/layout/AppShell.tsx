@@ -9,15 +9,18 @@ import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import UpdateBanner from "@/components/shared/UpdateBanner";
 import NotificationCenter from "@/components/notifications/NotificationCenter";
 import AISettings from "@/components/ai/AISettings";
+import ConnectionsSettings from "@/components/connections/ConnectionsSettings";
 import { getNotifications } from "@/lib/tauri";
 import { useNotificationStore } from "@/stores/notificationStore";
+import { useSync } from "@/hooks/useSync";
 
 export default function AppShell() {
-  const { sidebarOpen, rightPanelOpen, notificationCenterOpen, settingsOpen, setNotificationCenterOpen, setSettingsOpen } = useUIStore();
+  const { sidebarOpen, rightPanelOpen, notificationCenterOpen, settingsOpen, settingsTab, setNotificationCenterOpen, setSettingsOpen } = useUIStore();
   const { fetchProjects } = useProjectStore();
   const { setNotifications } = useNotificationStore();
 
   useKeyboardShortcuts();
+  const { runSync, isSyncing } = useSync();
 
   useEffect(() => {
     fetchProjects();
@@ -51,7 +54,8 @@ export default function AppShell() {
 
       <CommandPalette />
       <NotificationCenter open={notificationCenterOpen} onClose={() => setNotificationCenterOpen(false)} />
-      <AISettings open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <AISettings open={settingsOpen && settingsTab !== "connections"} onClose={() => setSettingsOpen(false)} />
+      <ConnectionsSettings open={settingsOpen && settingsTab === "connections"} onClose={() => setSettingsOpen(false)} runSync={runSync} isSyncing={isSyncing} />
     </div>
   );
 }

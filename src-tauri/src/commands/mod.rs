@@ -1,4 +1,5 @@
 pub mod ai;
+pub mod connections;
 pub mod documents;
 pub mod export;
 pub mod import;

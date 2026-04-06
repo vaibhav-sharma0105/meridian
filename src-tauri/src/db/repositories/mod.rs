@@ -1,4 +1,5 @@
 pub mod ai_settings;
+pub mod connections;
 pub mod documents;
 pub mod meetings;
 pub mod notifications;

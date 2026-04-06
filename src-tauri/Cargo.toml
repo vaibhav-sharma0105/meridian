@@ -32,6 +32,10 @@ anyhow = "1"
 thiserror = "1"
 zip = "0.6"
 dirs-next = "2"
+sha2 = "0.10"
+rand = "0.8"
+base64 = "0.22"
+urlencoding = "2"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

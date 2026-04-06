@@ -101,6 +101,7 @@ export interface UpdateTaskInput {
   kanban_column?: string;
   kanban_order?: number;
   notes?: string;
+  meeting_id?: string | null;
 }
 
 export interface TaskFilters {
@@ -464,3 +465,68 @@ export const onEmbedProgress = (
     (event) => callback(event.payload)
   );
 };
+
+// ─── Connections ──────────────────────────────────────────────────────────────
+
+export interface Connection {
+  id: string;
+  provider: "zoom" | "gmail";
+  account_email: string | null;
+  scopes: string | null;
+  token_expires_at: string | null;
+  last_sync_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PendingImport {
+  id: string;
+  provider: "zoom" | "gmail";
+  external_meeting_id: string | null;
+  title: string;
+  meeting_date: string | null;
+  duration_minutes: number | null;
+  attendees: string | null;
+  summary_preview: string | null;
+  summary_full: string | null;
+  transcript_available: boolean;
+  transcript_content: string | null;
+  zoom_join_url: string | null;
+  source_email_id: string | null;
+  status: "pending" | "imported" | "dismissed";
+  imported_meeting_id: string | null;
+  project_id: string | null;
+  created_at: string;
+}
+
+export interface ImportApproval {
+  pending_import_id: string;
+  project_id: string;
+  import_type: "summary" | "transcript";
+}
+
+export interface SyncResult {
+  new_imports: number;
+  errors: string[];
+}
+
+export const connectZoom = () => invoke<Connection>("connect_zoom");
+export const connectGmail = () => invoke<Connection>("connect_gmail");
+export const getConnection = (provider: string) =>
+  invoke<Connection | null>("get_connection", { provider });
+export const disconnectProvider = (provider: string) =>
+  invoke<void>("disconnect_provider", { provider });
+export const syncConnections = () => invoke<SyncResult>("sync_connections");
+export const getPendingImports = () =>
+  invoke<PendingImport[]>("get_pending_imports");
+export const countPendingImports = () =>
+  invoke<number>("count_pending_imports");
+export const approveImport = (input: ImportApproval) =>
+  invoke<IngestMeetingResult>("approve_import", { input });
+export const dismissImport = (pendingImportId: string) =>
+  invoke<void>("dismiss_import", { pendingImportId });
+
+export const onSyncComplete = (callback: (data: SyncResult) => void) =>
+  listen<SyncResult>("sync_complete", (event) => callback(event.payload));
+
+export const openUrl = (url: string) => invoke<void>("open_url", { url });

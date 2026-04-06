@@ -1,6 +1,9 @@
 import { useTranslation } from "react-i18next";
 import { X, Bell, CheckCheck } from "lucide-react";
 import { useNotificationStore } from "@/stores/notificationStore";
+import { useProjectStore } from "@/stores/projectStore";
+import { usePendingImports } from "@/hooks/usePendingImports";
+import PendingImportCard from "./PendingImportCard";
 import { format } from "date-fns";
 
 interface Props {
@@ -11,6 +14,8 @@ interface Props {
 export default function NotificationCenter({ open, onClose }: Props) {
   const { t } = useTranslation();
   const { notifications, markAllRead, dismiss } = useNotificationStore();
+  const { pendingImports, approveImport, dismissImport } = usePendingImports();
+  const { projects } = useProjectStore();
 
   if (!open) return null;
 
@@ -40,6 +45,35 @@ export default function NotificationCenter({ open, onClose }: Props) {
             </button>
           </div>
         </div>
+
+        {/* ── Pending imports section ── */}
+        {pendingImports.length > 0 && (
+          <div className="border-b border-zinc-200 dark:border-zinc-800">
+            <div className="px-4 py-2 bg-indigo-50 dark:bg-indigo-900/20">
+              <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide">
+                {pendingImports.length} New Meeting
+                {pendingImports.length > 1 ? "s" : ""} Found
+              </span>
+            </div>
+            {pendingImports.map((pi) => (
+              <PendingImportCard
+                key={pi.id}
+                import={pi}
+                projects={projects}
+                onApprove={async (id, projectId, type) => {
+                  await approveImport({
+                    pending_import_id: id,
+                    project_id: projectId,
+                    import_type: type,
+                  });
+                }}
+                onDismiss={async (id) => {
+                  await dismissImport(id);
+                }}
+              />
+            ))}
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto">
           {notifications.length === 0 ? (
