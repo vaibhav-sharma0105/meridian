@@ -197,7 +197,7 @@ export default function AISettings({ open, onClose }: Props) {
           {/* Verify button */}
           <button
             onClick={handleVerify}
-            disabled={verifyState === "loading" || (!apiKey && showApiKey)}
+            disabled={verifyState === "loading" || (!apiKey && !["ollama", "litellm"].includes(provider))}
             className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg text-sm font-medium disabled:opacity-50"
           >
             {verifyState === "loading" && <Loader className="w-4 h-4 animate-spin" />}

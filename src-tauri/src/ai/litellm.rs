@@ -112,21 +112,29 @@ impl LiteLLMClient {
     }
 
     fn parse_error_message(status: u16, body: &str) -> String {
+        // Always try to extract the actual error message from the response body first
+        if let Ok(json) = serde_json::from_str::<Value>(body) {
+            if let Some(msg) = json["error"]["message"].as_str() {
+                if !msg.is_empty() {
+                    return msg.to_string();
+                }
+            }
+            if let Some(msg) = json["error"].as_str() {
+                if !msg.is_empty() {
+                    return msg.to_string();
+                }
+            }
+        }
+
+        // Fall back to generic messages by status code
         match status {
+            400 => format!("Bad request — check your model ID and parameters (HTTP {})", status),
             401 => "Invalid API key — check your credentials in Settings".to_string(),
             403 => "Access forbidden — your API key may not have permission for this model".to_string(),
             404 => "Model not found — verify the model ID in Settings".to_string(),
             429 => "Rate limited — too many requests, try again in a moment".to_string(),
             500..=599 => "AI server error — the provider is experiencing issues".to_string(),
-            _ => {
-                // Try to extract error message from body
-                if let Ok(json) = serde_json::from_str::<Value>(body) {
-                    if let Some(msg) = json["error"]["message"].as_str() {
-                        return msg.to_string();
-                    }
-                }
-                format!("AI request failed with status {}", status)
-            }
+            _ => format!("AI request failed with status {}", status),
         }
     }
 }

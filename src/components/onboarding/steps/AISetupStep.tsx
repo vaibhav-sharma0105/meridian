@@ -33,15 +33,8 @@ export default function AISetupStep({ onNext, onSkip }: Props) {
     setVerifyState("loading");
     setVerifyError("");
     try {
-      const result = await verifyAiConnection({
-        provider,
-        baseUrl: effectiveUrl,
-        apiKey,
-        modelId: modelId || undefined,
-      });
-      if (result.success) {
-        setVerifyState("ok");
-        // Fetch models
+      // Fetch models first so we can auto-select one if needed
+      try {
         const mods = await fetchAvailableModels({
           provider,
           baseUrl: effectiveUrl,
@@ -49,6 +42,24 @@ export default function AISetupStep({ onNext, onSkip }: Props) {
           apiKey,
         });
         setModels(mods);
+        // Auto-select first model if none selected
+        if (!modelId && mods.length > 0) {
+          setModelId(mods[0].id);
+        }
+      } catch {
+        // Model fetch failed — proceed with verify anyway
+      }
+
+      // Use the selected model (or the auto-selected one)
+      const currentModelId = modelId || (models.length > 0 ? models[0]?.id : undefined);
+      const result = await verifyAiConnection({
+        provider,
+        baseUrl: effectiveUrl,
+        apiKey,
+        modelId: currentModelId || undefined,
+      });
+      if (result.success) {
+        setVerifyState("ok");
       } else {
         setVerifyState("error");
         setVerifyError(result.error || "Connection failed");
@@ -144,7 +155,7 @@ export default function AISetupStep({ onNext, onSkip }: Props) {
         {/* Verify button */}
         <button
           onClick={handleVerify}
-          disabled={verifyState === "loading" || (!apiKey && showApiKey)}
+          disabled={verifyState === "loading" || (!apiKey && !["ollama", "litellm"].includes(provider))}
           className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors hover:bg-zinc-700"
         >
           {verifyState === "loading" && <Loader className="w-4 h-4 animate-spin" />}
@@ -157,12 +168,12 @@ export default function AISetupStep({ onNext, onSkip }: Props) {
           <p className="text-sm text-red-600">{verifyError}</p>
         )}
 
-        {/* Model picker */}
-        {models.length > 0 && (
-          <div>
-            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
-              {t("onboarding.aiSetup.selectModel")}
-            </label>
+        {/* Model picker — always visible so users can type model ID for LiteLLM */}
+        <div>
+          <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+            {t("onboarding.aiSetup.selectModel")} <span className="text-zinc-400 font-normal">(optional)</span>
+          </label>
+          {models.length > 0 ? (
             <select
               value={modelId}
               onChange={(e) => setModelId(e.target.value)}
@@ -173,8 +184,16 @@ export default function AISetupStep({ onNext, onSkip }: Props) {
                 <option key={m.id} value={m.id}>{m.name}</option>
               ))}
             </select>
-          </div>
-        )}
+          ) : (
+            <input
+              type="text"
+              value={modelId}
+              onChange={(e) => setModelId(e.target.value)}
+              placeholder={provider === "litellm" ? "e.g. bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0" : "Auto-detected if left blank"}
+              className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm"
+            />
+          )}
+        </div>
 
         {/* Ollama toggle */}
         <div className="border border-zinc-100 dark:border-zinc-800 rounded-lg p-3">

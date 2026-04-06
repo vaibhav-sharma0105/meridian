@@ -6,15 +6,32 @@ use crate::AppState;
 use serde_json::{json, Value};
 use tauri::{Emitter, State};
 
+/// Build a LiteLLMClient from saved AI settings. Used by other command modules.
+pub fn get_litellm_client_pub(settings: &AiSettings, api_key: &str) -> LiteLLMClient {
+    get_litellm_client(settings, api_key)
+}
+
 fn get_litellm_client(settings: &AiSettings, api_key: &str) -> LiteLLMClient {
     let base_url = settings
         .base_url
         .clone()
-        .unwrap_or_else(|| "https://api.openai.com/v1".to_string());
+        .unwrap_or_else(|| match settings.provider.as_str() {
+            "anthropic" => "https://api.anthropic.com/v1".to_string(),
+            "gemini" => "https://generativelanguage.googleapis.com/v1beta/openai".to_string(),
+            "groq" => "https://api.groq.com/openai/v1".to_string(),
+            "litellm" => "http://localhost:4000".to_string(),
+            _ => "https://api.openai.com/v1".to_string(),
+        });
     let model = settings
         .model_id
         .clone()
-        .unwrap_or_else(|| "gpt-4".to_string());
+        .filter(|m| !m.is_empty())
+        .unwrap_or_else(|| match settings.provider.as_str() {
+            "anthropic" => "claude-sonnet-4-6".to_string(),
+            "gemini" => "gemini-pro".to_string(),
+            "groq" => "llama-3.1-70b-versatile".to_string(),
+            _ => "gpt-4o-mini".to_string(),
+        });
     LiteLLMClient::new(base_url, api_key.to_string(), model)
 }
 
@@ -40,13 +57,46 @@ pub async fn verify_ai_connection(
         _ => "http://localhost:4000".to_string(),
     });
 
-    let model = model_id.unwrap_or_else(|| match provider.as_str() {
-        "openai" => "gpt-4".to_string(),
-        "anthropic" => "claude-3-5-sonnet-20241022".to_string(),
-        "gemini" => "gemini-pro".to_string(),
-        "groq" => "llama-3.1-70b-versatile".to_string(),
-        _ => "gpt-4".to_string(),
-    });
+    let has_model = model_id.as_ref().map_or(false, |m| !m.is_empty());
+
+    let model = if has_model {
+        model_id.unwrap()
+    } else {
+        // For providers without a known default, auto-detect from /models endpoint
+        let known_default = match provider.as_str() {
+            "openai" => Some("gpt-4o-mini".to_string()),
+            "anthropic" => Some("claude-sonnet-4-6".to_string()),
+            "gemini" => Some("gemini-pro".to_string()),
+            "groq" => Some("llama-3.1-70b-versatile".to_string()),
+            _ => None,
+        };
+
+        if let Some(default_model) = known_default {
+            default_model
+        } else {
+            // Auto-detect: fetch /models and use the first available one
+            let probe = LiteLLMClient::new(url.clone(), api_key.clone(), String::new());
+            match probe.get_models().await {
+                Ok(models) if !models.is_empty() => {
+                    models[0]["id"].as_str().unwrap_or("gpt-4o-mini").to_string()
+                }
+                Ok(_) => {
+                    return Ok(json!({
+                        "success": false,
+                        "error": "Connected to server but no models are available. Check your LiteLLM configuration.",
+                        "latency_ms": 0,
+                    }));
+                }
+                Err(e) => {
+                    return Ok(json!({
+                        "success": false,
+                        "error": format!("Cannot reach server or list models: {}", e),
+                        "latency_ms": 0,
+                    }));
+                }
+            }
+        }
+    };
 
     let client = LiteLLMClient::new(url, api_key, model);
 
@@ -329,6 +379,18 @@ fn search_documents_fts(
     project_id: &str,
     query: &str,
 ) -> Result<Vec<SearchResult>, String> {
+    // Sanitize query for FTS5: wrap each word in double quotes to avoid syntax errors
+    let sanitized_query: String = query
+        .split_whitespace()
+        .filter(|w| !w.is_empty())
+        .map(|w| format!("\"{}\"", w.replace('"', "")))
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    if sanitized_query.is_empty() {
+        return Ok(vec![]);
+    }
+
     let sql = "SELECT d.id, d.filename, df.content_text, COALESCE(d.title, d.filename)
                FROM documents_fts df
                JOIN documents d ON d.rowid = df.rowid
@@ -337,7 +399,7 @@ fn search_documents_fts(
 
     let mut stmt = conn.prepare(sql).map_err(|e| e.to_string())?;
     let results = stmt
-        .query_map(rusqlite::params![query, project_id], |row| {
+        .query_map(rusqlite::params![sanitized_query, project_id], |row| {
             let chunk_text: String = row.get(2)?;
             Ok(SearchResult {
                 document_id: row.get(0)?,

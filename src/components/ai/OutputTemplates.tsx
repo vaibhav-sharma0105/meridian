@@ -14,6 +14,7 @@ export default function OutputTemplates({ projectId, onOutput }: Props) {
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [expanded, setExpanded] = useState(false);
   const [generating, setGenerating] = useState<string | null>(null);
+  const [genError, setGenError] = useState<string | null>(null);
 
   const load = async () => {
     if (templates.length > 0) { setExpanded(!expanded); return; }
@@ -25,9 +26,12 @@ export default function OutputTemplates({ projectId, onOutput }: Props) {
   const handleGenerate = async (template: PromptTemplate) => {
     if (!projectId) return;
     setGenerating(template.id);
+    setGenError(null);
     try {
       const result = await generateOutput({ projectId, templateId: template.id });
       onOutput(result);
+    } catch (e) {
+      setGenError(e instanceof Error ? e.message : String(e));
     } finally {
       setGenerating(null);
     }
@@ -59,6 +63,9 @@ export default function OutputTemplates({ projectId, onOutput }: Props) {
               )}
             </button>
           ))}
+          {genError && (
+            <p className="text-xs text-red-500 px-2 py-1">{genError}</p>
+          )}
         </div>
       )}
     </div>

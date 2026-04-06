@@ -37,7 +37,9 @@ export function useAI(projectId: string | null) {
       setStreaming(true);
 
       try {
-        const history = messages.slice(-10).map((m) => ({
+        // Read latest messages from store to avoid stale closure
+        const currentMessages = useAIStore.getState().messages;
+        const history = currentMessages.slice(-10).map((m) => ({
           role: m.role,
           content: m.content,
         }));
@@ -64,7 +66,7 @@ export function useAI(projectId: string | null) {
         setStreaming(false);
       }
     },
-    [projectId, messages, addMessage, setStreaming]
+    [projectId, addMessage, setStreaming]
   );
 
   const stopStreaming = useCallback(() => {
