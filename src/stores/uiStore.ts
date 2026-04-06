@@ -36,7 +36,7 @@ interface UIStore {
 export const useUIStore = create<UIStore>((set) => ({
   theme: "system",
   language: "en",
-  viewMode: "list",
+  viewMode: "kanban",
   rightPanelOpen: true,
   sidebarOpen: true,
   activeView: "tasks",

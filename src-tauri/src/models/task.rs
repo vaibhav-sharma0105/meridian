@@ -63,6 +63,7 @@ pub struct UpdateTaskInput {
     pub kanban_column: Option<String>,
     pub kanban_order: Option<i64>,
     pub notes: Option<String>,
+    pub meeting_id: Option<Option<String>>,
 }
 
 #[derive(Debug, Deserialize, Default)]

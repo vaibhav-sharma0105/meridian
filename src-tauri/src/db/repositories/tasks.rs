@@ -262,6 +262,13 @@ pub fn update_task(conn: &Connection, input: &UpdateTaskInput) -> Result<Task, S
         idx += 1;
     }
 
+    // meeting_id uses Option<Option<String>>: outer None = skip, inner None = set NULL
+    if let Some(mid) = &input.meeting_id {
+        sets.push(format!("meeting_id = ?{}", idx));
+        bind.push(Box::new(mid.clone()));
+        idx += 1;
+    }
+
     bind.push(Box::new(input.id.clone()));
     let sql = format!(
         "UPDATE tasks SET {} WHERE id = ?{}",
@@ -296,6 +303,7 @@ pub fn bulk_update_tasks(
             kanban_column: updates.kanban_column.clone(),
             kanban_order: None,
             notes: None,
+            meeting_id: None,
         };
         update_task(conn, &input)?;
     }

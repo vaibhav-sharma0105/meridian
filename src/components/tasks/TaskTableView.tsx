@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useTasks } from "@/hooks/useTasks";
+import { useMeetings } from "@/hooks/useMeetings";
 import { useTaskStore } from "@/stores/taskStore";
 import { useUIStore } from "@/stores/uiStore";
 import { KANBAN_COLUMNS } from "@/lib/constants";
@@ -22,7 +23,9 @@ const PRIORITY_BADGE: Record<string, string> = {
 export default function TaskTableView({ projectId }: Props) {
   const { t } = useTranslation();
   const { tasks, updateTask } = useTasks(projectId);
+  const { meetings } = useMeetings(projectId);
   const { filters } = useTaskStore();
+  const meetingMap = new Map(meetings.map((m) => [m.id, m.title]));
   const { setSelectedTask } = useUIStore();
 
   const filtered = tasks.filter((task) => {
@@ -52,6 +55,7 @@ export default function TaskTableView({ projectId }: Props) {
             <th className="text-left px-3 py-2 text-xs font-semibold text-zinc-500 uppercase tracking-wide">{t("tasks.priority")}</th>
             <th className="text-left px-3 py-2 text-xs font-semibold text-zinc-500 uppercase tracking-wide">{t("tasks.assignee")}</th>
             <th className="text-left px-3 py-2 text-xs font-semibold text-zinc-500 uppercase tracking-wide">{t("tasks.dueDate")}</th>
+            <th className="text-left px-3 py-2 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Meeting</th>
             <th className="text-left px-3 py-2 text-xs font-semibold text-zinc-500 uppercase tracking-wide">AI</th>
           </tr>
         </thead>
@@ -89,6 +93,9 @@ export default function TaskTableView({ projectId }: Props) {
               <td className="px-3 py-2.5 text-zinc-600 dark:text-zinc-400 text-xs">{task.assignee ?? "—"}</td>
               <td className="px-3 py-2.5 text-zinc-600 dark:text-zinc-400 text-xs">
                 {task.due_date ? format(new Date(task.due_date), "MMM d, yyyy") : "—"}
+              </td>
+              <td className="px-3 py-2.5 text-zinc-600 dark:text-zinc-400 text-xs max-w-[150px] truncate">
+                {task.meeting_id ? (meetingMap.get(task.meeting_id) ?? "—") : "—"}
               </td>
               <td className="px-3 py-2.5">
                 {task.confidence_score !== null && task.confidence_score !== undefined ? (

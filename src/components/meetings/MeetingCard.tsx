@@ -43,7 +43,7 @@ export default function MeetingCard({ meeting, onDelete }: Props) {
           <div className="flex items-center gap-3 mt-1 flex-wrap">
             <span className="flex items-center gap-1 text-xs text-zinc-500">
               <Calendar className="w-3 h-3" />
-              {format(new Date(meeting.created_at), "MMM d, yyyy")}
+              {(() => { try { return format(new Date(meeting.created_at), "MMM d, yyyy"); } catch { return meeting.created_at; } })()}
             </span>
             {meeting.platform && (
               <span className="text-xs text-zinc-400 capitalize">{meeting.platform}</span>

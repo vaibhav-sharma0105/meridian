@@ -2,16 +2,19 @@ import { useTranslation } from "react-i18next";
 import { Search, X } from "lucide-react";
 import { useTaskStore } from "@/stores/taskStore";
 import { useProjectStore } from "@/stores/projectStore";
+import { useTasks } from "@/hooks/useTasks";
 import { KANBAN_COLUMNS } from "@/lib/constants";
 
 export default function TaskFilters() {
   const { t } = useTranslation();
-  const { filters, setFilters, tasksByProject } = useTaskStore();
+  const { filters, setFilters } = useTaskStore();
   const { activeProjectId } = useProjectStore();
+  // Fetch all tasks (no filters) to build assignee suggestions
+  const { tasks: allTasks } = useTasks(activeProjectId, {});
 
   const assignees = Array.from(
     new Set(
-      (tasksByProject[activeProjectId ?? ""] ?? [])
+      allTasks
         .map((task) => task.assignee)
         .filter((a): a is string => !!a)
     )

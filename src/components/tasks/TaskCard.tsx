@@ -1,11 +1,12 @@
 import { useTranslation } from "react-i18next";
-import { Calendar, User, Tag } from "lucide-react";
+import { Calendar, User, Tag, Video } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 import { useTaskStore } from "@/stores/taskStore";
 import TaskConfidenceBadge from "./TaskConfidenceBadge";
 import { TAG_COLORS } from "@/lib/constants";
 import { parseTags } from "@/lib/validators";
 import type { Task } from "@/lib/tauri";
+import { useMeetings } from "@/hooks/useMeetings";
 import { format } from "date-fns";
 
 interface Props {
@@ -23,7 +24,9 @@ const PRIORITY_COLORS: Record<string, string> = {
 export default function TaskCard({ task, compact = false }: Props) {
   const { setSelectedTask } = useUIStore();
   const { selectedTaskIds, toggleTaskSelection } = useTaskStore();
+  const { meetings } = useMeetings(task.project_id);
   const isSelected = selectedTaskIds.includes(task.id);
+  const linkedMeeting = task.meeting_id ? meetings.find((m) => m.id === task.meeting_id) : null;
   const tags = parseTags(task.tags);
   const priorityBorder = task.priority ? (PRIORITY_COLORS[task.priority] ?? "border-l-zinc-300") : "border-l-zinc-300";
 
@@ -67,7 +70,13 @@ export default function TaskCard({ task, compact = false }: Props) {
         {task.due_date && (
           <span className="flex items-center gap-1 text-xs text-zinc-500">
             <Calendar className="w-3 h-3" />
-            {format(new Date(task.due_date), "MMM d")}
+            {(() => { try { return format(new Date(task.due_date), "MMM d"); } catch { return task.due_date; } })()}
+          </span>
+        )}
+        {linkedMeeting && (
+          <span className="flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 max-w-[120px] truncate" title={linkedMeeting.title}>
+            <Video className="w-3 h-3 flex-shrink-0" />
+            {linkedMeeting.title}
           </span>
         )}
         {tags.slice(0, 3).map((tag) => {

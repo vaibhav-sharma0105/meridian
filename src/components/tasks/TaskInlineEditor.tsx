@@ -8,6 +8,7 @@ import { parseTags } from "@/lib/validators";
 import type { Task } from "@/lib/tauri";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { useTasks } from "@/hooks/useTasks";
+import { useMeetings } from "@/hooks/useMeetings";
 
 interface Props {
   task: Task;
@@ -16,6 +17,7 @@ interface Props {
 export default function TaskInlineEditor({ task }: Props) {
   const { t } = useTranslation();
   const { updateTask } = useTasks(task.project_id);
+  const { meetings } = useMeetings(task.project_id);
   const { setSelectedTask } = useUIStore();
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description ?? "");
@@ -24,6 +26,7 @@ export default function TaskInlineEditor({ task }: Props) {
   const [assignee, setAssignee] = useState(task.assignee ?? "");
   const [dueDate, setDueDate] = useState(task.due_date ?? "");
   const [tagsStr, setTagsStr] = useState(parseTags(task.tags).join(", "));
+  const [meetingId, setMeetingId] = useState<string | null>(task.meeting_id);
 
   useEffect(() => {
     setTitle(task.title);
@@ -33,6 +36,7 @@ export default function TaskInlineEditor({ task }: Props) {
     setAssignee(task.assignee ?? "");
     setDueDate(task.due_date ?? "");
     setTagsStr(parseTags(task.tags).join(", "));
+    setMeetingId(task.meeting_id);
   }, [task.id]);
 
   const save = async () => {
@@ -46,10 +50,11 @@ export default function TaskInlineEditor({ task }: Props) {
       assignee: assignee || undefined,
       due_date: dueDate || undefined,
       tags: tagArray,
+      meeting_id: meetingId,
     });
   };
 
-  const { saved } = useAutoSave([title, description, status, priority, assignee, dueDate, tagsStr], save);
+  const { saved } = useAutoSave([title, description, status, priority, assignee, dueDate, tagsStr, meetingId], save);
 
   return (
     <div className="space-y-3">
@@ -122,6 +127,20 @@ export default function TaskInlineEditor({ task }: Props) {
           onChange={(e) => setDueDate(e.target.value)}
           className="w-full px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50"
         />
+      </div>
+
+      <div>
+        <label className="block text-xs text-zinc-500 mb-0.5">Meeting</label>
+        <select
+          value={meetingId ?? ""}
+          onChange={(e) => setMeetingId(e.target.value || null)}
+          className="w-full px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50"
+        >
+          <option value="">None</option>
+          {meetings.map((m) => (
+            <option key={m.id} value={m.id}>{m.title}</option>
+          ))}
+        </select>
       </div>
 
       <div>
