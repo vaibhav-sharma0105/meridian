@@ -4,8 +4,11 @@ use crate::AppState;
 use serde_json::{json, Value};
 use tauri::State;
 
-#[tauri::command]
-pub async fn ingest_meeting(
+/// Core ingest logic — shared by the manual ingest command and the auto-import pipeline.
+///
+/// `enforce_min_words`: pass `true` for user-entered transcripts (manual ingest),
+/// `false` for machine-generated content like Zoom AI summaries.
+pub async fn ingest_meeting_core(
     project_id: String,
     title: String,
     platform: String,
@@ -13,12 +16,41 @@ pub async fn ingest_meeting(
     attendees: Option<String>,
     duration_minutes: Option<i32>,
     meeting_at: Option<String>,
-    state: State<'_, AppState>,
+    state: &State<'_, AppState>,
 ) -> Result<Value, String> {
-    // Validate transcript length
-    let word_count = raw_transcript.split_whitespace().count();
-    if word_count < 50 {
-        return Err("Transcript too short — paste the full meeting text (minimum 50 words)".to_string());
+    ingest_meeting_core_inner(project_id, title, platform, raw_transcript, attendees, duration_minutes, meeting_at, state, true).await
+}
+
+pub async fn ingest_meeting_core_from_connector(
+    project_id: String,
+    title: String,
+    platform: String,
+    raw_transcript: String,
+    attendees: Option<String>,
+    duration_minutes: Option<i32>,
+    meeting_at: Option<String>,
+    state: &State<'_, AppState>,
+) -> Result<Value, String> {
+    ingest_meeting_core_inner(project_id, title, platform, raw_transcript, attendees, duration_minutes, meeting_at, state, false).await
+}
+
+async fn ingest_meeting_core_inner(
+    project_id: String,
+    title: String,
+    platform: String,
+    raw_transcript: String,
+    attendees: Option<String>,
+    duration_minutes: Option<i32>,
+    meeting_at: Option<String>,
+    state: &State<'_, AppState>,
+    enforce_min_words: bool,
+) -> Result<Value, String> {
+    // Validate transcript length (skipped for auto-imported connector content)
+    if enforce_min_words {
+        let word_count = raw_transcript.split_whitespace().count();
+        if word_count < 50 {
+            return Err("Transcript too short — paste the full meeting text (minimum 50 words)".to_string());
+        }
     }
 
     let (meeting, project_info) = {
@@ -69,18 +101,7 @@ pub async fn ingest_meeting(
         .get_password()
         .unwrap_or_default();
 
-    let base_url = ai_settings
-        .base_url
-        .as_deref()
-        .unwrap_or("https://api.openai.com/v1")
-        .to_string();
-    let model_id = ai_settings
-        .model_id
-        .as_deref()
-        .unwrap_or("gpt-4o")
-        .to_string();
-
-    let litellm = crate::ai::litellm::LiteLLMClient::new(base_url, api_key, model_id);
+    let litellm = crate::commands::ai::get_litellm_client_pub(&ai_settings, &api_key);
 
     // Extract tasks
     let extraction = crate::ai::extractor::extract_tasks(
@@ -185,6 +206,20 @@ pub async fn ingest_meeting(
 }
 
 #[tauri::command]
+pub async fn ingest_meeting(
+    project_id: String,
+    title: String,
+    platform: String,
+    raw_transcript: String,
+    attendees: Option<String>,
+    duration_minutes: Option<i32>,
+    meeting_at: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    ingest_meeting_core(project_id, title, platform, raw_transcript, attendees, duration_minutes, meeting_at, &state).await
+}
+
+#[tauri::command]
 pub async fn ingest_meeting_from_file(
     project_id: String,
     file_path: String,
@@ -208,7 +243,7 @@ pub async fn ingest_meeting_from_file(
     let resolved_platform = platform.unwrap_or_else(|| "other".to_string());
 
     // Delegate to the core ingest logic
-    ingest_meeting(
+    ingest_meeting_core(
         project_id,
         resolved_title,
         resolved_platform,
@@ -216,7 +251,7 @@ pub async fn ingest_meeting_from_file(
         None,
         None,
         None,
-        state,
+        &state,
     )
     .await
 }
