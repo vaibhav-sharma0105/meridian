@@ -30,30 +30,35 @@ export default function TaskBulkActions() {
   };
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2 bg-indigo-50 dark:bg-indigo-900/20 border-b border-indigo-200 dark:border-indigo-800 text-sm">
-      <span className="font-medium text-indigo-700 dark:text-indigo-300">{count} selected</span>
+    <div className="flex items-center gap-2 px-4 py-1.5 bg-indigo-500/[0.06] dark:bg-indigo-500/10 border-b border-indigo-200/50 dark:border-indigo-800/50 animate-slide-down flex-shrink-0">
+      <span className="text-[12px] font-semibold text-indigo-600 dark:text-indigo-400 tabular-nums">
+        {count} selected
+      </span>
+
+      <div className="h-3.5 w-px bg-indigo-200 dark:bg-indigo-800 mx-1" />
 
       <button
         onClick={() => handleBulkStatus("done")}
-        className="flex items-center gap-1.5 px-3 py-1 rounded-md bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 transition-colors text-xs"
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[12px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
       >
-        <CheckSquare className="w-3.5 h-3.5" />
+        <CheckSquare className="w-3 h-3" />
         {t("tasks.markDone")}
       </button>
 
       <button
         onClick={handleBulkDelete}
-        className="flex items-center gap-1.5 px-3 py-1 rounded-md bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 transition-colors text-xs"
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[12px] font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
       >
-        <Trash2 className="w-3.5 h-3.5" />
+        <Trash2 className="w-3 h-3" />
         {t("common.delete")}
       </button>
 
       <button
         onClick={clearTaskSelection}
-        className="ml-auto p-1 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+        title="Clear selection"
+        className="ml-auto p-1 rounded text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
       >
-        <X className="w-4 h-4" />
+        <X className="w-3.5 h-3.5" />
       </button>
     </div>
   );

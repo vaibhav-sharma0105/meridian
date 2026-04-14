@@ -74,10 +74,20 @@ pub fn get_tasks_for_project(
     let mut bind_values: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(project_id.to_string())];
     let mut param_idx = 2;
 
-    if let Some(assignee) = &filters.assignee {
-        conditions.push(format!("assignee = ?{}", param_idx));
-        bind_values.push(Box::new(assignee.clone()));
-        param_idx += 1;
+    if let Some(assignee_csv) = &filters.assignee {
+        // Supports comma-separated multi-assignee filter e.g. "Alice,Bob"
+        let names: Vec<&str> = assignee_csv.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+        if !names.is_empty() {
+            let parts: Vec<String> = names.iter().map(|_| format!("assignee LIKE ?{}", {
+                let idx = param_idx;
+                param_idx += 1;
+                idx
+            })).collect();
+            conditions.push(format!("({})", parts.join(" OR ")));
+            for name in &names {
+                bind_values.push(Box::new(format!("%{}%", name)));
+            }
+        }
     }
 
     if let Some(status) = &filters.status {
@@ -86,14 +96,20 @@ pub fn get_tasks_for_project(
         param_idx += 1;
     }
 
+    if let Some(priority) = &filters.priority {
+        conditions.push(format!("priority = ?{}", param_idx));
+        bind_values.push(Box::new(priority.clone()));
+        param_idx += 1;
+    }
+
     if let Some(from) = &filters.date_from {
-        conditions.push(format!("due_date >= ?{}", param_idx));
+        conditions.push(format!("date(created_at) >= ?{}", param_idx));
         bind_values.push(Box::new(from.clone()));
         param_idx += 1;
     }
 
     if let Some(to) = &filters.date_to {
-        conditions.push(format!("due_date <= ?{}", param_idx));
+        conditions.push(format!("date(created_at) <= ?{}", param_idx));
         bind_values.push(Box::new(to.clone()));
         param_idx += 1;
     }
@@ -329,4 +345,126 @@ pub fn delete_task(conn: &Connection, id: &str) -> Result<(), String> {
     conn.execute("DELETE FROM tasks WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// Count open/in-progress tasks linked to a meeting that still live in `current_project_id`.
+/// These are exactly the tasks that will be moved when the meeting moves.
+/// Fetch tasks across ALL projects, applying optional filters.
+/// Used by the "All Tasks" cross-project view.
+pub fn get_all_tasks(conn: &Connection, filters: &TaskFilters) -> Result<Vec<Task>, String> {
+    let mut conditions: Vec<String> = vec!["is_duplicate = 0".to_string()];
+    let mut bind_values: Vec<Box<dyn rusqlite::ToSql>> = vec![];
+    let mut param_idx = 1usize;
+
+    if let Some(assignee_csv) = &filters.assignee {
+        // Supports comma-separated multi-assignee filter e.g. "Alice,Bob"
+        let names: Vec<&str> = assignee_csv.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+        if !names.is_empty() {
+            let parts: Vec<String> = names.iter().map(|_| format!("assignee LIKE ?{}", {
+                let idx = param_idx;
+                param_idx += 1;
+                idx
+            })).collect();
+            conditions.push(format!("({})", parts.join(" OR ")));
+            for name in &names {
+                bind_values.push(Box::new(format!("%{}%", name)));
+            }
+        }
+    }
+
+    if let Some(status) = &filters.status {
+        conditions.push(format!("status = ?{}", param_idx));
+        bind_values.push(Box::new(status.clone()));
+        param_idx += 1;
+    }
+
+    if let Some(priority) = &filters.priority {
+        conditions.push(format!("priority = ?{}", param_idx));
+        bind_values.push(Box::new(priority.clone()));
+        param_idx += 1;
+    }
+
+    if let Some(from) = &filters.date_from {
+        conditions.push(format!("date(created_at) >= ?{}", param_idx));
+        bind_values.push(Box::new(from.clone()));
+        param_idx += 1;
+    }
+
+    if let Some(to) = &filters.date_to {
+        conditions.push(format!("date(created_at) <= ?{}", param_idx));
+        bind_values.push(Box::new(to.clone()));
+        param_idx += 1;
+    }
+
+    if let Some(q) = &filters.search_query {
+        if !q.is_empty() {
+            conditions.push(format!(
+                "(title LIKE ?{param} OR description LIKE ?{param})",
+                param = param_idx
+            ));
+            bind_values.push(Box::new(format!("%{}%", q)));
+            param_idx += 1;
+        }
+    }
+
+    let _ = param_idx; // suppress unused warning
+    let where_clause = conditions.join(" AND ");
+    let sql = format!(
+        "SELECT {} FROM tasks WHERE {} ORDER BY \
+         CASE WHEN due_date < date('now') AND status != 'done' THEN 0 ELSE 1 END, \
+         kanban_order ASC, created_at DESC",
+        TASK_COLUMNS, where_clause
+    );
+
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    let params_slice: Vec<&dyn rusqlite::ToSql> =
+        bind_values.iter().map(|v| v.as_ref()).collect();
+
+    let tasks = stmt
+        .query_map(params_slice.as_slice(), row_to_task_v2)
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(tasks)
+}
+
+pub fn count_moveable_tasks(
+    conn: &Connection,
+    meeting_id: &str,
+    current_project_id: &str,
+) -> Result<i64, String> {
+    conn.query_row(
+        "SELECT COUNT(*) FROM tasks
+         WHERE meeting_id = ?1
+           AND project_id = ?2
+           AND status IN ('open', 'in_progress')
+           AND is_duplicate = 0",
+        params![meeting_id, current_project_id],
+        |row| row.get(0),
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// Move open/in-progress tasks that are still in `from_project_id` to `to_project_id`.
+/// Skips tasks already reassigned to other projects and completed/cancelled tasks.
+/// Returns the number of rows updated.
+pub fn move_tasks_for_meeting(
+    conn: &Connection,
+    meeting_id: &str,
+    from_project_id: &str,
+    to_project_id: &str,
+) -> Result<usize, String> {
+    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let rows = conn
+        .execute(
+            "UPDATE tasks
+             SET project_id = ?1, updated_at = ?2
+             WHERE meeting_id = ?3
+               AND project_id = ?4
+               AND status IN ('open', 'in_progress')
+               AND is_duplicate = 0",
+            params![to_project_id, now, meeting_id, from_project_id],
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(rows)
 }

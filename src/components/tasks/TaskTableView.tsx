@@ -5,6 +5,7 @@ import { useTaskStore } from "@/stores/taskStore";
 import { useUIStore } from "@/stores/uiStore";
 import { KANBAN_COLUMNS } from "@/lib/constants";
 import TaskConfidenceBadge from "./TaskConfidenceBadge";
+import { parseAssignees } from "./AssigneeChipInput";
 import { format } from "date-fns";
 import EmptyState from "@/components/shared/EmptyState";
 import { Table } from "lucide-react";
@@ -31,11 +32,17 @@ export default function TaskTableView({ projectId }: Props) {
   const filtered = tasks.filter((task) => {
     if (filters.search_query && !task.title.toLowerCase().includes(filters.search_query.toLowerCase())) return false;
     if (filters.status && task.status !== filters.status) return false;
-    if (filters.assignee && task.assignee?.toLowerCase() !== filters.assignee.toLowerCase()) return false;
+    if (filters.priority && task.priority !== filters.priority) return false;
+    if (filters.assignee) {
+      const filterNames = parseAssignees(filters.assignee); // multi-value filter
+      const taskNames = parseAssignees(task.assignee ?? "");
+      // Task must match at least one of the filter names
+      if (!filterNames.some((fn) => taskNames.some((tn) => tn.toLowerCase().includes(fn.toLowerCase())))) return false;
+    }
     return true;
   });
 
-  if (!projectId || filtered.length === 0) {
+  if (filtered.length === 0) {
     return (
       <EmptyState
         title={t("tasks.noTasks")}

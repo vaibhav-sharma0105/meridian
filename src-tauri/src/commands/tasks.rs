@@ -15,6 +15,16 @@ pub async fn get_tasks_for_project(
 }
 
 #[tauri::command]
+pub async fn get_all_tasks(
+    filters: Option<TaskFilters>,
+    state: State<'_, AppState>,
+) -> Result<Vec<Task>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let filters = filters.unwrap_or_default();
+    repo::get_all_tasks(&conn, &filters)
+}
+
+#[tauri::command]
 pub async fn create_task(
     input: CreateTaskInput,
     state: State<'_, AppState>,

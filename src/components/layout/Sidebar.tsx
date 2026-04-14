@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  Bell, Settings, Settings2, Plus, LayoutList, CalendarDays,
-  Sun, Moon, Monitor, ChevronRight, Link2,
+  Bell, Settings, Settings2, Plus, LayoutList,
+  Sun, Moon, Monitor, Link2,
 } from "lucide-react";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -14,10 +14,9 @@ import ProjectSettings from "@/components/projects/ProjectSettings";
 import { setAppSetting } from "@/lib/tauri";
 import type { Project } from "@/lib/tauri";
 
-// Meridian Logo SVG
 function MeridianLogo() {
   return (
-    <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg width="24" height="24" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
       <rect width="28" height="28" rx="6" fill="#6366f1" />
       <path d="M7 20 L14 8 L21 20" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
       <path d="M10.5 16 L17.5 16" stroke="white" strokeWidth="2" strokeLinecap="round" />
@@ -42,155 +41,158 @@ export default function Sidebar() {
   };
 
   const ThemeIcon = theme === "light" ? Sun : theme === "dark" ? Moon : Monitor;
+  const themeLabel = theme === "light" ? "Switch to dark mode" : theme === "dark" ? "Switch to system theme" : "Switch to light mode";
+  const totalBadge = unreadCount + pendingCount;
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-zinc-900 select-none">
-      {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-4 border-b border-zinc-100 dark:border-zinc-800">
+    <div className="flex flex-col h-full bg-white dark:bg-[#111113] select-none">
+
+      {/* ── Brand ──────────────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-2.5 px-4 h-12 flex-shrink-0 border-b border-zinc-100/80 dark:border-[#1c1c20]">
         <MeridianLogo />
-        <span className="font-semibold text-zinc-900 dark:text-zinc-50 text-sm">Meridian</span>
+        <span className="font-semibold text-[13px] tracking-[-0.02em] text-zinc-900 dark:text-zinc-100">Meridian</span>
       </div>
 
-      {/* New Project */}
-      <div className="px-2 pt-2">
+      {/* ── Global nav ─────────────────────────────────────────────────────── */}
+      <div className="px-2 pb-1">
+        <NavItem
+          icon={<LayoutList className="w-4 h-4" />}
+          label={t("nav.allTasks")}
+          active={activeProjectId === null && activeView === "tasks"}
+          onClick={() => { setActiveProject(null); setActiveView("tasks"); }}
+        />
+      </div>
+
+      {/* ── Projects section ───────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between px-4 pt-3 pb-1">
+        <span className="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+          Projects
+        </span>
         <button
           onClick={() => setShowCreateProject(true)}
-          className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+          title={t("nav.newProject")}
+          className="p-0.5 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
         >
-          <Plus className="w-4 h-4" />
-          {t("nav.newProject")}
+          <Plus className="w-3.5 h-3.5" />
         </button>
       </div>
 
-      {/* Project List */}
-      <div className="flex-1 overflow-y-auto px-2 py-1">
-        {projects.map((project) => (
-          <div
-            key={project.id}
-            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors group cursor-pointer ${
-              activeProjectId === project.id
-                ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300"
-                : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-            }`}
-            onClick={() => { setActiveProject(project.id); setActiveView("tasks"); }}
-            onContextMenu={(e) => { e.preventDefault(); setSettingsProject(project); }}
-          >
+      {/* ── Project list ───────────────────────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto px-2 pb-2">
+        {projects.map((project) => {
+          const isActive = activeProjectId === project.id;
+          return (
             <div
-              className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-              style={{ backgroundColor: project.color }}
-            />
-            <span className="flex-1 text-left truncate">{project.name}</span>
-            {(project.open_task_count ?? 0) > 0 && (
-              <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                activeProjectId === project.id
-                  ? "bg-indigo-100 text-indigo-600 dark:bg-indigo-800 dark:text-indigo-300"
-                  : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800"
-              }`}>
-                {project.open_task_count}
-              </span>
-            )}
-            <button
-              onClick={(e) => { e.stopPropagation(); setSettingsProject(project); }}
-              className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-opacity flex-shrink-0"
-              title={t("projects.settings")}
+              key={project.id}
+              className={`group flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] transition-colors cursor-pointer ${
+                isActive
+                  ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300"
+                  : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 hover:text-zinc-900 dark:hover:text-zinc-200"
+              }`}
+              onClick={() => { setActiveProject(project.id); setActiveView("tasks"); }}
+              onContextMenu={(e) => { e.preventDefault(); setSettingsProject(project); }}
             >
-              <Settings2 className="w-3.5 h-3.5 text-zinc-400" />
-            </button>
-          </div>
-        ))}
+              <span
+                className="w-[7px] h-[7px] rounded-full flex-shrink-0 shadow-[0_0_0_1.5px_rgba(0,0,0,0.08)] dark:shadow-[0_0_0_1.5px_rgba(255,255,255,0.06)]"
+                style={{ backgroundColor: project.color }}
+              />
+              <span className="flex-1 truncate">{project.name}</span>
+              {(project.open_task_count ?? 0) > 0 && (
+                <span className={`text-[11px] tabular-nums px-1.5 py-0.5 rounded-full leading-none ${
+                  isActive
+                    ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400"
+                    : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400"
+                }`}>
+                  {project.open_task_count}
+                </span>
+              )}
+              <button
+                onClick={(e) => { e.stopPropagation(); setSettingsProject(project); }}
+                title={t("projects.settings")}
+                className="p-0.5 rounded opacity-0 group-hover:opacity-100 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-all flex-shrink-0"
+              >
+                <Settings2 className="w-3 h-3" />
+              </button>
+            </div>
+          );
+        })}
 
         {projects.length === 0 && (
-          <p className="text-xs text-zinc-400 px-2 py-2">No projects yet</p>
+          <p className="text-[12px] text-zinc-400 dark:text-zinc-600 px-2 py-2 italic">No projects yet</p>
         )}
       </div>
 
-      {/* Bottom navigation */}
-      <div className="border-t border-zinc-100 dark:border-zinc-800 px-2 py-2 space-y-1">
-        <button
-          onClick={() => { setActiveProject(null); setActiveView("tasks"); }}
-          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors ${
-            activeProjectId === null && activeView === "tasks"
-              ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"
-              : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-          }`}
-        >
-          <LayoutList className="w-4 h-4" />
-          {t("nav.allTasks")}
-        </button>
-        <button
-          onClick={() => setActiveView("meetings")}
-          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors ${
-            activeView === "meetings"
-              ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"
-              : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-          }`}
-        >
-          <CalendarDays className="w-4 h-4" />
-          {t("nav.meetings")}
-        </button>
-
-        <div className="h-px bg-zinc-100 dark:bg-zinc-800 my-1" />
-
-        {/* Notification bell */}
+      {/* ── Utility strip — icon-only with tooltips ──────────────────────── */}
+      <div className="border-t border-zinc-100 dark:border-[#1f1f23] px-2 py-2 flex items-center gap-0.5">
+        {/* Notifications */}
         <button
           onClick={() => setNotificationCenterOpen(true)}
-          className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+          title={`Notifications${totalBadge > 0 ? ` (${totalBadge})` : ""}`}
+          className="relative flex-1 flex items-center justify-center p-1.5 rounded-md text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
         >
-          <div className="relative">
-            <Bell className="w-4 h-4" />
-            {(unreadCount + pendingCount) > 0 && (
-              <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center">
-                {(unreadCount + pendingCount) > 9 ? "9+" : unreadCount + pendingCount}
-              </span>
-            )}
-          </div>
-          {t("nav.notifications")}
+          <Bell className="w-[15px] h-[15px]" />
+          {totalBadge > 0 && (
+            <span className="absolute top-1 right-1.5 w-[6px] h-[6px] bg-red-500 rounded-full ring-[1.5px] ring-white dark:ring-[#111113]" />
+          )}
         </button>
 
         {/* Connections */}
         <button
           onClick={() => setSettingsOpen(true, "connections")}
-          className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+          title="Connections"
+          className="flex-1 flex items-center justify-center p-1.5 rounded-md text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
         >
-          <Link2 className="w-4 h-4" />
-          Connections
+          <Link2 className="w-[15px] h-[15px]" />
         </button>
 
         {/* Settings */}
         <button
           onClick={() => setSettingsOpen(true, "ai")}
-          className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+          title={t("nav.settings")}
+          className="flex-1 flex items-center justify-center p-1.5 rounded-md text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
         >
-          <Settings className="w-4 h-4" />
-          {t("nav.settings")}
+          <Settings className="w-[15px] h-[15px]" />
         </button>
 
-        {/* Theme toggle */}
+        {/* Theme */}
         <button
           onClick={cycleTheme}
-          className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+          title={themeLabel}
+          className="flex-1 flex items-center justify-center p-1.5 rounded-md text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
         >
-          <ThemeIcon className="w-4 h-4" />
-          <span className="capitalize">{theme}</span>
+          <ThemeIcon className="w-[15px] h-[15px]" />
         </button>
-
-        {/* Version */}
-        <div className="px-2 pt-1">
-          <span className="text-[10px] text-zinc-400">v0.1.0</span>
-        </div>
       </div>
 
       {/* Modals */}
-      {showCreateProject && (
-        <ProjectCreate onClose={() => setShowCreateProject(false)} />
-      )}
+      {showCreateProject && <ProjectCreate onClose={() => setShowCreateProject(false)} />}
       {settingsProject && (
-        <ProjectSettings
-          project={settingsProject}
-          open={true}
-          onClose={() => setSettingsProject(null)}
-        />
+        <ProjectSettings project={settingsProject} open={true} onClose={() => setSettingsProject(null)} />
       )}
     </div>
+  );
+}
+
+/* ── Shared nav item ──────────────────────────────────────────────────────── */
+function NavItem({
+  icon, label, active, onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] transition-colors ${
+        active
+          ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50 font-medium"
+          : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 hover:text-zinc-800 dark:hover:text-zinc-200"
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }

@@ -2,20 +2,29 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Design tokens ──────────────────────────────────────────────────────────── */
 :root {
   --meridian-primary: #6366f1;
   --meridian-primary-dark: #818cf8;
   --meridian-surface: #ffffff;
   --meridian-surface-dark: #09090b;
-  --meridian-bg: #fafafa;
-  --meridian-bg-dark: #18181b;
+  --meridian-bg: #f4f4f5;
+  --meridian-bg-dark: #09090b;
+  --meridian-sidebar: #ffffff;
+  --meridian-sidebar-dark: #111113;
   --meridian-border: #e4e4e7;
-  --meridian-border-dark: #27272a;
+  --meridian-border-dark: #1f1f23;
+  --meridian-border-subtle: #f0f0f1;
+  --meridian-border-subtle-dark: #19191c;
   --meridian-text: #18181b;
   --meridian-text-dark: #fafafa;
   --meridian-muted: #71717a;
+  /* Transition speed for consistent UI feel */
+  --t-fast: 120ms;
+  --t-base: 180ms;
 }
 
+/* ─── Reset ──────────────────────────────────────────────────────────────────── */
 *, *::before, *::after {
   box-sizing: border-box;
 }
@@ -27,9 +36,14 @@ html, body, #root {
   overflow: hidden;
 }
 
+/* ─── Base typography ────────────────────────────────────────────────────────── */
 body {
   font-family: Inter, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   background: var(--meridian-bg);
   color: var(--meridian-text);
 }
@@ -39,10 +53,33 @@ body {
   color: var(--meridian-text-dark);
 }
 
-/* Scrollbar styling */
+/* ─── Focus rings — accessible, not distracting ──────────────────────────────── */
+:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Remove default outline for mouse users */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ─── Text selection ─────────────────────────────────────────────────────────── */
+::selection {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.dark ::selection {
+  background: #312e81;
+  color: #e0e7ff;
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -51,39 +88,77 @@ body {
 
 ::-webkit-scrollbar-thumb {
   background: #d4d4d8;
-  border-radius: 3px;
+  border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a1a1aa;
 }
 
 .dark ::-webkit-scrollbar-thumb {
+  background: #2d2d32;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
   background: #3f3f46;
 }
 
-/* Animations */
+/* ─── Animations ─────────────────────────────────────────────────────────────── */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0);    }
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.15s ease-out;
+  animation: fadeIn var(--t-fast) ease-out;
 }
 
-/* Prose overrides for markdown */
+.animate-slide-down {
+  animation: slideDown var(--t-fast) ease-out;
+}
+
+/* ─── Underline tab indicator ────────────────────────────────────────────────── */
+.tab-underline {
+  position: relative;
+}
+.tab-underline::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 1px 1px 0 0;
+  background: #6366f1;
+  opacity: 0;
+  transition: opacity var(--t-fast) ease;
+}
+.tab-underline.active::after {
+  opacity: 1;
+}
+
+/* ─── Prose overrides for markdown ──────────────────────────────────────────── */
 .prose pre {
-  background: #1e1e2e;
+  background: #0f0f12;
   color: #cdd6f4;
   padding: 1rem;
   border-radius: 0.5rem;
   overflow-x: auto;
+  font-size: 0.8125rem;
 }
 
 .prose code {
   background: #f4f4f5;
   padding: 0.1rem 0.3rem;
   border-radius: 0.25rem;
-  font-size: 0.875em;
+  font-size: 0.8125em;
 }
 
 .dark .prose code {
-  background: #27272a;
+  background: #1f1f23;
 }

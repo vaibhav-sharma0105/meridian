@@ -38,8 +38,12 @@ pub fn run() {
             commands::meetings::get_meetings_for_project,
             commands::meetings::get_meeting,
             commands::meetings::delete_meeting,
+            commands::meetings::rename_meeting,
+            commands::meetings::count_moveable_tasks,
+            commands::meetings::move_meeting_to_project,
             // Tasks
             commands::tasks::get_tasks_for_project,
+            commands::tasks::get_all_tasks,
             commands::tasks::create_task,
             commands::tasks::update_task,
             commands::tasks::bulk_update_tasks,
@@ -90,6 +94,10 @@ pub fn run() {
             commands::connections::approve_import,
             commands::connections::dismiss_import,
             commands::connections::open_url,
+            // Sheets Relay
+            commands::connections::save_sheets_relay_config,
+            commands::connections::test_sheets_relay,
+            commands::connections::reset_sheets_relay_sync,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

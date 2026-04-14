@@ -21,8 +21,15 @@ export function useSync() {
         qc.invalidateQueries({ queryKey: ["pending-imports-count"] });
         qc.invalidateQueries({ queryKey: ["notifications"] });
       }
+      if (result.skipped_duplicates > 0) {
+        toast(
+          `${result.skipped_duplicates} duplicate meeting${result.skipped_duplicates > 1 ? "s" : ""} skipped (already imported)`,
+          { icon: "⚠️", duration: 6000 }
+        );
+      }
       if (result.errors.length > 0) {
         console.warn("Sync errors:", result.errors);
+        result.errors.forEach((err) => toast.error(err, { duration: 8000 }));
       }
     } catch (e) {
       console.error("Sync failed:", e);

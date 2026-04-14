@@ -1,4 +1,4 @@
-use crate::connectors::zoom;
+use crate::connectors::{sheets_relay, zoom};
 use crate::db::repositories::connections as conn_repo;
 use crate::models::connection::PendingImport;
 use rusqlite::Connection as DbConn;
@@ -8,12 +8,14 @@ use uuid::Uuid;
 #[derive(serde::Serialize, Debug)]
 pub struct SyncResult {
     pub new_imports: usize,
+    pub skipped_duplicates: usize,
     pub errors: Vec<String>,
 }
 
 pub async fn sync_all_connections(db: &Mutex<DbConn>) -> Result<SyncResult, String> {
     let mut result = SyncResult {
         new_imports: 0,
+        skipped_duplicates: 0,
         errors: vec![],
     };
 
@@ -25,19 +27,28 @@ pub async fn sync_all_connections(db: &Mutex<DbConn>) -> Result<SyncResult, Stri
 
     if let Some(zoom_conn) = zoom_conn_opt {
         match sync_zoom(db, &zoom_conn).await {
-            Ok(count) => result.new_imports += count,
+            Ok((new, skipped)) => {
+                result.new_imports += new;
+                result.skipped_duplicates += skipped;
+            }
             Err(e) => result.errors.push(format!("Zoom sync failed: {}", e)),
         }
     }
 
-    // ─── Gmail sync (stub — no-op) ────────────────────────────────────────────
-    let gmail_conn_opt = {
+    // ─── Sheets Relay sync ───────────────────────────────────────────────────
+    let relay_conn_opt = {
         let conn = db.lock().map_err(|e| e.to_string())?;
-        conn_repo::get_connection(&conn, "gmail")?
+        conn_repo::get_connection(&conn, "sheets_relay")?
     };
 
-    if gmail_conn_opt.is_some() {
-        // Gmail sync not yet implemented; silently skip
+    if let Some(_relay_conn) = relay_conn_opt {
+        match sync_sheets_relay(db).await {
+            Ok((new, skipped)) => {
+                result.new_imports += new;
+                result.skipped_duplicates += skipped;
+            }
+            Err(e) => result.errors.push(format!("Sheets relay sync failed: {}", e)),
+        }
     }
 
     Ok(result)
@@ -46,7 +57,7 @@ pub async fn sync_all_connections(db: &Mutex<DbConn>) -> Result<SyncResult, Stri
 async fn sync_zoom(
     db: &Mutex<DbConn>,
     zoom_conn: &crate::models::connection::Connection,
-) -> Result<usize, String> {
+) -> Result<(usize, usize), String> {
     // Read access token from keyring
     let access_token = keyring::Entry::new("meridian", "zoom-token")
         .map_err(|e| e.to_string())?
@@ -73,6 +84,7 @@ async fn sync_zoom(
 
     let meetings = zoom::list_past_meetings(&access_token, &since).await?;
     let mut new_count = 0usize;
+    let mut skipped_count = 0usize;
 
     for meeting in meetings {
         let meeting_id_str = meeting.id.to_string();
@@ -114,6 +126,8 @@ async fn sync_zoom(
         };
         if inserted {
             new_count += 1;
+        } else {
+            skipped_count += 1;
         }
     }
 
@@ -123,7 +137,7 @@ async fn sync_zoom(
         conn_repo::update_last_sync(&conn, "zoom")?;
     }
 
-    Ok(new_count)
+    Ok((new_count, skipped_count))
 }
 
 async fn refresh_zoom_if_needed(
@@ -159,4 +173,96 @@ async fn refresh_zoom_if_needed(
     } else {
         Ok(access_token.to_string())
     }
+}
+
+// ─── Sheets Relay sync ────────────────────────────────────────────────────────
+
+async fn sync_sheets_relay(db: &Mutex<DbConn>) -> Result<(usize, usize), String> {
+    // Read the Apps Script URL (stored as account_email on the connection record)
+    let script_url = {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        conn_repo::get_connection(&conn, "sheets_relay")?
+            .and_then(|c| c.account_email)
+            .ok_or_else(|| "Sheets relay URL not configured".to_string())?
+    };
+
+    // Read the secret key from app_settings (stored there to avoid Keychain prompts)
+    let secret_key = {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        conn.query_row(
+            "SELECT value FROM app_settings WHERE key = 'sheets_relay_secret'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .map_err(|_| {
+            "Sheets relay secret not found — please reconnect in Settings > Connections"
+                .to_string()
+        })?
+    };
+
+    // Determine the last-synced timestamp (epoch ms, stored in app_settings)
+    let since_ms: i64 = {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        conn.query_row(
+            "SELECT value FROM app_settings WHERE key = 'sheets_relay_last_sync_ms'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()
+        .and_then(|v| v.parse::<i64>().ok())
+        .unwrap_or(0)
+    };
+
+    // Fetch new rows from the Apps Script endpoint
+    let rows = sheets_relay::fetch_new_rows(&script_url, &secret_key, since_ms).await?;
+
+    if rows.is_empty() {
+        // Still update last_sync_at even with no new rows
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        conn_repo::update_last_sync(&conn, "sheets_relay")?;
+        return Ok((0, 0));
+    }
+
+    // Track the highest created_at timestamp seen so we don't re-process rows
+    let mut max_ts_ms = since_ms;
+    let mut new_count = 0usize;
+    let mut skipped_count = 0usize;
+
+    for row in &rows {
+        // Parse the row's timestamp to update our watermark
+        if let Some(ts_str) = &row.created_at {
+            if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(ts_str) {
+                let ts_ms = dt.timestamp_millis();
+                if ts_ms > max_ts_ms {
+                    max_ts_ms = ts_ms;
+                }
+            }
+        }
+
+        let import = sheets_relay::row_to_pending_import(row);
+
+        // source_email_id is used as the dedup key (set in row_to_pending_import)
+        let inserted = {
+            let conn = db.lock().map_err(|e| e.to_string())?;
+            conn_repo::upsert_pending_import(&conn, &import)?
+        };
+        if inserted {
+            new_count += 1;
+        } else {
+            skipped_count += 1;
+        }
+    }
+
+    // Persist the new high-water mark so next sync only fetches newer rows
+    {
+        let conn = db.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('sheets_relay_last_sync_ms', ?1)",
+            rusqlite::params![max_ts_ms.to_string()],
+        )
+        .map_err(|e| e.to_string())?;
+        conn_repo::update_last_sync(&conn, "sheets_relay")?;
+    }
+
+    Ok((new_count, skipped_count))
 }

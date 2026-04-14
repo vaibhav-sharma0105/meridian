@@ -52,19 +52,19 @@ export default function MainCanvas() {
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* Tab bar */}
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+      {/* Tab bar — underline style */}
       {activeProjectId && (
-        <div className="flex items-center gap-1 px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex-shrink-0">
-          <div className="flex items-center gap-1 flex-1">
+        <div className="flex items-center px-4 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex-shrink-0">
+          <div className="flex items-center flex-1 -mb-px">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveView(tab.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                className={`flex items-center gap-1.5 px-3 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${
                   activeView === tab.id
-                    ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"
-                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                    ? "border-indigo-500 text-zinc-900 dark:text-zinc-50"
+                    : "border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:border-zinc-300 dark:hover:border-zinc-600"
                 }`}
               >
                 <tab.icon className="w-3.5 h-3.5" />
@@ -82,12 +82,12 @@ export default function MainCanvas() {
                   <button
                     key={mode}
                     onClick={() => setViewMode(mode)}
+                    title={t(`tasks.views.${mode}`)}
                     className={`p-1 rounded transition-colors ${
                       viewMode === mode
-                        ? "bg-white dark:bg-zinc-700 shadow-sm"
-                        : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
+                        ? "bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 shadow-sm"
+                        : "text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300"
                     }`}
-                    title={t(`tasks.views.${mode}`)}
                   >
                     <Icon className="w-3.5 h-3.5" />
                   </button>
@@ -100,7 +100,7 @@ export default function MainCanvas() {
           {activeView === "meetings" && (
             <button
               onClick={() => setIngestModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-md text-sm font-medium transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 active:bg-indigo-700 text-white rounded-md text-[13px] font-medium transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
               {t("meetings.new")}
@@ -114,10 +114,36 @@ export default function MainCanvas() {
         <TaskBulkActions />
       )}
 
+      {/* All Tasks header — shown when no project is active */}
+      {activeView === "tasks" && !activeProjectId && (
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex-shrink-0">
+          <span className="text-[13px] font-semibold text-zinc-900 dark:text-zinc-50 tracking-tight">All Tasks</span>
+          <div className="flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5 gap-0.5">
+            {(["list", "table"] as const).map((mode) => {
+              const Icon = VIEW_ICONS[mode];
+              return (
+                <button
+                  key={mode}
+                  onClick={() => setViewMode(mode)}
+                  title={mode}
+                  className={`p-1 rounded transition-colors ${
+                    viewMode === mode
+                      ? "bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 shadow-sm"
+                      : "text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300"
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Filters for tasks */}
-      {activeView === "tasks" && activeProjectId && (
-        <div className="px-4 py-2 border-b border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex-shrink-0">
-          <TaskFilters />
+      {activeView === "tasks" && (
+        <div className="px-4 py-2 border-b border-zinc-100 dark:border-[#1a1a1e] bg-white dark:bg-zinc-900 flex-shrink-0">
+          <TaskFilters showProjectFilter={!activeProjectId} />
         </div>
       )}
 
@@ -125,8 +151,10 @@ export default function MainCanvas() {
       <div className={`flex-1 min-h-0 ${viewMode === "kanban" && activeView === "tasks" ? "overflow-hidden" : "overflow-auto"}`}>
         {activeView === "tasks" && (
           <>
+            {/* Kanban requires a project (for task creation); fall back to list when in All Tasks */}
             {viewMode === "list" && <TaskListView projectId={activeProjectId} />}
-            {viewMode === "kanban" && <TaskKanbanView projectId={activeProjectId} />}
+            {viewMode === "kanban" && activeProjectId && <TaskKanbanView projectId={activeProjectId} />}
+            {viewMode === "kanban" && !activeProjectId && <TaskListView projectId={null} />}
             {viewMode === "table" && <TaskTableView projectId={activeProjectId} />}
           </>
         )}

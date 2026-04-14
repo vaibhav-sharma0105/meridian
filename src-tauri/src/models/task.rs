@@ -70,6 +70,7 @@ pub struct UpdateTaskInput {
 pub struct TaskFilters {
     pub assignee: Option<String>,
     pub status: Option<String>,
+    pub priority: Option<String>,
     pub tags: Option<Vec<String>>,
     pub search_query: Option<String>,
     pub date_from: Option<String>,

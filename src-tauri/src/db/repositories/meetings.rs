@@ -127,6 +127,39 @@ pub fn update_meeting_summary(
     Ok(())
 }
 
+pub fn rename_meeting(conn: &Connection, id: &str, title: &str) -> Result<(), String> {
+    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let rows = conn
+        .execute(
+            "UPDATE meetings SET title = ?1, updated_at = ?2 WHERE id = ?3",
+            params![title, now, id],
+        )
+        .map_err(|e| e.to_string())?;
+    if rows == 0 {
+        return Err(format!("Meeting {} not found", id));
+    }
+    Ok(())
+}
+
+/// Move a meeting to a different project.
+/// Only updates the meeting row — task migration is handled separately.
+pub fn move_meeting_project(
+    conn: &Connection,
+    meeting_id: &str,
+    new_project_id: &str,
+) -> Result<(), String> {
+    let rows = conn
+        .execute(
+            "UPDATE meetings SET project_id = ?1, updated_at = datetime('now') WHERE id = ?2",
+            params![new_project_id, meeting_id],
+        )
+        .map_err(|e| e.to_string())?;
+    if rows == 0 {
+        return Err("Meeting not found".to_string());
+    }
+    Ok(())
+}
+
 pub fn soft_delete_meeting(conn: &Connection, id: &str) -> Result<(), String> {
     // Disassociate tasks from this meeting before deleting
     conn.execute(

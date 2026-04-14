@@ -35,6 +35,27 @@ fn get_litellm_client(settings: &AiSettings, api_key: &str) -> LiteLLMClient {
     LiteLLMClient::new(base_url, api_key.to_string(), model)
 }
 
+/// Read the API key from app_settings (no Keychain — avoids macOS permission prompts).
+/// Falls back to Keychain for users who saved their key before this change.
+pub fn get_api_key_from_db(conn: &rusqlite::Connection, label: &str) -> String {
+    let db_key = format!("ai_key_{}", label);
+    conn.query_row(
+        "SELECT value FROM app_settings WHERE key = ?1",
+        rusqlite::params![db_key],
+        |row| row.get::<_, String>(0),
+    )
+    .ok()
+    // Keychain fallback for keys saved before this migration
+    .or_else(|| {
+        keyring::Entry::new("meridian", label)
+            .ok()
+            .and_then(|e| e.get_password().ok())
+            .filter(|k| !k.is_empty())
+    })
+    .unwrap_or_default()
+}
+
+// Thin wrapper kept for the one caller (fetch_available_models) that has no DB access.
 fn get_api_key(label: &str) -> String {
     keyring::Entry::new("meridian", label)
         .ok()
@@ -168,17 +189,19 @@ pub async fn save_ai_settings(
 ) -> Result<AiSettings, String> {
     let id = settings.id.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
-    // Store API key in keychain
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+
+    // Store API key in app_settings (no Keychain — avoids macOS permission prompts)
     if let Some(key) = &settings.api_key {
         if !key.is_empty() {
-            keyring::Entry::new("meridian", &settings.label)
-                .map_err(|e| format!("Keychain error: {}", e))?
-                .set_password(key)
-                .map_err(|e| format!("Failed to save API key: {}", e))?;
+            let db_key = format!("ai_key_{}", settings.label);
+            conn.execute(
+                "INSERT OR REPLACE INTO app_settings (key, value) VALUES (?1, ?2)",
+                rusqlite::params![db_key, key],
+            )
+            .map_err(|e| format!("Failed to save API key: {}", e))?;
         }
     }
-
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
     ai_repo::save_settings(
         &conn,
         &id,
@@ -209,21 +232,21 @@ pub async fn extract_tasks_from_transcript(
         return Err("Transcript too short to extract tasks — paste the full meeting text".to_string());
     }
 
-    let (settings, project, existing_titles, all_projects) = {
+    let (settings, api_key, project, existing_titles, all_projects) = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         let settings = ai_repo::get_active_settings(&conn)?
             .ok_or_else(|| "No AI provider configured".to_string())?;
+        let api_key = get_api_key_from_db(&conn, &settings.label);
         let project = proj_repo::get_project(&conn, &project_id)?
             .ok_or_else(|| "Project not found".to_string())?;
         let existing = task_repo::get_open_tasks_for_project(&conn, &project_id)?;
         let titles: Vec<String> = existing.iter().map(|t| t.title.clone()).collect();
         let all_projects = proj_repo::get_all_projects(&conn)?;
-        (settings, project, titles, all_projects)
+        (settings, api_key, project, titles, all_projects)
     };
 
     let all_project_names: Vec<String> = all_projects.iter().map(|p| p.name.clone()).collect();
 
-    let api_key = get_api_key(&settings.label);
     let litellm = get_litellm_client(&settings, &api_key);
 
     let extraction = extractor::extract_tasks(&litellm, &transcript, &project.name, &existing_titles, &all_project_names).await?;
@@ -281,10 +304,11 @@ pub async fn chat_with_project(
     app_handle: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
-    let (settings, project, open_tasks, done_tasks, meetings, doc_results) = {
+    let (settings, api_key, project, open_tasks, done_tasks, meetings, doc_results) = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         let settings = ai_repo::get_active_settings(&conn)?
             .ok_or_else(|| "No AI provider configured".to_string())?;
+        let api_key = get_api_key_from_db(&conn, &settings.label);
         let project = crate::db::repositories::projects::get_project(&conn, &project_id)?
             .ok_or_else(|| "Project not found".to_string())?;
 
@@ -303,10 +327,9 @@ pub async fn chat_with_project(
             vec![]
         };
 
-        (settings, project, open_tasks, done_tasks, meetings, doc_results)
+        (settings, api_key, project, open_tasks, done_tasks, meetings, doc_results)
     };
 
-    let api_key = get_api_key(&settings.label);
     let litellm = get_litellm_client(&settings, &api_key);
 
     // Build context
@@ -588,10 +611,11 @@ pub async fn generate_output(
     template_id: String,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    let (settings, project, open_tasks, done_tasks, meetings, template) = {
+    let (settings, api_key, project, open_tasks, done_tasks, meetings, template) = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         let settings = ai_repo::get_active_settings(&conn)?
             .ok_or_else(|| "No AI provider configured".to_string())?;
+        let api_key = get_api_key_from_db(&conn, &settings.label);
         let project = crate::db::repositories::projects::get_project(&conn, &project_id)?
             .ok_or_else(|| "Project not found".to_string())?;
         let open_filters = crate::models::task::TaskFilters { status: Some("open".to_string()), ..Default::default() };
@@ -601,10 +625,9 @@ pub async fn generate_output(
         let meetings = mtg_repo::get_meetings_for_project(&conn, &project_id)?;
         let template = crate::db::repositories::prompt_templates::get_template(&conn, &template_id)?
             .ok_or_else(|| "Template not found".to_string())?;
-        (settings, project, open_tasks, done_tasks, meetings, template)
+        (settings, api_key, project, open_tasks, done_tasks, meetings, template)
     };
 
-    let api_key = get_api_key(&settings.label);
     let litellm = get_litellm_client(&settings, &api_key);
 
     let context = extractor::build_project_context(&project.name, &open_tasks, &done_tasks, &meetings, &[]);

@@ -9,10 +9,35 @@ export function useTasks(projectId: string | null, filters?: TaskFilters) {
   // Use explicitly passed filters, or fall back to the global filter store
   const effectiveFilters = filters ?? storeFilters;
 
+  // Strip client-side-only fields before sending to backend
+  const backendFilters = {
+    ...effectiveFilters,
+    project_id: undefined,
+    meeting_ids: undefined,
+  };
+
   const query = useQuery({
     queryKey: ["tasks", projectId, effectiveFilters],
-    queryFn: () => api.getTasksForProject(projectId!, effectiveFilters),
-    enabled: !!projectId,
+    queryFn: async () => {
+      let tasks = projectId
+        ? await api.getTasksForProject(projectId, backendFilters)
+        : await api.getAllTasks(backendFilters);
+
+      // project_id filter is client-side
+      if (!projectId && effectiveFilters.project_id) {
+        tasks = tasks.filter((t) => t.project_id === effectiveFilters.project_id);
+      }
+
+      // meeting_ids multi-select is client-side
+      if (effectiveFilters.meeting_ids?.length) {
+        tasks = tasks.filter(
+          (t) => t.meeting_id && effectiveFilters.meeting_ids!.includes(t.meeting_id)
+        );
+      }
+
+      return tasks;
+    },
+    enabled: true,
   });
 
   const updateMutation = useMutation({

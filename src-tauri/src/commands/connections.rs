@@ -1,4 +1,4 @@
-use crate::connectors::sync;
+use crate::connectors::{sheets_relay, sync};
 use crate::db::repositories::connections as conn_repo;
 use crate::models::connection::{Connection, ImportApproval, PendingImport, SaveConnectionInput};
 use crate::AppState;
@@ -203,7 +203,112 @@ pub async fn connect_gmail(
     _app_handle: tauri::AppHandle,
     _state: State<'_, AppState>,
 ) -> Result<Connection, String> {
-    Err("Gmail connector is not yet fully implemented. Coming soon!".to_string())
+    Err("Gmail direct OAuth is not available — use the Sheets Relay integration instead.".to_string())
+}
+
+/// Save (or update) the Google Sheets relay configuration.
+/// Stores the Apps Script URL in the connections table and the secret key
+/// in the OS keyring. Deliberately avoids save_connection() because that
+/// helper tries to store an empty refresh_token in the keyring, which can
+/// fail and silently prevent the row from being written.
+#[tauri::command]
+pub async fn save_sheets_relay_config(
+    script_url: String,
+    secret_key: String,
+    state: State<'_, AppState>,
+) -> Result<Connection, String> {
+    if script_url.trim().is_empty() {
+        return Err("Apps Script URL cannot be empty".to_string());
+    }
+    if secret_key.trim().is_empty() {
+        return Err("Secret key cannot be empty".to_string());
+    }
+    if !script_url.starts_with("https://script.google.com/") {
+        return Err(
+            "That doesn't look like an Apps Script URL — it should start with \
+             https://script.google.com/"
+                .to_string(),
+        );
+    }
+
+    // Store secret in app_settings (no Keychain — avoids macOS permission prompts
+    // on unsigned dev builds and is appropriate for an API key, not a user password)
+    {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('sheets_relay_secret', ?1)",
+            rusqlite::params![secret_key.trim()],
+        )
+        .map_err(|e| format!("Failed to save secret: {}", e))?;
+
+        // Write the connection row
+        let id = uuid::Uuid::new_v4().to_string();
+        conn.execute(
+            "INSERT INTO connections (id, provider, account_email, scopes)
+             VALUES (?1, 'sheets_relay', ?2, 'sheets:read')
+             ON CONFLICT(provider) DO UPDATE SET
+                 account_email = excluded.account_email,
+                 updated_at    = datetime('now')",
+            rusqlite::params![id, script_url.trim()],
+        )
+        .map_err(|e| format!("Failed to save connection: {}", e))?;
+    }
+
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    conn_repo::get_connection(&conn, "sheets_relay")?
+        .ok_or_else(|| "Connection not found after save — please try again".to_string())
+}
+
+/// Test the Sheets relay connection and return a human-readable result.
+/// Also does a real row-fetch (since=0) so we can confirm data is reachable.
+#[tauri::command]
+pub async fn test_sheets_relay(state: State<'_, AppState>) -> Result<String, String> {
+    let script_url = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        conn_repo::get_connection(&conn, "sheets_relay")?
+            .and_then(|c| c.account_email)
+            .ok_or_else(|| "No Sheets relay configured — save your settings first".to_string())?
+    };
+
+    let secret_key = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        conn.query_row(
+            "SELECT value FROM app_settings WHERE key = 'sheets_relay_secret'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .map_err(|_| "Secret key not found — please save your Sheets relay settings again".to_string())?
+    };
+
+    // Ping the endpoint first
+    sheets_relay::test_connection(&script_url, &secret_key).await?;
+
+    // Do a real fetch with since=-1 so rows with unparseable dates are included too
+    let rows = sheets_relay::fetch_new_rows(&script_url, &secret_key, -1).await?;
+    let row_count = rows.len();
+
+    if row_count == 0 {
+        Ok("Connected! No rows found in the sheet yet — make sure at least one data row exists below the header row.".to_string())
+    } else {
+        Ok(format!(
+            "Connected! Found {} row{} in the sheet. Click Sync Now to import.",
+            row_count,
+            if row_count == 1 { "" } else { "s" }
+        ))
+    }
+}
+
+/// Reset the high-water mark so the next sync re-fetches all rows from the Sheet.
+/// Also called on disconnect to clean up the stored secret.
+#[tauri::command]
+pub async fn reset_sheets_relay_sync(state: State<'_, AppState>) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "DELETE FROM app_settings WHERE key IN ('sheets_relay_last_sync_ms', 'sheets_relay_secret')",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]

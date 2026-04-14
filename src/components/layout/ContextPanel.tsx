@@ -21,26 +21,27 @@ export default function ContextPanel() {
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-zinc-900 overflow-hidden">
-      {/* Task Detail */}
+      {/* Task Detail — exactly half the panel height when open */}
       {selectedTask && (
-        <div className="flex-1 overflow-y-auto p-4 border-b border-zinc-100 dark:border-zinc-800">
+        <div className="h-1/2 flex-shrink-0 overflow-y-auto p-4 border-b border-zinc-100 dark:border-[#1a1a1e] animate-fade-in">
           <TaskInlineEditor task={selectedTask} />
         </div>
       )}
 
+      {/* Empty state — small, doesn't push chat down */}
       {!selectedTask && !selectedMeetingId && (
-        <div className="flex-1 overflow-hidden flex flex-col">
-          <div className="flex-1 flex items-center justify-center text-zinc-400 text-sm p-4 text-center">
-            <div>
-              <p className="font-medium text-zinc-500 dark:text-zinc-400">Project Context</p>
-              <p className="text-xs mt-1">Select a task to view details, or use the chat below</p>
-            </div>
+        <div className="flex items-center justify-center px-6 py-4 text-center flex-shrink-0">
+          <div className="space-y-1">
+            <p className="text-[13px] font-medium text-zinc-500 dark:text-zinc-400">Context</p>
+            <p className="text-[12px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
+              Select a task to edit details,<br />or chat with AI below
+            </p>
           </div>
         </div>
       )}
 
-      {/* AI Chat Panel — always at bottom */}
-      <div className="flex-shrink-0" style={{ height: selectedTask ? "50%" : "100%" }}>
+      {/* AI Chat Panel — other half when task open, full height otherwise */}
+      <div className={`${selectedTask ? "h-1/2 flex-shrink-0" : "flex-1 min-h-0"} overflow-hidden border-t border-zinc-100 dark:border-[#1a1a1e]`}>
         <AIChatPanel projectId={pid} />
       </div>
     </div>

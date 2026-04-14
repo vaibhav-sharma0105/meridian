@@ -85,21 +85,18 @@ async fn ingest_meeting_core_inner(
 
     let (project, existing_titles, all_project_names, all_projects) = project_info;
 
-    // Get AI settings
-    let ai_settings = {
+    // Get AI settings + API key in one DB lock (no Keychain access)
+    let (ai_settings, api_key) = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
-        crate::db::repositories::ai_settings::get_active_settings(&conn)?
+        let settings = crate::db::repositories::ai_settings::get_active_settings(&conn)?
+            .ok_or_else(|| {
+                "No AI provider configured — please set up your AI provider in Settings"
+                    .to_string()
+            })?;
+        let key = crate::commands::ai::get_api_key_from_db(&conn, &settings.label);
+        (settings, key)
     };
-
-    let ai_settings = ai_settings.ok_or_else(|| {
-        "No AI provider configured — please set up your AI provider in Settings".to_string()
-    })?;
-
-    // Get API key from keychain
-    let api_key = keyring::Entry::new("meridian", &ai_settings.label)
-        .map_err(|e| format!("Keychain error: {}", e))?
-        .get_password()
-        .unwrap_or_default();
+    let ai_settings = ai_settings;
 
     let litellm = crate::commands::ai::get_litellm_client_pub(&ai_settings, &api_key);
 
@@ -275,4 +272,81 @@ pub async fn get_meeting(id: String, state: State<'_, AppState>) -> Result<Optio
 pub async fn delete_meeting(id: String, state: State<'_, AppState>) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     repo::soft_delete_meeting(&conn, &id)
+}
+
+#[tauri::command]
+pub async fn rename_meeting(
+    id: String,
+    title: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    if title.trim().is_empty() {
+        return Err("Meeting title cannot be empty".to_string());
+    }
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    repo::rename_meeting(&conn, &id, title.trim())
+}
+
+/// Return the number of open/in-progress tasks that would move with a meeting.
+/// Used to populate the confirmation dialog before the user commits to the move.
+#[tauri::command]
+pub async fn count_moveable_tasks(
+    meeting_id: String,
+    state: State<'_, AppState>,
+) -> Result<i64, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let meeting = repo::get_meeting(&conn, &meeting_id)?
+        .ok_or_else(|| "Meeting not found".to_string())?;
+    task_repo::count_moveable_tasks(&conn, &meeting_id, &meeting.project_id)
+}
+
+/// Move a meeting and its eligible tasks to a different project atomically.
+///
+/// Rules:
+/// - Only tasks still in the meeting's current project are considered
+/// - Only open/in_progress tasks move; completed/cancelled tasks stay
+/// - Tasks already manually reassigned to other projects are not touched
+///
+/// Returns `{ old_project_id, new_project_id, tasks_moved }`.
+#[tauri::command]
+pub async fn move_meeting_to_project(
+    meeting_id: String,
+    new_project_id: String,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+
+    // Fetch the meeting so we know its current project
+    let meeting = repo::get_meeting(&conn, &meeting_id)?
+        .ok_or_else(|| "Meeting not found".to_string())?;
+
+    let old_project_id = meeting.project_id.clone();
+
+    // Guard: moving to the same project is a no-op / user error
+    if old_project_id == new_project_id {
+        return Err("Meeting is already in that project".to_string());
+    }
+
+    // Guard: target project must exist and not be archived
+    let target = proj_repo::get_project(&conn, &new_project_id)?
+        .ok_or_else(|| "Target project not found".to_string())?;
+    if target.archived_at.is_some() {
+        return Err(format!(
+            "'{}' is archived — unarchive it first before moving meetings into it",
+            target.name
+        ));
+    }
+
+    // Move the meeting row
+    repo::move_meeting_project(&conn, &meeting_id, &new_project_id)?;
+
+    // Move eligible tasks
+    let tasks_moved =
+        task_repo::move_tasks_for_meeting(&conn, &meeting_id, &old_project_id, &new_project_id)?;
+
+    Ok(json!({
+        "old_project_id": old_project_id,
+        "new_project_id": new_project_id,
+        "tasks_moved": tasks_moved,
+    }))
 }

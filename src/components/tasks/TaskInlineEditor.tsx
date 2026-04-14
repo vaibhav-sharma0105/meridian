@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useUIStore } from "@/stores/uiStore";
 import TaskConfidenceBadge from "./TaskConfidenceBadge";
+import AssigneeChipInput, { parseAssignees } from "./AssigneeChipInput";
 import { KANBAN_COLUMNS } from "@/lib/constants";
 import { X, Save } from "lucide-react";
 import { parseTags } from "@/lib/validators";
@@ -16,8 +17,17 @@ interface Props {
 
 export default function TaskInlineEditor({ task }: Props) {
   const { t } = useTranslation();
-  const { updateTask } = useTasks(task.project_id);
+  const { tasks: allProjectTasks, updateTask } = useTasks(task.project_id);
   const { meetings } = useMeetings(task.project_id);
+
+  // Build unique assignee suggestions from all tasks in this project
+  const assigneeSuggestions = Array.from(
+    new Set(
+      allProjectTasks
+        .flatMap((t) => parseAssignees(t.assignee ?? ""))
+        .filter(Boolean)
+    )
+  );
   const { setSelectedTask } = useUIStore();
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description ?? "");
@@ -111,11 +121,10 @@ export default function TaskInlineEditor({ task }: Props) {
 
       <div>
         <label className="block text-xs text-zinc-500 mb-0.5">{t("tasks.assignee")}</label>
-        <input
-          type="text"
+        <AssigneeChipInput
           value={assignee}
-          onChange={(e) => setAssignee(e.target.value)}
-          className="w-full px-2 py-1 text-xs rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50"
+          onChange={setAssignee}
+          suggestions={assigneeSuggestions}
         />
       </div>
 

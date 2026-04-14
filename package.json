@@ -7,6 +7,8 @@
     "build": "tauri build",
     "build:debug": "tauri build --debug",
     "test": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
     "test:rust": "cd src-tauri && cargo test",
     "lint": "eslint src --ext .ts,.tsx",
     "type-check": "tsc --noEmit",
@@ -36,10 +38,11 @@
     "react-markdown": "^9.0.1",
     "react-router-dom": "^6.22.0",
     "recharts": "^2.10.4",
-    "zustand": "^4.5.0",
-    "zod": "^3.22.4"
+    "zod": "^3.22.4",
+    "zustand": "^4.5.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@tauri-apps/cli": "^2.0.0",
     "@types/react": "^18.2.55",
     "@types/react-dom": "^18.2.19",

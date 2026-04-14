@@ -107,6 +107,9 @@ export interface UpdateTaskInput {
 export interface TaskFilters {
   assignee?: string;
   status?: string;
+  priority?: string;
+  project_id?: string;    // client-side only — not sent to backend
+  meeting_ids?: string[]; // client-side only — multi-select meeting filter
   tags?: string[];
   search_query?: string;
   date_from?: string;
@@ -286,6 +289,22 @@ export const getMeeting = (id: string) =>
   invoke<Meeting | null>("get_meeting", { id });
 export const deleteMeeting = (id: string) =>
   invoke<void>("delete_meeting", { id });
+export const renameMeeting = (id: string, title: string) =>
+  invoke<void>("rename_meeting", { id, title });
+
+export interface MoveMeetingResult {
+  old_project_id: string;
+  new_project_id: string;
+  tasks_moved: number;
+}
+
+/** Count open/in-progress tasks that would follow the meeting on a move. */
+export const countMoveableTasks = (meetingId: string) =>
+  invoke<number>("count_moveable_tasks", { meetingId });
+
+/** Move a meeting and its eligible tasks to a new project. */
+export const moveMeetingToProject = (meetingId: string, newProjectId: string) =>
+  invoke<MoveMeetingResult>("move_meeting_to_project", { meetingId, newProjectId });
 
 // ─── Tasks ───────────────────────────────────────────────────────────────────
 
@@ -297,6 +316,9 @@ export const getTasksForProject = (
     projectId,
     filters: filters || {},
   });
+
+export const getAllTasks = (filters?: TaskFilters) =>
+  invoke<Task[]>("get_all_tasks", { filters: filters || {} });
 export const createTask = (input: CreateTaskInput) =>
   invoke<Task>("create_task", { input });
 export const updateTask = (input: UpdateTaskInput) =>
@@ -470,7 +492,7 @@ export const onEmbedProgress = (
 
 export interface Connection {
   id: string;
-  provider: "zoom" | "gmail";
+  provider: "zoom" | "gmail" | "sheets_relay";
   account_email: string | null;
   scopes: string | null;
   token_expires_at: string | null;
@@ -481,7 +503,7 @@ export interface Connection {
 
 export interface PendingImport {
   id: string;
-  provider: "zoom" | "gmail";
+  provider: "zoom" | "gmail" | "sheets_relay" | "manual";
   external_meeting_id: string | null;
   title: string;
   meeting_date: string | null;
@@ -507,6 +529,7 @@ export interface ImportApproval {
 
 export interface SyncResult {
   new_imports: number;
+  skipped_duplicates: number;
   errors: string[];
 }
 
@@ -530,3 +553,14 @@ export const onSyncComplete = (callback: (data: SyncResult) => void) =>
   listen<SyncResult>("sync_complete", (event) => callback(event.payload));
 
 export const openUrl = (url: string) => invoke<void>("open_url", { url });
+
+// ─── Sheets Relay ─────────────────────────────────────────────────────────────
+
+export const saveSheetRelayConfig = (scriptUrl: string, secretKey: string) =>
+  invoke<Connection>("save_sheets_relay_config", { scriptUrl, secretKey });
+
+export const testSheetsRelay = () =>
+  invoke<string>("test_sheets_relay");
+
+export const resetSheetsRelaySync = () =>
+  invoke<void>("reset_sheets_relay_sync");

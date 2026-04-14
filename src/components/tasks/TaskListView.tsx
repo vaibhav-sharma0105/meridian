@@ -23,16 +23,6 @@ export default function TaskListView({ projectId }: Props) {
     setAdding(false);
   };
 
-  if (!projectId) {
-    return (
-      <EmptyState
-        title={t("tasks.noProject")}
-        description={t("tasks.noProjectDesc")}
-        icon={<LayoutList className="w-10 h-10 text-zinc-400" />}
-      />
-    );
-  }
-
   return (
     <div className="p-4 space-y-2">
       {filtered.length === 0 && !adding && (
