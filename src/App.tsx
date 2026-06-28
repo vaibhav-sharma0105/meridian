@@ -95,6 +95,7 @@ export default function App() {
       <AppContent />
       <Toaster
         position="bottom-left"
+        containerStyle={{ bottom: 80 }}
         toastOptions={{
           className: "dark:bg-zinc-800 dark:text-zinc-50",
           duration: 3000,
