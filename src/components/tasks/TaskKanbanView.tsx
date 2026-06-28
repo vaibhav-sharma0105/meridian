@@ -11,6 +11,7 @@ import {
 } from "@dnd-kit/core";
 import { useState } from "react";
 import { useTasks } from "@/hooks/useTasks";
+import { useUIStore } from "@/stores/uiStore";
 import { KANBAN_COLUMNS } from "@/lib/constants";
 import TaskCard from "./TaskCard";
 import type { Task } from "@/lib/tauri";
@@ -88,11 +89,13 @@ function DroppableColumn({
   tasks,
   projectId,
   onAddTask,
+  fluid,
 }: {
   column: typeof KANBAN_COLUMNS[number];
   tasks: Task[];
   projectId: string;
   onAddTask: (status: string, title: string) => Promise<void>;
+  fluid: boolean;
 }) {
   const { t } = useTranslation();
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
@@ -109,7 +112,7 @@ function DroppableColumn({
   const chrome = COLUMN_CHROME[column.id] ?? COLUMN_CHROME.open;
 
   return (
-    <div className="w-80 flex-shrink-0 flex flex-col h-full min-h-0">
+    <div className={`flex flex-col h-full min-h-0 ${fluid ? "flex-1 min-w-[220px]" : "w-80 flex-shrink-0"}`}>
       {/* Column header — tonal pill */}
       <div className={`flex items-center justify-between mb-3 px-3 py-2 rounded-xl border ${chrome.header}`}>
         <div className="flex items-center gap-2">
@@ -182,6 +185,8 @@ function DroppableColumn({
 
 export default function TaskKanbanView({ projectId }: Props) {
   const { tasks, updateTask, createTask, refetch } = useTasks(projectId);
+  const { rightPanelOpen, activeView } = useUIStore();
+  const fluid = !(rightPanelOpen && activeView !== "chat");
   const [activeTask, setActiveTask] = useState<Task | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -216,6 +221,7 @@ export default function TaskKanbanView({ projectId }: Props) {
             tasks={tasks.filter((t) => t.kanban_column === col.id || t.status === col.id)}
             projectId={projectId}
             onAddTask={handleAddTask}
+            fluid={fluid}
           />
         ))}
       </div>

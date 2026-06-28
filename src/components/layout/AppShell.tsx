@@ -1,9 +1,11 @@
 import { useEffect } from "react";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore } from "@/stores/projectStore";
+import { useTasks } from "@/hooks/useTasks";
 import Sidebar from "./Sidebar";
 import MainCanvas from "./MainCanvas";
 import ContextPanel from "./ContextPanel";
+import TaskEditModal from "@/components/tasks/TaskEditModal";
 import CommandPalette from "@/components/command-palette/CommandPalette";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import UpdateBanner from "@/components/shared/UpdateBanner";
@@ -15,9 +17,11 @@ import { useNotificationStore } from "@/stores/notificationStore";
 import { useSync } from "@/hooks/useSync";
 
 export default function AppShell() {
-  const { sidebarOpen, rightPanelOpen, activeView, notificationCenterOpen, settingsOpen, settingsTab, setNotificationCenterOpen, setSettingsOpen } = useUIStore();
-  const { fetchProjects } = useProjectStore();
+  const { sidebarOpen, rightPanelOpen, activeView, notificationCenterOpen, settingsOpen, settingsTab, setNotificationCenterOpen, setSettingsOpen, selectedTaskId } = useUIStore();
+  const { fetchProjects, activeProjectId } = useProjectStore();
   const { setNotifications } = useNotificationStore();
+  const { tasks } = useTasks(activeProjectId);
+  const selectedTask = selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) ?? null : null;
 
   useKeyboardShortcuts();
   const { runSync, isSyncing } = useSync();
@@ -43,19 +47,22 @@ export default function AppShell() {
           <MainCanvas />
         </div>
 
-        {/* Right Context Panel — hidden when chat tab is active (redundant duplicate) */}
-        {rightPanelOpen && activeView !== "chat" && (
-          <div className="flex-shrink-0 border-l border-[#e2e2e8] dark:border-[#1e1e24] flex flex-col overflow-hidden shadow-[-1px_0_0_0_rgba(0,0,0,0.03)]"
-               style={{ width: "320px" }}>
+        {/* Right AI Panel — slides in/out, hidden when chat tab is active */}
+        <div
+          className="flex-shrink-0 flex flex-col overflow-hidden transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
+          style={{ width: rightPanelOpen && activeView !== "chat" ? "320px" : "0px" }}
+        >
+          <div className="w-[320px] h-full border-l border-[#e2e2e8] dark:border-[#1e1e24] flex flex-col shadow-[-1px_0_0_0_rgba(0,0,0,0.03)]">
             <ContextPanel />
           </div>
-        )}
+        </div>
       </div>
 
       <CommandPalette />
       <NotificationCenter open={notificationCenterOpen} onClose={() => setNotificationCenterOpen(false)} />
       <AISettings open={settingsOpen && settingsTab !== "connections"} onClose={() => setSettingsOpen(false)} />
       <ConnectionsSettings open={settingsOpen && settingsTab === "connections"} onClose={() => setSettingsOpen(false)} runSync={runSync} isSyncing={isSyncing} />
+      {selectedTask && <TaskEditModal task={selectedTask} />}
     </div>
   );
 }

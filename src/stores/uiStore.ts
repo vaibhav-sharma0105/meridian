@@ -37,7 +37,7 @@ export const useUIStore = create<UIStore>((set) => ({
   theme: "system",
   language: "en",
   viewMode: "kanban",
-  rightPanelOpen: true,
+  rightPanelOpen: false,
   sidebarOpen: true,
   activeView: "tasks",
   selectedTaskId: null,

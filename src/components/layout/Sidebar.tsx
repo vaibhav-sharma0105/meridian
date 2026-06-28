@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Bell, Settings, Settings2, Plus, LayoutList,
-  Sun, Moon, Monitor, Link2,
+  Sun, Moon, Monitor, Link2, Sparkles,
 } from "lucide-react";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -28,7 +28,7 @@ export default function Sidebar() {
   const { t } = useTranslation();
   const { projects } = useProjects();
   const { activeProjectId, setActiveProject } = useProjectStore();
-  const { theme, setTheme, setNotificationCenterOpen, setSettingsOpen, activeView, setActiveView } = useUIStore();
+  const { theme, setTheme, setNotificationCenterOpen, setSettingsOpen, activeView, setActiveView, rightPanelOpen, toggleRightPanel } = useUIStore();
   const { unreadCount } = useNotificationStore();
   const { pendingCount } = usePendingImports();
   const [showCreateProject, setShowCreateProject] = useState(false);
@@ -143,6 +143,23 @@ export default function Sidebar() {
           className="flex-1 flex items-center justify-center p-2 rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all duration-150"
         >
           <Link2 className="w-[17px] h-[17px]" />
+        </button>
+
+        {/* AI Panel toggle — always indigo-tinted to stand out; gradient fill when active */}
+        <button
+          onClick={toggleRightPanel}
+          title={rightPanelOpen && activeView !== "chat" ? "Hide AI panel" : "Show AI panel"}
+          className={`relative flex-1 flex items-center justify-center p-2 rounded-lg transition-all duration-200 ${
+            rightPanelOpen && activeView !== "chat"
+              ? "shadow-sm"
+              : "text-indigo-400 dark:text-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
+          }`}
+          style={rightPanelOpen && activeView !== "chat" ? {
+            background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+            color: "white",
+          } : undefined}
+        >
+          <Sparkles className="w-[17px] h-[17px]" />
         </button>
 
         {/* Settings */}
