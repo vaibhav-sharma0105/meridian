@@ -1,6 +1,10 @@
 import { test, expect } from "./fixtures";
 import { buildTauriMockScript, MOCK_PROJECTS, MOCK_TASKS } from "./setup/tauri-mock";
 
+// Sidebar is the only nav surface — target project items inside it
+const sidebarProject = (page: Parameters<typeof test>[1]["page"], name: string) =>
+  page.locator("nav, .select-none").getByText(name).first();
+
 test.describe("View switching (List / Kanban / Table)", () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(buildTauriMockScript({
@@ -9,11 +13,10 @@ test.describe("View switching (List / Kanban / Table)", () => {
     }));
     await page.goto("/");
     await page.waitForSelector("text=Meridian", { timeout: 15000 });
-    await page.getByText("Alpha Project").click();
+    await sidebarProject(page, "Alpha Project").click();
   });
 
   test("Tasks tab is active by default after selecting a project", async ({ page }) => {
-    // After project selection the tab bar becomes visible; tasks tab is active (border-indigo)
     const tasksTab = page.getByRole("button", { name: /^Tasks$/ }).first();
     await expect(tasksTab).toBeVisible();
   });
@@ -25,35 +28,32 @@ test.describe("View switching (List / Kanban / Table)", () => {
 
   test("switching to Kanban shows column headers", async ({ page }) => {
     await page.locator('[title*="kanban"], [title*="Kanban"]').first().click();
-    // Kanban column labels are rendered as uppercase text in DroppableColumn
-    // They use the column.label value — pick one that won't clash with <option> tags
-    await expect(page.locator('.uppercase').filter({ hasText: /^IN PROGRESS$|^OPEN$|^DONE$/i }).first()).toBeVisible();
+    await expect(
+      page.locator(".uppercase").filter({ hasText: /^IN PROGRESS$|^OPEN$|^DONE$/i }).first()
+    ).toBeVisible();
   });
 
   test("switching to Table shows table headers", async ({ page }) => {
     await page.locator('[title*="table"], [title*="Table"]').first().click();
-    // Table renders a header row; wait for a cell that only appears in table view
-    await expect(page.locator('table, [role="table"], th').first()).toBeVisible();
+    await expect(page.locator("table, [role=\"table\"], th").first()).toBeVisible();
   });
 
   test("switching back to List shows task cards", async ({ page }) => {
-    // Go to kanban then back
     await page.locator('[title*="kanban"], [title*="Kanban"]').first().click();
     await page.locator('[title*="list"], [title*="List"]').first().click();
     await expect(page.getByText("Fix the login bug")).toBeVisible();
   });
 
   test("Meetings tab is accessible from project view", async ({ page }) => {
-    await page.getByText("Meetings").click();
-    // Should show meetings (or empty state)
+    // Click the Meetings tab button specifically (not any other element with that text)
+    await page.getByRole("button", { name: /^Meetings$/ }).first().click();
     await expect(
       page.getByText("Sprint Planning Q1").or(page.getByText(/no meeting/i))
     ).toBeVisible();
   });
 
   test("Meetings nav item is NOT in sidebar (removed per design)", async ({ page }) => {
-    // The sidebar should NOT have a standalone "Meetings" nav item
-    const sidebarMeetings = page.locator('.select-none').getByText("Meetings");
+    const sidebarMeetings = page.locator(".select-none").getByText("Meetings");
     await expect(sidebarMeetings).not.toBeVisible();
   });
 });
@@ -78,9 +78,8 @@ test.describe("Empty states", () => {
     }));
     await page.goto("/");
     await page.waitForSelector("text=Meridian", { timeout: 15000 });
-    await page.getByText("Alpha Project").click();
-    await page.getByText("Meetings").click();
-    // The empty state heading and the New meeting button are both present — just check the heading
+    await sidebarProject(page, "Alpha Project").click();
+    await page.getByRole("button", { name: /^Meetings$/ }).first().click();
     await expect(page.getByRole("heading", { name: /no meetings yet/i })).toBeVisible();
   });
 });
