@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "meridian": {
+      "command": "/Users/vaibhav/eco/projects/meridian/src-tauri/target/release/meridian-mcp",
+      "args": []
+    }
+  }
+}

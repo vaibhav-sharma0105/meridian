@@ -1,3 +1,7 @@
+[workspace]
+members = [".", "meridian-mcp"]
+resolver = "2"
+
 [package]
 name = "meridian"
 version = "0.1.0"

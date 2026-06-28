@@ -76,7 +76,7 @@ pub fn get_tasks_for_project(
     let mut conditions = vec![
         "project_id = ?1".to_string(),
         if show_archived {
-            "1=1".to_string()
+            "archived_at IS NOT NULL".to_string()
         } else {
             "archived_at IS NULL".to_string()
         },
@@ -384,7 +384,7 @@ pub fn get_all_tasks(conn: &Connection, filters: &TaskFilters) -> Result<Vec<Tas
     let mut conditions: Vec<String> = vec![
         "is_duplicate = 0".to_string(),
         if show_archived {
-            "1=1".to_string()
+            "archived_at IS NOT NULL".to_string()
         } else {
             "archived_at IS NULL".to_string()
         },
