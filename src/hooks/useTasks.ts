@@ -67,7 +67,13 @@ export function useTasks(projectId: string | null, filters?: TaskFilters) {
 
   const createMutation = useMutation({
     mutationFn: api.createTask,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks", projectId] }),
+    onSuccess: (newTask) => {
+      // Optimistically append to cache so it appears instantly
+      qc.setQueryData<any[]>(["tasks", projectId, filtersWithBaseline], (old) =>
+        old ? [...old, newTask] : [newTask]
+      );
+      qc.invalidateQueries({ queryKey: ["tasks", projectId] });
+    },
   });
 
   const deleteMutation = useMutation({

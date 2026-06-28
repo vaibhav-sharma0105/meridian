@@ -84,7 +84,7 @@ function ActiveChip({
 const inputCls =
   "px-2.5 py-1.5 text-[13px] rounded-lg border border-[#e2e2e8] dark:border-zinc-700/60 " +
   "bg-white dark:bg-zinc-800/80 text-zinc-700 dark:text-zinc-300 outline-none " +
-  "focus:ring-2 focus:ring-indigo-400/50 focus:border-indigo-400 transition-all duration-150 cursor-pointer";
+  "focus-visible:ring-2 focus-visible:ring-indigo-400/50 focus:border-indigo-400 transition-all duration-150 cursor-pointer";
 
 const activeCls =
   "border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-900/30 " +
@@ -358,7 +358,7 @@ export default function TaskFilters({ showProjectFilter = false }: Props) {
             value={filters.search_query ?? ""}
             onChange={(e) => setFilters({ search_query: e.target.value || undefined })}
             placeholder={t("tasks.searchPlaceholder")}
-            className="pl-8 pr-3 py-1.5 text-[13px] rounded-lg border border-[#e2e2e8] dark:border-zinc-700/60 bg-white dark:bg-zinc-800/80 text-zinc-700 dark:text-zinc-300 w-44 outline-none focus:ring-2 focus:ring-indigo-400/50 focus:border-indigo-400 transition-all duration-150 placeholder:text-zinc-400"
+            className="pl-8 pr-3 py-1.5 text-[13px] rounded-lg border border-[#e2e2e8] dark:border-zinc-700/60 bg-white dark:bg-zinc-800/80 text-zinc-700 dark:text-zinc-300 w-44 outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50 focus:border-indigo-400 transition-all duration-150 placeholder:text-zinc-400"
           />
         </div>
 

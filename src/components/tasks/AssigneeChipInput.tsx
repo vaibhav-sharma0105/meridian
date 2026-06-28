@@ -1,4 +1,5 @@
-import { useState, useRef, KeyboardEvent } from "react";
+import { useState, useRef, useEffect, KeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import { X, User } from "lucide-react";
 
 interface Props {
@@ -33,6 +34,8 @@ export default function AssigneeChipInput({
   const [input, setInput] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
 
   const add = (name: string) => {
     const trimmed = name.trim();
@@ -55,12 +58,25 @@ export default function AssigneeChipInput({
     }
   };
 
+  // Recompute fixed position whenever the dropdown becomes visible
+  useEffect(() => {
+    if (!showSuggestions || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    setDropdownStyle({
+      position: "fixed",
+      top: rect.bottom + 2,
+      left: rect.left,
+      width: rect.width,
+      zIndex: 9999,
+    });
+  }, [showSuggestions, input]);
+
   const filtered = suggestions.filter(
     (s) => s.toLowerCase().includes(input.toLowerCase()) && !names.includes(s)
   );
 
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <div
         className="flex flex-wrap gap-1 items-center px-2 py-1 min-h-[30px] rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 cursor-text"
         onClick={() => inputRef.current?.focus()}
@@ -93,8 +109,11 @@ export default function AssigneeChipInput({
         />
       </div>
 
-      {showSuggestions && input && filtered.length > 0 && (
-        <ul className="absolute z-50 top-full left-0 right-0 mt-0.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md shadow-lg max-h-32 overflow-y-auto">
+      {showSuggestions && input && filtered.length > 0 && createPortal(
+        <ul
+          style={dropdownStyle}
+          className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md shadow-lg max-h-32 overflow-y-auto"
+        >
           {filtered.slice(0, 6).map((s) => (
             <li key={s}>
               <button
@@ -107,7 +126,8 @@ export default function AssigneeChipInput({
               </button>
             </li>
           ))}
-        </ul>
+        </ul>,
+        document.body
       )}
 
       {showHint && <p className="text-[10px] text-zinc-400 mt-0.5">Press Enter or comma to add</p>}

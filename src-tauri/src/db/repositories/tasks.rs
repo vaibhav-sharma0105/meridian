@@ -194,9 +194,9 @@ pub fn create_task(conn: &Connection, input: &CreateTaskInput) -> Result<Task, S
     conn.execute(
         "INSERT INTO tasks (id, project_id, meeting_id, title, description, assignee,
             assignee_confidence, assignee_source_quote, due_date, due_confidence,
-            due_source_quote, priority, confidence_score, tags, kanban_column, notes,
+            due_source_quote, priority, confidence_score, tags, status, kanban_column, notes,
             is_duplicate, duplicate_of_id)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
         params![
             id,
             input.project_id,
@@ -212,6 +212,7 @@ pub fn create_task(conn: &Connection, input: &CreateTaskInput) -> Result<Task, S
             priority,
             input.confidence_score,
             tags_json,
+            kanban_col,  // status mirrors kanban_column so filters stay in sync
             kanban_col,
             input.notes,
             is_dup,

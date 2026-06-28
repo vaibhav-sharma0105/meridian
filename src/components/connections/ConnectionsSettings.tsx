@@ -583,7 +583,7 @@ export default function ConnectionsSettings({ open: isOpen, onClose, runSync, is
                           placeholder="https://script.google.com/macros/s/…/exec"
                           value={scriptUrl}
                           onChange={(e) => setScriptUrl(e.target.value)}
-                          className="w-full px-3 py-2 text-xs rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          className="w-full px-3 py-2 text-xs rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                         />
 
                         {(testMessage || sheetsRelayError) && (
@@ -681,7 +681,7 @@ export default function ConnectionsSettings({ open: isOpen, onClose, runSync, is
                 <select
                   value={manualProjectId}
                   onChange={(e) => setManualProjectId(e.target.value)}
-                  className="w-full px-3 py-2 text-sm rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 text-sm rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                 >
                   <option value="">Select a project…</option>
                   {projects.filter(p => !p.archived_at).map((p) => (
@@ -700,7 +700,7 @@ export default function ConnectionsSettings({ open: isOpen, onClose, runSync, is
                   placeholder="e.g. Q2 Planning — defaults to 'Zoom Meeting'"
                   value={manualTitle}
                   onChange={(e) => setManualTitle(e.target.value)}
-                  className="w-full px-3 py-2 text-sm rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 text-sm rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                 />
               </div>
 
@@ -714,7 +714,7 @@ export default function ConnectionsSettings({ open: isOpen, onClose, runSync, is
                   onChange={(e) => setPasteText(e.target.value)}
                   placeholder="Paste the full Zoom AI summary, transcript, or any meeting notes here…"
                   rows={5}
-                  className="w-full px-3 py-2 text-sm rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
+                  className="w-full px-3 py-2 text-sm rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 resize-y"
                 />
               </div>
 

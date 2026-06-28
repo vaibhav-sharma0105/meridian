@@ -156,7 +156,7 @@ function DroppableColumn({
                 if (e.key === "Enter") handleAdd();
                 if (e.key === "Escape") setAdding(false);
               }}
-              className="w-full px-3 py-2 text-[13.5px] rounded-lg border border-[#e2e2e8] dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50 outline-none focus:ring-2 focus:ring-indigo-400/40 focus:border-indigo-400 transition-all placeholder:text-zinc-400"
+              className="w-full px-3 py-2 text-[13.5px] rounded-lg border border-[#e2e2e8] dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50 outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/40 focus:border-indigo-400 transition-all placeholder:text-zinc-400"
             />
             <div className="flex gap-1.5">
               <button onClick={handleAdd} className="px-3 py-1.5 text-[13px] font-medium bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg transition-colors shadow-sm">

@@ -36,14 +36,14 @@ const PRIORITY_LABEL: Record<string, string> = {
 const fieldCls =
   "w-full px-3 py-2 text-[13px] rounded-xl border border-[#e2e2e8] dark:border-zinc-700 " +
   "bg-white dark:bg-zinc-800/80 text-zinc-900 dark:text-zinc-50 outline-none " +
-  "focus:ring-2 focus:ring-indigo-400/30 focus:border-indigo-400 transition-all duration-150";
+  "focus-visible:ring-2 focus-visible:ring-indigo-400/30 focus:border-indigo-400 transition-all duration-150";
 
 const labelCls =
   "block text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 mb-1.5 uppercase tracking-[0.06em]";
 
 export default function TaskEditModal({ task }: Props) {
   const { t } = useTranslation();
-  const { tasks: allProjectTasks, updateTask, archiveTask, unarchiveTask, deleteTask } = useTasks(task.project_id);
+  const { tasks: allProjectTasks, updateTask, archiveTask, unarchiveTask, deleteTask } = useTasks(task.project_id, {});
   const { meetings } = useMeetings(task.project_id);
   const { setSelectedTask } = useUIStore();
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -287,7 +287,7 @@ export default function TaskEditModal({ task }: Props) {
                   await moveTaskToProject(task.id, targetId);
                   setSelectedTask(null);
                 }}
-                className="text-[12px] text-zinc-500 dark:text-zinc-400 bg-transparent border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1 outline-none hover:border-indigo-300 dark:hover:border-indigo-700 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/30 transition-all cursor-pointer"
+                className="text-[12px] text-zinc-500 dark:text-zinc-400 bg-transparent border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1 outline-none hover:border-indigo-300 dark:hover:border-indigo-700 focus:border-indigo-400 focus-visible:ring-1 focus-visible:ring-indigo-400/30 transition-all cursor-pointer"
               >
                 <option value="">Move to project…</option>
                 {otherProjects.map((p) => (

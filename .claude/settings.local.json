@@ -7,7 +7,11 @@
       "Read(//c/Users/0001v/.cargo/bin/**)",
       "Read(//c/Users/0001v/Documents/projects/meridian/$USERPROFILE/.cargo/bin/**)",
       "Bash(npx --version)",
-      "Bash(npm list:*)"
+      "Bash(npm list:*)",
+      "Bash(cargo build *)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "meridian"
+  ]
 }

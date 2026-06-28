@@ -18,13 +18,13 @@ interface Props {
 const fieldCls =
   "w-full px-2.5 py-1.5 text-[13px] rounded-lg border border-[#e2e2e8] dark:border-zinc-700 " +
   "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50 outline-none " +
-  "focus:ring-2 focus:ring-indigo-400/40 focus:border-indigo-400 transition-all duration-150";
+  "focus-visible:ring-2 focus-visible:ring-indigo-400/40 focus:border-indigo-400 transition-all duration-150";
 
 const labelCls = "block text-[11.5px] font-medium text-zinc-400 dark:text-zinc-500 mb-1 uppercase tracking-[0.05em]";
 
 export default function TaskInlineEditor({ task }: Props) {
   const { t } = useTranslation();
-  const { tasks: allProjectTasks, updateTask, archiveTask, unarchiveTask, deleteTask } = useTasks(task.project_id);
+  const { tasks: allProjectTasks, updateTask, archiveTask, unarchiveTask, deleteTask } = useTasks(task.project_id, {});
   const { meetings } = useMeetings(task.project_id);
 
   const assigneeSuggestions = Array.from(

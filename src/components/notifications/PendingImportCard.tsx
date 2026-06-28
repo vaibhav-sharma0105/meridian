@@ -96,7 +96,7 @@ export default function PendingImportCard({
           value={selectedProjectId}
           onChange={(e) => setSelectedProjectId(e.target.value)}
           disabled={isLoading}
-          className="w-full text-xs rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
+          className="w-full text-xs rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-2 py-1.5 focus:outline-none focus-visible:ring-1 focus-visible:ring-indigo-500 disabled:opacity-50"
         >
           <option value="">Select project…</option>
           {projects.map((p) => (

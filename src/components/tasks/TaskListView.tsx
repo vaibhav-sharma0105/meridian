@@ -50,7 +50,7 @@ export default function TaskListView({ projectId }: Props) {
               if (e.key === "Enter") handleAdd();
               if (e.key === "Escape") setAdding(false);
             }}
-            className="flex-1 px-3.5 py-2.5 text-[13.5px] rounded-xl border border-[#e2e2e8] dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50 outline-none focus:ring-2 focus:ring-indigo-400/40 focus:border-indigo-400 transition-all"
+            className="flex-1 px-3.5 py-2.5 text-[13.5px] rounded-xl border border-[#e2e2e8] dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50 outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/40 focus:border-indigo-400 transition-all"
           />
           <button
             onClick={handleAdd}
