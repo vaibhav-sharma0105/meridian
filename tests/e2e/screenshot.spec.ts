@@ -1,32 +1,27 @@
 import { test } from "./fixtures";
 
-test("screenshot all views", async ({ mockedPage: page }) => {
+test("screenshot bulk bar", async ({ mockedPage: page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
 
-  // AI panel is closed by default — kanban full width
   await page.click("text=Alpha Project");
   await page.waitForTimeout(400);
+
+  // Default: no AI panel, kanban full width
   await page.screenshot({ path: "/tmp/kanban-no-ai.png" });
 
-  // Click a task to open modal
-  await page.click(".group >> nth=0");
+  // Inject a task selection directly into Zustand store
+  await page.evaluate(() => {
+    // Zustand stores are accessible via their module; React re-renders automatically.
+    // We trigger toggleTaskSelection on the task card via a known task id.
+    const storeKey = Object.keys((window as any)).find(k => k.includes("zustand"));
+    // Fallback: dispatch a click on the card checkbox label
+  });
+
+  // Hover the first card to make the checkbox visible, then click the label
+  await page.locator(".group").first().hover();
+  await page.waitForTimeout(150);
+  // The checkbox is sr-only but the label click still fires the onChange
+  await page.locator("label").first().click({ force: true });
   await page.waitForTimeout(300);
-  await page.screenshot({ path: "/tmp/task-modal-light.png" });
-  await page.keyboard.press("Escape");
-  await page.waitForTimeout(200);
-
-  // Open AI panel via Sparkles button
-  await page.locator('button[title="Show AI panel"]').click();
-  await page.waitForTimeout(400);
-  await page.screenshot({ path: "/tmp/kanban-with-ai.png" });
-
-  // Dark mode
-  await page.evaluate(() => document.documentElement.classList.add("dark"));
-  await page.waitForTimeout(200);
-  await page.screenshot({ path: "/tmp/kanban-dark.png" });
-
-  // Task modal dark
-  await page.click(".group >> nth=0");
-  await page.waitForTimeout(300);
-  await page.screenshot({ path: "/tmp/task-modal-dark.png" });
+  await page.screenshot({ path: "/tmp/bulk-bar.png" });
 });
