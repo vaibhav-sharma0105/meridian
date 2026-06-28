@@ -12,8 +12,9 @@ test.describe("Meeting card", () => {
     await page.addInitScript(buildTauriMockScript(overrides));
     await page.goto("/");
     await page.waitForSelector("text=Meridian", { timeout: 15000 });
-    // Select a project to see its Meetings tab
-    await page.getByText("Alpha Project").click();
+    // Select a project to see its Meetings tab — use .first() because the project name
+    // also appears as a heading in the auto-selected project view
+    await page.getByText("Alpha Project").first().click();
     await page.getByText("Meetings").click();
   });
 
@@ -86,7 +87,7 @@ test.describe("Meeting card — edge cases", () => {
     }));
     await page.goto("/");
     await page.waitForSelector("text=Meridian", { timeout: 15000 });
-    await page.getByText("Alpha Project").click();
+    await page.getByText("Alpha Project").first().click();
     await page.getByText("Meetings").click();
     await expect(page.getByText("Sprint Planning Q1")).toBeVisible();
   });
@@ -99,7 +100,7 @@ test.describe("Meeting card — edge cases", () => {
     }));
     await page.goto("/");
     await page.waitForSelector("text=Meridian", { timeout: 15000 });
-    await page.getByText("Alpha Project").click();
+    await page.getByText("Alpha Project").first().click();
     await page.getByText("Meetings").click();
     await expect(page.getByText("Sprint Planning Q1")).toBeVisible();
   });

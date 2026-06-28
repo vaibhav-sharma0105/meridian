@@ -450,6 +450,7 @@ export default function TaskFilters({ showProjectFilter = false }: Props) {
         {hasFilters && (
           <button
             onClick={clearAll}
+            aria-label="Clear filters"
             className="flex items-center gap-1 px-2 py-1.5 text-[13px] text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all duration-150 flex-shrink-0"
           >
             <X className="w-3.5 h-3.5" />

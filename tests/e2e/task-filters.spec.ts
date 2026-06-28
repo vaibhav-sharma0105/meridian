@@ -24,10 +24,13 @@ test.describe("Task filter bar", () => {
   });
 
   test("date filter button shows 'Created date' when inactive", async ({ mockedPage: page }) => {
+    // Date filter is in the secondary row — expand it first
+    await page.getByRole("button", { name: /Filters/i }).click();
     await expect(page.getByText("Created date")).toBeVisible();
   });
 
   test("date filter popover opens on click", async ({ mockedPage: page }) => {
+    await page.getByRole("button", { name: /Filters/i }).click();
     await page.getByText("Created date").click();
     await expect(page.getByText("Today")).toBeVisible();
     await expect(page.getByText("Last 7 days")).toBeVisible();
@@ -38,6 +41,7 @@ test.describe("Task filter bar", () => {
   });
 
   test("selecting 'Today' preset closes popover and shows active chip", async ({ mockedPage: page }) => {
+    await page.getByRole("button", { name: /Filters/i }).click();
     await page.getByText("Created date").click();
     await page.getByRole("button", { name: "Today" }).click();
     // Popover should close
@@ -49,17 +53,18 @@ test.describe("Task filter bar", () => {
   test("clear filters button appears when a filter is active", async ({ mockedPage: page }) => {
     const search = page.locator('input[placeholder*="Search"]').first();
     await search.fill("test query");
-    await expect(page.getByText(/clear/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Clear filters" })).toBeVisible();
   });
 
   test("clearing filters resets search input", async ({ mockedPage: page }) => {
     const search = page.locator('input[placeholder*="Search"]').first();
     await search.fill("test query");
-    await page.getByText(/clear/i).click();
+    await page.getByRole("button", { name: "Clear filters" }).click();
     await expect(search).toHaveValue("");
   });
 
   test("custom date range inputs appear when Custom is selected", async ({ mockedPage: page }) => {
+    await page.getByRole("button", { name: /Filters/i }).click();
     await page.getByText("Created date").click();
     await page.getByText("Custom range").click();
     await expect(page.locator('input[type="date"]').first()).toBeVisible();
@@ -68,6 +73,7 @@ test.describe("Task filter bar", () => {
   });
 
   test("Apply button is disabled when no custom dates entered", async ({ mockedPage: page }) => {
+    await page.getByRole("button", { name: /Filters/i }).click();
     await page.getByText("Created date").click();
     await page.getByText("Custom range").click();
     const applyBtn = page.getByRole("button", { name: "Apply" });
