@@ -351,6 +351,15 @@ pub fn reorder_task(
     Ok(())
 }
 
+pub fn move_task_to_project(conn: &Connection, task_id: &str, new_project_id: &str) -> Result<(), String> {
+    conn.execute(
+        "UPDATE tasks SET project_id = ?1, updated_at = datetime('now') WHERE id = ?2",
+        params![new_project_id, task_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 pub fn delete_task(conn: &Connection, id: &str) -> Result<(), String> {
     conn.execute("DELETE FROM tasks WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;

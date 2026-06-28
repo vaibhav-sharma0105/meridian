@@ -1,15 +1,18 @@
 import { useTranslation } from "react-i18next";
-import { Trash2, CheckSquare, X, Archive, CheckCheck } from "lucide-react";
+import { Trash2, CheckSquare, X, Archive, CheckCheck, FolderInput } from "lucide-react";
 import { useTaskStore } from "@/stores/taskStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useTasks } from "@/hooks/useTasks";
-import { archiveTask } from "@/lib/tauri";
+import { useProjects } from "@/hooks/useProjects";
+import { archiveTask, moveTaskToProject } from "@/lib/tauri";
 
 export default function TaskBulkActions() {
   const { t } = useTranslation();
   const { selectedTaskIds, clearTaskSelection, selectAllTasks } = useTaskStore();
   const { activeProjectId } = useProjectStore();
   const { tasks, updateTask, deleteTask, refetch } = useTasks(activeProjectId);
+  const { projects } = useProjects();
+  const otherProjects = projects.filter((p) => p.id !== activeProjectId && !p.archived_at);
   const count = selectedTaskIds.length;
 
   const visibleTaskIds = tasks.map((t) => t.id);
@@ -35,6 +38,12 @@ export default function TaskBulkActions() {
     clearTaskSelection();
   };
 
+  const handleBulkMove = async (newProjectId: string) => {
+    await Promise.all(selectedTaskIds.map((id) => moveTaskToProject(id, newProjectId)));
+    await refetch();
+    clearTaskSelection();
+  };
+
   const handleBulkDelete = async () => {
     if (!window.confirm(`Delete ${count} task${count > 1 ? "s" : ""}? This cannot be undone.`)) return;
     await Promise.all(selectedTaskIds.map((id) => deleteTask(id)));
@@ -47,6 +56,36 @@ export default function TaskBulkActions() {
       <span className="text-[12px] font-semibold text-indigo-600 dark:text-indigo-400 tabular-nums min-w-[60px]">
         {count} selected
       </span>
+
+      <div className="h-3.5 w-px bg-indigo-200 dark:bg-indigo-800 mx-1" />
+
+      {/* Move to project */}
+      {otherProjects.length > 0 && (
+        <div className="flex items-center gap-1">
+          <FolderInput className="w-3 h-3 text-indigo-400 flex-shrink-0" />
+          <select
+            defaultValue=""
+            onChange={async (e) => {
+              const targetId = e.target.value;
+              if (!targetId) return;
+              const target = projects.find((p) => p.id === targetId);
+              if (!target) return;
+              if (!window.confirm(`Move ${count} task${count > 1 ? "s" : ""} to "${target.name}"?`)) {
+                e.target.value = "";
+                return;
+              }
+              await handleBulkMove(targetId);
+              e.target.value = "";
+            }}
+            className="text-[12px] text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200/60 dark:border-indigo-800/50 rounded-md px-2 py-1 outline-none hover:bg-indigo-100 dark:hover:bg-indigo-900/40 cursor-pointer transition-colors"
+          >
+            <option value="">Move to…</option>
+            {otherProjects.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="h-3.5 w-px bg-indigo-200 dark:bg-indigo-800 mx-1" />
 

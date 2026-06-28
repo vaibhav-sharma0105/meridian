@@ -53,6 +53,7 @@ pub fn run() {
             commands::tasks::delete_task,
             commands::tasks::archive_task,
             commands::tasks::unarchive_task,
+            commands::tasks::move_task_to_project,
             // Documents
             commands::documents::upload_document,
             commands::documents::upload_text,

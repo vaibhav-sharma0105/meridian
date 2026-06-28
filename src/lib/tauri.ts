@@ -345,6 +345,8 @@ export const archiveTask = (id: string) =>
   invoke<void>("archive_task", { id });
 export const unarchiveTask = (id: string) =>
   invoke<void>("unarchive_task", { id });
+export const moveTaskToProject = (taskId: string, newProjectId: string) =>
+  invoke<void>("move_task_to_project", { taskId, newProjectId });
 
 // ─── Documents ───────────────────────────────────────────────────────────────
 

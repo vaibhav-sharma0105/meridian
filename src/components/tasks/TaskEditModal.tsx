@@ -1,16 +1,18 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { X, Save, Archive, ArchiveRestore, Trash2, Calendar, User, Tag } from "lucide-react";
+import { X, Save, Archive, ArchiveRestore, Trash2, Calendar, User, Tag, FolderInput } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 import TaskConfidenceBadge from "./TaskConfidenceBadge";
 import AssigneeChipInput, { parseAssignees } from "./AssigneeChipInput";
 import { KANBAN_COLUMNS } from "@/lib/constants";
 import { parseTags } from "@/lib/validators";
 import type { Task } from "@/lib/tauri";
+import { moveTaskToProject } from "@/lib/tauri";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { useTasks } from "@/hooks/useTasks";
 import { useMeetings } from "@/hooks/useMeetings";
+import { useProjects } from "@/hooks/useProjects";
 import { TAG_COLORS } from "@/lib/constants";
 
 interface Props {
@@ -45,6 +47,9 @@ export default function TaskEditModal({ task }: Props) {
   const { meetings } = useMeetings(task.project_id);
   const { setSelectedTask } = useUIStore();
   const backdropRef = useRef<HTMLDivElement>(null);
+
+  const { projects } = useProjects();
+  const otherProjects = projects.filter((p) => p.id !== task.project_id && !p.archived_at);
 
   const assigneeSuggestions = Array.from(
     new Set(allProjectTasks.flatMap((t) => parseAssignees(t.assignee ?? "")).filter(Boolean))
@@ -263,7 +268,36 @@ export default function TaskEditModal({ task }: Props) {
         </div>
 
         {/* Footer actions */}
-        <div className="flex items-center px-5 py-3 border-t border-[#ebebf0] dark:border-zinc-800 bg-zinc-50/60 dark:bg-zinc-900/40 flex-shrink-0">
+        <div className="flex items-center gap-3 px-5 py-3 border-t border-[#ebebf0] dark:border-zinc-800 bg-zinc-50/60 dark:bg-zinc-900/40 flex-shrink-0 flex-wrap">
+          {/* Move to project */}
+          {otherProjects.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <FolderInput className="w-3.5 h-3.5 text-zinc-400 flex-shrink-0" />
+              <select
+                defaultValue=""
+                onChange={async (e) => {
+                  const targetId = e.target.value;
+                  if (!targetId) return;
+                  const target = projects.find((p) => p.id === targetId);
+                  if (!target) return;
+                  if (!window.confirm(`Move "${task.title}" to "${target.name}"?`)) {
+                    e.target.value = "";
+                    return;
+                  }
+                  await moveTaskToProject(task.id, targetId);
+                  setSelectedTask(null);
+                }}
+                className="text-[12px] text-zinc-500 dark:text-zinc-400 bg-transparent border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1 outline-none hover:border-indigo-300 dark:hover:border-indigo-700 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/30 transition-all cursor-pointer"
+              >
+                <option value="">Move to project…</option>
+                {otherProjects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Archive / Unarchive */}
           {task.archived_at ? (
             <button
               onClick={async () => { await unarchiveTask(task.id); setSelectedTask(null); }}
@@ -281,6 +315,8 @@ export default function TaskEditModal({ task }: Props) {
               Archive
             </button>
           )}
+
+          {/* Delete */}
           <button
             onClick={async () => {
               if (window.confirm(`Delete "${task.title}"? This cannot be undone.`)) {
