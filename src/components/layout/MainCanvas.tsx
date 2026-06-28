@@ -54,21 +54,37 @@ export default function MainCanvas() {
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+      {/* Project identity header */}
+      {activeProjectId && activeProject && (
+        <div className="flex items-center gap-2.5 px-5 pt-4 pb-0 flex-shrink-0">
+          <span
+            className="w-2.5 h-2.5 rounded-full flex-shrink-0 shadow-sm"
+            style={{ backgroundColor: activeProject.color ?? "#6366f1" }}
+          />
+          <h1 className="text-[17px] font-bold tracking-[-0.025em] text-zinc-900 dark:text-zinc-50">{activeProject.name}</h1>
+          {(activeProject.open_task_count ?? 0) > 0 && (
+            <span className="text-[12px] tabular-nums px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 font-medium leading-none">
+              {activeProject.open_task_count} open
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Tab bar — underline style */}
       {activeProjectId && (
-        <div className="flex items-center px-4 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex-shrink-0">
-          <div className="flex items-center flex-1 -mb-px">
+        <div className="flex items-center px-4 border-b border-[#e2e2e8] dark:border-[#1e1e24] bg-white dark:bg-[#111114] flex-shrink-0">
+          <div className="flex items-center flex-1 -mb-px gap-0.5">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveView(tab.id)}
-                className={`flex items-center gap-1.5 px-3 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${
+                className={`flex items-center gap-2 px-3.5 py-3.5 text-[13.5px] font-medium border-b-[2.5px] transition-all duration-150 rounded-t-sm ${
                   activeView === tab.id
                     ? "border-indigo-500 text-zinc-900 dark:text-zinc-50"
-                    : "border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:border-zinc-300 dark:hover:border-zinc-600"
+                    : "border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:border-zinc-200 dark:hover:border-zinc-600"
                 }`}
               >
-                <tab.icon className="w-3.5 h-3.5" />
+                <tab.icon className="w-4 h-4" />
                 {tab.label}
               </button>
             ))}
@@ -76,7 +92,7 @@ export default function MainCanvas() {
 
           {/* View switcher for tasks */}
           {activeView === "tasks" && (
-            <div className="flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5 gap-0.5">
+            <div className="flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-lg p-[3px] gap-[2px]">
               {(["list", "kanban", "table"] as const).map((mode) => {
                 const Icon = VIEW_ICONS[mode];
                 return (
@@ -84,13 +100,13 @@ export default function MainCanvas() {
                     key={mode}
                     onClick={() => setViewMode(mode)}
                     title={t(`tasks.views.${mode}`)}
-                    className={`p-1 rounded transition-colors ${
+                    className={`p-1.5 rounded-md transition-all duration-150 ${
                       viewMode === mode
                         ? "bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 shadow-sm"
                         : "text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300"
                     }`}
                   >
-                    <Icon className="w-3.5 h-3.5" />
+                    <Icon className="w-4 h-4" />
                   </button>
                 );
               })}
@@ -103,20 +119,20 @@ export default function MainCanvas() {
               <button
                 onClick={() => setShowArchivedMeetings((s) => !s)}
                 title={showArchivedMeetings ? "Hide archived meetings" : "Show archived meetings"}
-                className={`flex items-center gap-1 px-2 py-1 text-[12px] rounded-md border transition-colors ${
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-[13px] rounded-lg border transition-all duration-150 ${
                   showArchivedMeetings
                     ? "border-zinc-400 dark:border-zinc-500 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
-                    : "border-zinc-200 dark:border-zinc-700/60 bg-white dark:bg-zinc-800/80 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600"
+                    : "border-[#e2e2e8] dark:border-zinc-700/60 bg-white dark:bg-zinc-800/80 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 hover:border-zinc-300"
                 }`}
               >
-                <Archive className="w-3 h-3" />
+                <Archive className="w-3.5 h-3.5" />
                 {showArchivedMeetings ? "Archived on" : "Archived"}
               </button>
               <button
                 onClick={() => setIngestModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 active:bg-indigo-700 text-white rounded-md text-[13px] font-medium transition-colors"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-500 hover:bg-indigo-600 active:bg-indigo-700 text-white rounded-lg text-[13.5px] font-medium transition-all duration-150 shadow-sm hover:shadow-md"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="w-4 h-4" />
                 {t("meetings.new")}
               </button>
             </div>
@@ -131,9 +147,9 @@ export default function MainCanvas() {
 
       {/* All Tasks header — shown when no project is active */}
       {activeView === "tasks" && !activeProjectId && (
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex-shrink-0">
-          <span className="text-[13px] font-semibold text-zinc-900 dark:text-zinc-50 tracking-tight">All Tasks</span>
-          <div className="flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5 gap-0.5">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[#e2e2e8] dark:border-[#1e1e24] bg-white dark:bg-[#111114] flex-shrink-0">
+          <span className="text-[14px] font-semibold text-zinc-900 dark:text-zinc-50 tracking-tight">All Tasks</span>
+          <div className="flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-lg p-[3px] gap-[2px]">
             {(["list", "table"] as const).map((mode) => {
               const Icon = VIEW_ICONS[mode];
               return (
@@ -141,13 +157,13 @@ export default function MainCanvas() {
                   key={mode}
                   onClick={() => setViewMode(mode)}
                   title={mode}
-                  className={`p-1 rounded transition-colors ${
+                  className={`p-1.5 rounded-md transition-all duration-150 ${
                     viewMode === mode
                       ? "bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 shadow-sm"
                       : "text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300"
                   }`}
                 >
-                  <Icon className="w-3.5 h-3.5" />
+                  <Icon className="w-4 h-4" />
                 </button>
               );
             })}
@@ -157,7 +173,7 @@ export default function MainCanvas() {
 
       {/* Filters for tasks */}
       {activeView === "tasks" && (
-        <div className="px-4 py-2 border-b border-zinc-100 dark:border-[#1a1a1e] bg-white dark:bg-zinc-900 flex-shrink-0">
+        <div className="px-4 py-2.5 border-b border-[#ebebf0] dark:border-[#1a1a1e] bg-white dark:bg-[#111114] flex-shrink-0">
           <TaskFilters showProjectFilter={!activeProjectId} />
         </div>
       )}
@@ -175,7 +191,7 @@ export default function MainCanvas() {
         )}
 
         {activeView === "meetings" && (
-          <div className="p-4 space-y-3">
+          <div className="p-5 space-y-3">
             {meetings.length === 0 ? (
               <EmptyState
                 title={t("meetings.noMeetings")}

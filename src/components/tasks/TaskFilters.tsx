@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Search, X, Video, Calendar, ChevronDown, Archive } from "lucide-react";
+import { Search, X, Video, Calendar, ChevronDown, Archive, SlidersHorizontal } from "lucide-react";
 import { useTaskStore } from "@/stores/taskStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useTasks } from "@/hooks/useTasks";
@@ -67,14 +67,14 @@ function ActiveChip({
     orange: "bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800/60",
   };
   return (
-    <span className={`inline-flex items-center gap-1 pl-2 pr-1 py-0.5 text-[12px] font-medium rounded-md border ${colors[variant]}`}>
+    <span className={`inline-flex items-center gap-1 pl-2.5 pr-1 py-1 text-[13px] font-medium rounded-lg border ${colors[variant]}`}>
       {label}
       <button
         onClick={onClear}
         className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
         title="Remove filter"
       >
-        <X className="w-2.5 h-2.5" />
+        <X className="w-3 h-3" />
       </button>
     </span>
   );
@@ -82,9 +82,9 @@ function ActiveChip({
 
 // ── Shared input style ─────────────────────────────────────────────────────────
 const inputCls =
-  "px-2 py-1 text-[12px] rounded-md border border-zinc-200 dark:border-zinc-700/60 " +
+  "px-2.5 py-1.5 text-[13px] rounded-lg border border-[#e2e2e8] dark:border-zinc-700/60 " +
   "bg-white dark:bg-zinc-800/80 text-zinc-700 dark:text-zinc-300 outline-none " +
-  "focus:ring-2 focus:ring-indigo-400/50 focus:border-indigo-400 transition-colors cursor-pointer";
+  "focus:ring-2 focus:ring-indigo-400/50 focus:border-indigo-400 transition-all duration-150 cursor-pointer";
 
 const activeCls =
   "border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-900/30 " +
@@ -126,21 +126,21 @@ function MeetingFilter({
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className={`flex items-center gap-1.5 px-2 py-1 text-[12px] rounded-md border transition-colors ${
-          isActive ? activeCls : "border-zinc-200 dark:border-zinc-700/60 bg-white dark:bg-zinc-800/80 text-zinc-700 dark:text-zinc-300"
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 text-[13px] rounded-lg border transition-all duration-150 ${
+          isActive ? activeCls : "border-[#e2e2e8] dark:border-zinc-700/60 bg-white dark:bg-zinc-800/80 text-zinc-700 dark:text-zinc-300"
         }`}
       >
-        <Video className="w-3 h-3 flex-shrink-0" />
+        <Video className="w-3.5 h-3.5 flex-shrink-0" />
         <span>
           {isActive
             ? `${selectedIds.length} meeting${selectedIds.length > 1 ? "s" : ""}`
             : "By meeting"}
         </span>
-        <ChevronDown className={`w-3 h-3 transition-transform ${open ? "rotate-180" : ""}`} />
+        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-xl z-50 overflow-hidden animate-fade-in">
+        <div className="absolute top-full left-0 mt-1.5 w-64 bg-white dark:bg-zinc-800 border border-[#e2e2e8] dark:border-zinc-700 rounded-xl shadow-xl z-50 overflow-hidden animate-slide-down">
           <div className="px-3 py-2 border-b border-zinc-100 dark:border-zinc-700 flex items-center justify-between">
             <span className="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
               Filter by meeting
@@ -227,20 +227,20 @@ function DateFilter({
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(o => !o)}
-        className={`flex items-center gap-1.5 px-2 py-1 text-[12px] rounded-md border transition-colors ${
-          isActive ? activeCls : "border-zinc-200 dark:border-zinc-700/60 bg-white dark:bg-zinc-800/80 text-zinc-700 dark:text-zinc-300"
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 text-[13px] rounded-lg border transition-all duration-150 ${
+          isActive ? activeCls : "border-[#e2e2e8] dark:border-zinc-700/60 bg-white dark:bg-zinc-800/80 text-zinc-700 dark:text-zinc-300"
         }`}
       >
-        <Calendar className="w-3 h-3 flex-shrink-0" />
+        <Calendar className="w-3.5 h-3.5 flex-shrink-0" />
         <span>{isActive ? activeLabel : "Created date"}</span>
         {isActive
-          ? <button onClick={(e) => { e.stopPropagation(); onChange(undefined, undefined); }} className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10"><X className="w-2.5 h-2.5" /></button>
-          : <ChevronDown className={`w-3 h-3 transition-transform ${open ? "rotate-180" : ""}`} />
+          ? <button onClick={(e) => { e.stopPropagation(); onChange(undefined, undefined); }} className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10"><X className="w-3 h-3" /></button>
+          : <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
         }
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1 w-52 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-xl z-50 py-1 overflow-hidden animate-fade-in">
+        <div className="absolute top-full left-0 mt-1.5 w-52 bg-white dark:bg-zinc-800 border border-[#e2e2e8] dark:border-zinc-700 rounded-xl shadow-xl z-50 py-1 overflow-hidden animate-slide-down">
           {/* Clear */}
           {isActive && (
             <button
@@ -309,8 +309,8 @@ export default function TaskFilters({ showProjectFilter = false }: Props) {
   const { filters, setFilters, baselineDate, setBaselineDate } = useTaskStore();
   const { activeProjectId, projects } = useProjectStore();
   const [editingBaseline, setEditingBaseline] = useState(false);
+  const [showMore, setShowMore] = useState(false);
   const { meetings } = useMeetings(activeProjectId);
-
   const { tasks: allTasks } = useTasks(activeProjectId, {});
 
   async function handleBaselineChange(date: string | null) {
@@ -318,194 +318,213 @@ export default function TaskFilters({ showProjectFilter = false }: Props) {
     await api.setAppSetting("baseline_date", date ?? "");
     setEditingBaseline(false);
   }
+
   const assignees = Array.from(
     new Set(allTasks.flatMap((task) => parseAssignees(task.assignee ?? "")))
   );
 
   const hasFilters =
-    filters.search_query ||
-    filters.status ||
-    filters.priority ||
-    filters.assignee ||
-    filters.project_id ||
-    filters.meeting_ids?.length ||
-    filters.date_from ||
-    filters.date_to;
+    filters.search_query || filters.status || filters.priority ||
+    filters.assignee || filters.project_id ||
+    filters.meeting_ids?.length || filters.date_from || filters.date_to;
+
+  // Count secondary active filters for the badge on the More button
+  const secondaryActiveCount = [
+    filters.meeting_ids?.length ? 1 : 0,
+    filters.date_from || filters.date_to ? 1 : 0,
+    filters.show_archived ? 1 : 0,
+    baselineDate ? 1 : 0,
+  ].reduce((a, b) => a + b, 0);
 
   const clearAll = () => {
     setFilters({
-      search_query: undefined,
-      status: undefined,
-      priority: undefined,
-      assignee: undefined,
-      project_id: undefined,
-      meeting_ids: undefined,
-      date_from: undefined,
-      date_to: undefined,
-      // preserve show_archived across clear — it's an explicit persistent toggle
+      search_query: undefined, status: undefined, priority: undefined,
+      assignee: undefined, project_id: undefined, meeting_ids: undefined,
+      date_from: undefined, date_to: undefined,
     });
-    // Clear persisted assignee
     void api.setAppSetting("persistent_assignee", "");
   };
 
   return (
-    <div className="flex items-center gap-1.5 flex-wrap">
-      {/* Baseline date chip — global persistent floor */}
-      {editingBaseline ? (
-        <div className="flex items-center gap-1">
+    <div className="space-y-2">
+      {/* ── Primary row ─────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-2 flex-nowrap overflow-x-auto">
+
+        {/* Search */}
+        <div className="relative flex-shrink-0">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 pointer-events-none" />
           <input
-            type="date"
-            autoFocus
-            defaultValue={baselineDate ?? ""}
-            onBlur={(e) => { void handleBaselineChange(e.target.value || null); }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void handleBaselineChange((e.target as HTMLInputElement).value || null);
-              if (e.key === "Escape") setEditingBaseline(false);
-            }}
-            className={`${inputCls} w-36`}
+            type="text"
+            value={filters.search_query ?? ""}
+            onChange={(e) => setFilters({ search_query: e.target.value || undefined })}
+            placeholder={t("tasks.searchPlaceholder")}
+            className="pl-8 pr-3 py-1.5 text-[13px] rounded-lg border border-[#e2e2e8] dark:border-zinc-700/60 bg-white dark:bg-zinc-800/80 text-zinc-700 dark:text-zinc-300 w-44 outline-none focus:ring-2 focus:ring-indigo-400/50 focus:border-indigo-400 transition-all duration-150 placeholder:text-zinc-400"
           />
         </div>
-      ) : baselineDate ? (
-        <span className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 text-[12px] font-medium rounded-md border border-indigo-200 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300">
-          <Calendar className="w-2.5 h-2.5" />
-          From {baselineDate}
-          <button
-            onClick={() => setEditingBaseline(true)}
-            className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
-            title="Change baseline date"
-          >
-            <Search className="w-2 h-2" />
-          </button>
-          <button
-            onClick={() => { void handleBaselineChange(null); }}
-            className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
-            title="Remove baseline date"
-          >
-            <X className="w-2.5 h-2.5" />
-          </button>
-        </span>
-      ) : null}
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-400 pointer-events-none" />
-        <input
-          type="text"
-          value={filters.search_query ?? ""}
-          onChange={(e) => setFilters({ search_query: e.target.value || undefined })}
-          placeholder={t("tasks.searchPlaceholder")}
-          className="pl-7 pr-3 py-1 text-[12px] rounded-md border border-zinc-200 dark:border-zinc-700/60 bg-white dark:bg-zinc-800/80 text-zinc-700 dark:text-zinc-300 w-40 outline-none focus:ring-2 focus:ring-indigo-400/50 focus:border-indigo-400 transition-colors placeholder:text-zinc-400"
-        />
-      </div>
+        {/* Status */}
+        {filters.status ? (
+          <ActiveChip
+            label={KANBAN_COLUMNS.find(c => c.id === filters.status)?.label ?? filters.status}
+            onClear={() => setFilters({ status: undefined })}
+          />
+        ) : (
+          <select value="" onChange={(e) => setFilters({ status: e.target.value || undefined })} className={inputCls}>
+            <option value="">{t("tasks.allStatuses")}</option>
+            {KANBAN_COLUMNS.map((col) => <option key={col.id} value={col.id}>{col.label}</option>)}
+            <option value="cancelled">Cancelled</option>
+          </select>
+        )}
 
-      {/* Status */}
-      {filters.status ? (
-        <ActiveChip
-          label={KANBAN_COLUMNS.find(c => c.id === filters.status)?.label ?? filters.status}
-          onClear={() => setFilters({ status: undefined })}
-        />
-      ) : (
-        <select
-          value=""
-          onChange={(e) => setFilters({ status: e.target.value || undefined })}
-          className={inputCls}
-        >
-          <option value="">{t("tasks.allStatuses")}</option>
-          {KANBAN_COLUMNS.map((col) => (
-            <option key={col.id} value={col.id}>{col.label}</option>
-          ))}
-          <option value="cancelled">Cancelled</option>
-        </select>
-      )}
+        {/* Priority */}
+        {filters.priority ? (
+          <ActiveChip
+            label={filters.priority.charAt(0).toUpperCase() + filters.priority.slice(1)}
+            onClear={() => setFilters({ priority: undefined })}
+            variant={filters.priority === "critical" ? "red" : filters.priority === "high" ? "orange" : "indigo"}
+          />
+        ) : (
+          <select value="" onChange={(e) => setFilters({ priority: e.target.value || undefined })} className={inputCls}>
+            <option value="">All priorities</option>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+        )}
 
-      {/* Priority */}
-      {filters.priority ? (
-        <ActiveChip
-          label={filters.priority.charAt(0).toUpperCase() + filters.priority.slice(1)}
-          onClear={() => setFilters({ priority: undefined })}
-          variant={filters.priority === "critical" ? "red" : filters.priority === "high" ? "orange" : "indigo"}
-        />
-      ) : (
-        <select
-          value=""
-          onChange={(e) => setFilters({ priority: e.target.value || undefined })}
-          className={inputCls}
-        >
-          <option value="">All priorities</option>
-          <option value="critical">Critical</option>
-          <option value="high">High</option>
-          <option value="medium">Medium</option>
-          <option value="low">Low</option>
-        </select>
-      )}
+        {/* Assignee */}
+        <div className="w-40 flex-shrink-0">
+          <AssigneeChipInput
+            value={filters.assignee ?? ""}
+            onChange={(v) => {
+              setFilters({ assignee: v || undefined });
+              void api.setAppSetting("persistent_assignee", v ?? "");
+            }}
+            suggestions={assignees}
+            placeholder={t("tasks.filterAssignee")}
+            showHint={false}
+          />
+        </div>
 
-      {/* Assignee — value persists across restarts */}
-      <div className="w-40 relative">
-        <AssigneeChipInput
-          value={filters.assignee ?? ""}
-          onChange={(v) => {
-            setFilters({ assignee: v || undefined });
-            void api.setAppSetting("persistent_assignee", v ?? "");
-          }}
-          suggestions={assignees}
-          placeholder={t("tasks.filterAssignee")}
-          showHint={false}
-        />
-      </div>
+        {/* Project — All Tasks view only */}
+        {showProjectFilter && (
+          filters.project_id ? (
+            <ActiveChip
+              label={projects.find(p => p.id === filters.project_id)?.name ?? "Project"}
+              onClear={() => setFilters({ project_id: undefined })}
+            />
+          ) : (
+            <select
+              value={filters.project_id ?? ""}
+              onChange={(e) => setFilters({ project_id: e.target.value || undefined })}
+              className={`${inputCls} max-w-[130px]`}
+            >
+              <option value="">All projects</option>
+              {projects.filter((p) => !p.archived_at).map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          )
+        )}
 
-      {/* Meeting multi-select — project-scoped only */}
-      {activeProjectId && meetings.length > 0 && (
-        <MeetingFilter
-          meetings={meetings}
-          selectedIds={filters.meeting_ids ?? []}
-          onChange={(ids) => setFilters({ meeting_ids: ids.length ? ids : undefined })}
-        />
-      )}
-
-      {/* Date filter */}
-      <DateFilter
-        dateFrom={filters.date_from}
-        dateTo={filters.date_to}
-        onChange={(from, to) => setFilters({ date_from: from, date_to: to })}
-      />
-
-      {/* Project — All Tasks view only */}
-      {showProjectFilter && (
-        <select
-          value={filters.project_id ?? ""}
-          onChange={(e) => setFilters({ project_id: e.target.value || undefined })}
-          className={`${inputCls} max-w-[130px] ${filters.project_id ? activeCls : ""}`}
-        >
-          <option value="">All projects</option>
-          {projects.filter((p) => !p.archived_at).map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
-      )}
-
-      {/* Show archived toggle */}
-      <button
-        onClick={() => setFilters({ show_archived: !filters.show_archived })}
-        title={filters.show_archived ? "Hide archived tasks" : "Show archived tasks"}
-        className={`flex items-center gap-1 px-2 py-1 text-[12px] rounded-md border transition-colors ${
-          filters.show_archived
-            ? "border-zinc-400 dark:border-zinc-500 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
-            : "border-zinc-200 dark:border-zinc-700/60 bg-white dark:bg-zinc-800/80 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-400"
-        }`}
-      >
-        <Archive className="w-3 h-3" />
-        {filters.show_archived ? "Archived on" : "Archived"}
-      </button>
-
-      {/* Clear all */}
-      {hasFilters && (
+        {/* More filters toggle */}
         <button
-          onClick={clearAll}
-          className="flex items-center gap-1 px-2 py-1 text-[12px] text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+          onClick={() => setShowMore(s => !s)}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 text-[13px] rounded-lg border transition-all duration-150 flex-shrink-0 ${
+            showMore || secondaryActiveCount > 0
+              ? "border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
+              : "border-[#e2e2e8] dark:border-zinc-700/60 bg-white dark:bg-zinc-800/80 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 hover:border-zinc-300"
+          }`}
         >
-          <X className="w-3 h-3" />
-          {t("tasks.clearFilters")}
+          <SlidersHorizontal className="w-3.5 h-3.5" />
+          Filters
+          {secondaryActiveCount > 0 && (
+            <span className="ml-0.5 w-4 h-4 rounded-full bg-indigo-500 text-white text-[10px] font-bold flex items-center justify-center leading-none">
+              {secondaryActiveCount}
+            </span>
+          )}
         </button>
+
+        {/* Clear all */}
+        {hasFilters && (
+          <button
+            onClick={clearAll}
+            className="flex items-center gap-1 px-2 py-1.5 text-[13px] text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all duration-150 flex-shrink-0"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
+      {/* ── Secondary row (progressive disclosure) ──────────────────────── */}
+      {showMore && (
+        <div className="flex items-center gap-2 flex-wrap animate-fade-in pt-0.5">
+
+          {/* Baseline date */}
+          {editingBaseline ? (
+            <input
+              type="date"
+              autoFocus
+              defaultValue={baselineDate ?? ""}
+              onBlur={(e) => { void handleBaselineChange(e.target.value || null); }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void handleBaselineChange((e.target as HTMLInputElement).value || null);
+                if (e.key === "Escape") setEditingBaseline(false);
+              }}
+              className={`${inputCls} w-36`}
+            />
+          ) : baselineDate ? (
+            <span className="inline-flex items-center gap-1.5 pl-2.5 pr-1 py-1 text-[13px] font-medium rounded-lg border border-indigo-200 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300">
+              <Calendar className="w-3 h-3" />
+              From {baselineDate}
+              <button onClick={() => setEditingBaseline(true)} className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors" title="Change">
+                <Search className="w-2.5 h-2.5" />
+              </button>
+              <button onClick={() => { void handleBaselineChange(null); }} className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ) : (
+            <button
+              onClick={() => setEditingBaseline(true)}
+              className={`${inputCls} flex items-center gap-1.5`}
+            >
+              <Calendar className="w-3.5 h-3.5 text-zinc-400" />
+              <span className="text-zinc-500">From date…</span>
+            </button>
+          )}
+
+          {/* Meeting multi-select */}
+          {activeProjectId && meetings.length > 0 && (
+            <MeetingFilter
+              meetings={meetings}
+              selectedIds={filters.meeting_ids ?? []}
+              onChange={(ids) => setFilters({ meeting_ids: ids.length ? ids : undefined })}
+            />
+          )}
+
+          {/* Date filter */}
+          <DateFilter
+            dateFrom={filters.date_from}
+            dateTo={filters.date_to}
+            onChange={(from, to) => setFilters({ date_from: from, date_to: to })}
+          />
+
+          {/* Show archived toggle */}
+          <button
+            onClick={() => setFilters({ show_archived: !filters.show_archived })}
+            title={filters.show_archived ? "Hide archived tasks" : "Show archived tasks"}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 text-[13px] rounded-lg border transition-all duration-150 ${
+              filters.show_archived
+                ? "border-zinc-400 dark:border-zinc-500 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+                : "border-[#e2e2e8] dark:border-zinc-700/60 bg-white dark:bg-zinc-800/80 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-400"
+            }`}
+          >
+            <Archive className="w-3.5 h-3.5" />
+            {filters.show_archived ? "Archived on" : "Archived"}
+          </button>
+        </div>
       )}
     </div>
   );

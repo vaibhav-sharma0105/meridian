@@ -15,7 +15,7 @@ import { useNotificationStore } from "@/stores/notificationStore";
 import { useSync } from "@/hooks/useSync";
 
 export default function AppShell() {
-  const { sidebarOpen, rightPanelOpen, notificationCenterOpen, settingsOpen, settingsTab, setNotificationCenterOpen, setSettingsOpen } = useUIStore();
+  const { sidebarOpen, rightPanelOpen, activeView, notificationCenterOpen, settingsOpen, settingsTab, setNotificationCenterOpen, setSettingsOpen } = useUIStore();
   const { fetchProjects } = useProjectStore();
   const { setNotifications } = useNotificationStore();
 
@@ -28,25 +28,25 @@ export default function AppShell() {
   }, []);
 
   return (
-    <div className="flex flex-col h-full bg-zinc-100 dark:bg-[#0c0c0e] overflow-hidden">
+    <div className="flex flex-col h-full bg-[#f0f0f4] dark:bg-[#0a0a0d] overflow-hidden">
       <UpdateBanner />
       <div className="flex flex-1 overflow-hidden">
         {/* Left Sidebar */}
         {sidebarOpen && (
-          <div className="w-56 flex-shrink-0 border-r border-zinc-200 dark:border-[#1c1c20] flex flex-col overflow-hidden">
+          <div className="w-60 flex-shrink-0 border-r border-[#e2e2e8] dark:border-[#1e1e24] flex flex-col overflow-hidden shadow-[1px_0_0_0_rgba(0,0,0,0.03)]">
             <Sidebar />
           </div>
         )}
 
         {/* Main Canvas */}
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0 bg-white dark:bg-zinc-900">
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0 bg-white dark:bg-[#111114]">
           <MainCanvas />
         </div>
 
-        {/* Right Context Panel */}
-        {rightPanelOpen && (
-          <div className="flex-shrink-0 border-l border-zinc-200 dark:border-[#1c1c20] flex flex-col overflow-hidden"
-               style={{ width: "340px" }}>
+        {/* Right Context Panel — hidden when chat tab is active (redundant duplicate) */}
+        {rightPanelOpen && activeView !== "chat" && (
+          <div className="flex-shrink-0 border-l border-[#e2e2e8] dark:border-[#1e1e24] flex flex-col overflow-hidden shadow-[-1px_0_0_0_rgba(0,0,0,0.03)]"
+               style={{ width: "320px" }}>
             <ContextPanel />
           </div>
         )}

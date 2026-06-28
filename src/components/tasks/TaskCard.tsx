@@ -19,7 +19,7 @@ const PRIORITY_COLORS: Record<string, string> = {
   critical: "border-l-red-500",
   high: "border-l-orange-400",
   medium: "border-l-yellow-400",
-  low: "border-l-zinc-300",
+  low: "border-l-zinc-300 dark:border-l-zinc-600",
 };
 
 export default function TaskCard({ task, compact = false }: Props) {
@@ -33,14 +33,13 @@ export default function TaskCard({ task, compact = false }: Props) {
 
   const hasMetadata = task.assignee || task.due_date || linkedMeeting || tags.length > 0;
 
-  // Metadata items as an array so we can render separators cleanly
   const metaItems: React.ReactNode[] = [];
   if (!compact) {
     if (task.assignee) {
       parseAssignees(task.assignee).forEach((name) => {
         metaItems.push(
-          <span key={`a-${name}`} className="flex items-center gap-1 text-[11px] text-zinc-400 dark:text-zinc-500">
-            <User className="w-2.5 h-2.5" />
+          <span key={`a-${name}`} className="flex items-center gap-1 text-[12px] text-zinc-400 dark:text-zinc-500">
+            <User className="w-3 h-3" />
             {name}
           </span>
         );
@@ -48,16 +47,16 @@ export default function TaskCard({ task, compact = false }: Props) {
     }
     if (task.due_date) {
       metaItems.push(
-        <span key="due" className="flex items-center gap-1 text-[11px] text-zinc-400 dark:text-zinc-500">
-          <Calendar className="w-2.5 h-2.5" />
+        <span key="due" className="flex items-center gap-1 text-[12px] text-zinc-400 dark:text-zinc-500">
+          <Calendar className="w-3 h-3" />
           {(() => { try { return format(new Date(task.due_date), "MMM d"); } catch { return task.due_date; } })()}
         </span>
       );
     }
     if (linkedMeeting) {
       metaItems.push(
-        <span key="mtg" className="flex items-center gap-1 text-[11px] text-indigo-400/80 dark:text-indigo-400/60 max-w-[100px] truncate" title={linkedMeeting.title}>
-          <Video className="w-2.5 h-2.5 flex-shrink-0" />
+        <span key="mtg" className="flex items-center gap-1 text-[12px] text-indigo-400/80 dark:text-indigo-400/60 max-w-[110px] truncate" title={linkedMeeting.title}>
+          <Video className="w-3 h-3 flex-shrink-0" />
           {linkedMeeting.title}
         </span>
       );
@@ -65,8 +64,8 @@ export default function TaskCard({ task, compact = false }: Props) {
     tags.slice(0, 3).forEach((tag) => {
       const tc = TAG_COLORS[tag] ?? "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400";
       metaItems.push(
-        <span key={`t-${tag}`} className={`inline-flex items-center gap-0.5 text-[11px] px-1.5 py-0.5 rounded ${tc}`}>
-          <Tag className="w-2 h-2" />
+        <span key={`t-${tag}`} className={`inline-flex items-center gap-1 text-[12px] px-2 py-0.5 rounded-full ${tc}`}>
+          <Tag className="w-2.5 h-2.5" />
           {tag}
         </span>
       );
@@ -77,19 +76,19 @@ export default function TaskCard({ task, compact = false }: Props) {
 
   return (
     <div
-      className={`group bg-white dark:bg-[#18181b] border border-zinc-100 dark:border-zinc-800/50 rounded-lg cursor-pointer transition-all duration-120 border-l-[3px] ${priorityBorder} ${
+      className={`group bg-white dark:bg-[#18181b] border border-[#ebebf0] dark:border-zinc-800/60 rounded-xl cursor-pointer transition-all duration-150 border-l-[3px] ${priorityBorder} ${
         isArchived
-          ? "opacity-60"
+          ? "opacity-55"
           : isSelected
-          ? "bg-indigo-50/60 dark:bg-indigo-950/30 border-zinc-200 dark:border-indigo-900/60 shadow-sm shadow-indigo-500/5"
-          : "hover:bg-zinc-50 dark:hover:bg-zinc-800/60 hover:border-zinc-200 dark:hover:border-zinc-700 hover:shadow-sm"
+          ? "bg-indigo-50/70 dark:bg-indigo-950/30 border-indigo-200/80 dark:border-indigo-900/60 shadow-sm shadow-indigo-500/8"
+          : "hover:bg-zinc-50 dark:hover:bg-zinc-800/60 hover:border-zinc-200 dark:hover:border-zinc-700 hover:-translate-y-px hover:shadow-[0_4px_12px_rgba(0,0,0,0.07)] dark:hover:shadow-[0_4px_12px_rgba(0,0,0,0.25)]"
       }`}
       onClick={() => setSelectedTask(task.id)}
     >
-      <div className="flex items-start gap-2.5 px-3 py-2.5">
-        {/* Custom checkbox — always in flow, never overlaps */}
+      <div className="flex items-start gap-3 px-4 py-3">
+        {/* Custom checkbox */}
         <label
-          className="flex-shrink-0 pt-[2px] cursor-pointer"
+          className="flex-shrink-0 pt-[3px] cursor-pointer"
           onClick={(e) => e.stopPropagation()}
         >
           <input
@@ -98,12 +97,12 @@ export default function TaskCard({ task, compact = false }: Props) {
             onChange={(e) => { e.stopPropagation(); toggleTaskSelection(task.id); }}
             className="sr-only"
           />
-          <div className={`w-[15px] h-[15px] rounded-[4px] border flex items-center justify-center transition-all duration-120 ${
+          <div className={`w-[17px] h-[17px] rounded-[5px] border-[1.5px] flex items-center justify-center transition-all duration-150 ${
             isSelected
-              ? "bg-indigo-500 border-indigo-500"
+              ? "bg-indigo-500 border-indigo-500 shadow-sm"
               : "border-zinc-300 dark:border-zinc-600 opacity-0 group-hover:opacity-100 group-hover:border-indigo-300 dark:group-hover:border-indigo-700"
           }`}>
-            {isSelected && <Check className="w-2.5 h-2.5 text-white stroke-[2.5]" />}
+            {isSelected && <Check className="w-2.5 h-2.5 text-white stroke-[3]" />}
           </div>
         </label>
 
@@ -111,12 +110,12 @@ export default function TaskCard({ task, compact = false }: Props) {
         <div className="flex-1 min-w-0">
           {/* Title row */}
           <div className="flex items-start justify-between gap-2 min-w-0">
-            <p className={`text-zinc-900 dark:text-zinc-100 font-semibold leading-snug min-w-0 break-words tracking-[-0.01em] ${compact ? "text-xs line-clamp-2" : "text-[13.5px]"}`}>
+            <p className={`text-zinc-900 dark:text-zinc-100 font-semibold leading-snug min-w-0 break-words tracking-[-0.012em] ${compact ? "text-[13px] line-clamp-2" : "text-[14.5px]"}`}>
               {task.title}
             </p>
             {isArchived && (
-              <span className="flex items-center gap-0.5 text-[10px] text-zinc-400 dark:text-zinc-500 flex-shrink-0">
-                <Archive className="w-2.5 h-2.5" />
+              <span className="flex items-center gap-0.5 text-[11px] text-zinc-400 dark:text-zinc-500 flex-shrink-0">
+                <Archive className="w-3 h-3" />
                 Archived
               </span>
             )}
@@ -125,20 +124,20 @@ export default function TaskCard({ task, compact = false }: Props) {
             )}
           </div>
 
-          {/* Description — 2 lines so the actual task context is visible */}
+          {/* Description */}
           {!compact && task.description && (
-            <p className="text-[12px] text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
+            <p className="text-[13px] text-zinc-500 dark:text-zinc-400 mt-1.5 line-clamp-2 leading-relaxed">
               {task.description}
             </p>
           )}
 
-          {/* Metadata — dot-separated items */}
+          {/* Metadata — dot-separated */}
           {!compact && metaItems.length > 0 && (
-            <div className="flex items-center gap-0 mt-1.5 flex-wrap">
+            <div className="flex items-center gap-0 mt-2 flex-wrap">
               {metaItems.map((item, i) => (
                 <span key={i} className="flex items-center">
                   {i > 0 && (
-                    <span className="mx-1.5 text-zinc-300 dark:text-zinc-700 text-[10px] leading-none select-none">·</span>
+                    <span className="mx-2 text-zinc-300 dark:text-zinc-700 text-[11px] leading-none select-none">·</span>
                   )}
                   {item}
                 </span>

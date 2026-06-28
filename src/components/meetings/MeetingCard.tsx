@@ -195,17 +195,17 @@ export default function MeetingCard({ meeting, onDelete, onArchive, onUnarchive,
     : [];
 
   return (
-    <div className={`bg-white dark:bg-zinc-900/80 border border-zinc-100 dark:border-zinc-800/60 rounded-lg overflow-visible transition-shadow hover:shadow-sm ${isArchived ? "opacity-60" : ""}`}>
+    <div className={`bg-white dark:bg-[#18181b] border border-[#ebebf0] dark:border-zinc-800/60 rounded-xl overflow-visible transition-all duration-150 hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)] dark:hover:shadow-[0_4px_12px_rgba(0,0,0,0.22)] hover:-translate-y-px ${isArchived ? "opacity-55" : ""}`}>
       {/* ── Card header row ─────────────────────────────────────────────── */}
       <div
-        className="flex items-center gap-2.5 px-3.5 py-3 cursor-pointer hover:bg-zinc-50/80 dark:hover:bg-zinc-800/30 transition-colors"
+        className="flex items-center gap-3 px-4 py-3.5 cursor-pointer hover:bg-zinc-50/80 dark:hover:bg-zinc-800/30 transition-colors rounded-xl"
         onClick={() => setExpanded(!expanded)}
       >
         <button className="text-zinc-300 dark:text-zinc-600 flex-shrink-0 hover:text-zinc-500 dark:hover:text-zinc-400 transition-colors">
           {expanded ? (
-            <ChevronDown className="w-3.5 h-3.5" />
+            <ChevronDown className="w-4 h-4" />
           ) : (
-            <ChevronRight className="w-3.5 h-3.5" />
+            <ChevronRight className="w-4 h-4" />
           )}
         </button>
 
@@ -227,7 +227,7 @@ export default function MeetingCard({ meeting, onDelete, onArchive, onUnarchive,
             ) : (
               <div className="flex items-center gap-1.5 min-w-0">
                 <h3
-                  className="text-[13px] font-semibold text-zinc-900 dark:text-zinc-100 truncate cursor-text hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
+                  className="text-[14.5px] font-semibold text-zinc-900 dark:text-zinc-100 truncate cursor-text hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
                   title="Click to rename"
                   onClick={(e) => { e.stopPropagation(); setEditingTitle(true); }}
                 >
@@ -245,9 +245,9 @@ export default function MeetingCard({ meeting, onDelete, onArchive, onUnarchive,
               <MeetingHealthBadge score={meeting.health_score} showLabel />
             )}
           </div>
-          <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-            <span className="flex items-center gap-1 text-[11px] text-zinc-400 dark:text-zinc-500">
-              <Calendar className="w-3 h-3" />
+          <div className="flex items-center gap-3 mt-1 flex-wrap">
+            <span className="flex items-center gap-1.5 text-[12.5px] text-zinc-400 dark:text-zinc-500">
+              <Calendar className="w-3.5 h-3.5" />
               {(() => {
                 try {
                   return format(new Date(meeting.created_at), "MMM d, yyyy");
@@ -257,17 +257,17 @@ export default function MeetingCard({ meeting, onDelete, onArchive, onUnarchive,
               })()}
             </span>
             {meeting.platform && (
-              <span className="text-[11px] text-zinc-400 dark:text-zinc-500 capitalize">{meeting.platform}</span>
+              <span className="text-[12.5px] text-zinc-400 dark:text-zinc-500 capitalize">{meeting.platform}</span>
             )}
             {attendees.length > 0 && (
-              <span className="flex items-center gap-1 text-[11px] text-zinc-400 dark:text-zinc-500">
-                <Users className="w-3 h-3" />
+              <span className="flex items-center gap-1.5 text-[12.5px] text-zinc-400 dark:text-zinc-500">
+                <Users className="w-3.5 h-3.5" />
                 {attendees.length} attendees
               </span>
             )}
             {meeting.duration_minutes && (
-              <span className="flex items-center gap-1 text-[11px] text-zinc-400 dark:text-zinc-500">
-                <Clock className="w-3 h-3" />
+              <span className="flex items-center gap-1.5 text-[12.5px] text-zinc-400 dark:text-zinc-500">
+                <Clock className="w-3.5 h-3.5" />
                 {meeting.duration_minutes}m
               </span>
             )}
@@ -450,22 +450,22 @@ export default function MeetingCard({ meeting, onDelete, onArchive, onUnarchive,
 
       {/* ── Expanded detail ───────────────────────────────────────────────── */}
       {expanded && (
-        <div className="px-4 pb-4 pt-3 border-t border-zinc-100 dark:border-zinc-800/60 space-y-4 animate-fade-in">
+        <div className="px-5 pb-5 pt-4 border-t border-[#ebebf0] dark:border-zinc-800/60 space-y-5 animate-fade-in">
           {meeting.summary && (
             <div>
-              <p className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-1.5">
+              <p className="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.07em] mb-2">
                 {t("meetings.summary")}
               </p>
-              <p className="text-[13px] text-zinc-700 dark:text-zinc-300 leading-relaxed">{meeting.summary}</p>
+              <p className="text-[13.5px] text-zinc-700 dark:text-zinc-300 leading-relaxed">{meeting.summary}</p>
             </div>
           )}
 
           {meeting.decisions && (
             <div>
-              <p className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-1.5">
+              <p className="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.07em] mb-2">
                 {t("meetings.decisions")}
               </p>
-              <p className="text-[13px] text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed">
+              <p className="text-[13.5px] text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed">
                 {meeting.decisions}
               </p>
             </div>
@@ -473,14 +473,14 @@ export default function MeetingCard({ meeting, onDelete, onArchive, onUnarchive,
 
           {attendees.length > 0 && (
             <div>
-              <p className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-1.5">
+              <p className="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.07em] mb-2">
                 {t("meetings.attendees")}
               </p>
               <div className="flex gap-1.5 flex-wrap">
                 {attendees.map((a) => (
                   <span
                     key={a}
-                    className="text-[11px] bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 px-2 py-0.5 rounded-full"
+                    className="text-[12.5px] bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 px-2.5 py-1 rounded-full"
                   >
                     {a}
                   </span>

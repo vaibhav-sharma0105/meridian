@@ -16,8 +16,8 @@ import type { Project } from "@/lib/tauri";
 
 function MeridianLogo() {
   return (
-    <svg width="24" height="24" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="28" height="28" rx="6" fill="#6366f1" />
+    <svg width="26" height="26" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="28" height="28" rx="7" fill="#6366f1" />
       <path d="M7 20 L14 8 L21 20" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
       <path d="M10.5 16 L17.5 16" stroke="white" strokeWidth="2" strokeLinecap="round" />
     </svg>
@@ -45,18 +45,18 @@ export default function Sidebar() {
   const totalBadge = unreadCount + pendingCount;
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-[#111113] select-none">
+    <div className="flex flex-col h-full bg-white dark:bg-[#0f0f12] select-none">
 
       {/* ── Brand ──────────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-2.5 px-4 h-12 flex-shrink-0 border-b border-zinc-100/80 dark:border-[#1c1c20]">
+      <div className="flex items-center gap-3 px-4 h-14 flex-shrink-0 border-b border-[#ebebf0] dark:border-[#1a1a1e]">
         <MeridianLogo />
-        <span className="font-semibold text-[13px] tracking-[-0.02em] text-zinc-900 dark:text-zinc-100">Meridian</span>
+        <span className="font-bold text-[14px] tracking-[-0.025em] text-zinc-900 dark:text-zinc-50">Meridian</span>
       </div>
 
       {/* ── Global nav ─────────────────────────────────────────────────────── */}
-      <div className="px-2 pb-1">
+      <div className="px-3 pt-3 pb-1">
         <NavItem
-          icon={<LayoutList className="w-4 h-4" />}
+          icon={<LayoutList className="w-[17px] h-[17px]" />}
           label={t("nav.allTasks")}
           active={activeProjectId === null && activeView === "tasks"}
           onClick={() => { setActiveProject(null); setActiveView("tasks"); }}
@@ -64,43 +64,43 @@ export default function Sidebar() {
       </div>
 
       {/* ── Projects section ───────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-4 pt-3 pb-1">
-        <span className="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+      <div className="flex items-center justify-between px-4 pt-4 pb-1.5">
+        <span className="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.07em]">
           Projects
         </span>
         <button
           onClick={() => setShowCreateProject(true)}
           title={t("nav.newProject")}
-          className="p-0.5 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+          className="p-1 rounded-md text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-all duration-150"
         >
           <Plus className="w-3.5 h-3.5" />
         </button>
       </div>
 
       {/* ── Project list ───────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto px-2 pb-2">
+      <div className="flex-1 overflow-y-auto px-3 pb-3">
         {projects.map((project) => {
           const isActive = activeProjectId === project.id;
           return (
             <div
               key={project.id}
-              className={`group flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] transition-colors cursor-pointer ${
+              className={`group flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-all duration-150 cursor-pointer ${
                 isActive
-                  ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300"
-                  : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 hover:text-zinc-900 dark:hover:text-zinc-200"
+                  ? "bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 shadow-[inset_2px_0_0_0_#6366f1] font-medium"
+                  : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 hover:text-zinc-900 dark:hover:text-zinc-200"
               }`}
               onClick={() => { setActiveProject(project.id); setActiveView("tasks"); }}
               onContextMenu={(e) => { e.preventDefault(); setSettingsProject(project); }}
             >
               <span
-                className="w-[7px] h-[7px] rounded-full flex-shrink-0 shadow-[0_0_0_1.5px_rgba(0,0,0,0.08)] dark:shadow-[0_0_0_1.5px_rgba(255,255,255,0.06)]"
+                className="w-2 h-2 rounded-full flex-shrink-0 shadow-[0_0_0_1.5px_rgba(0,0,0,0.08)] dark:shadow-[0_0_0_1.5px_rgba(255,255,255,0.06)]"
                 style={{ backgroundColor: project.color }}
               />
               <span className="flex-1 truncate">{project.name}</span>
               {(project.open_task_count ?? 0) > 0 && (
-                <span className={`text-[11px] tabular-nums px-1.5 py-0.5 rounded-full leading-none ${
+                <span className={`text-[11px] tabular-nums px-1.5 py-0.5 rounded-full leading-none font-medium ${
                   isActive
-                    ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400"
+                    ? "bg-indigo-100 dark:bg-indigo-900/60 text-indigo-600 dark:text-indigo-400"
                     : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400"
                 }`}>
                   {project.open_task_count}
@@ -111,28 +111,28 @@ export default function Sidebar() {
                 title={t("projects.settings")}
                 className="p-0.5 rounded opacity-0 group-hover:opacity-100 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-all flex-shrink-0"
               >
-                <Settings2 className="w-3 h-3" />
+                <Settings2 className="w-3.5 h-3.5" />
               </button>
             </div>
           );
         })}
 
         {projects.length === 0 && (
-          <p className="text-[12px] text-zinc-400 dark:text-zinc-600 px-2 py-2 italic">No projects yet</p>
+          <p className="text-[12.5px] text-zinc-400 dark:text-zinc-600 px-3 py-2.5 italic leading-relaxed">No projects yet.<br />Create one to get started.</p>
         )}
       </div>
 
-      {/* ── Utility strip — icon-only with tooltips ──────────────────────── */}
-      <div className="border-t border-zinc-100 dark:border-[#1f1f23] px-2 py-2 flex items-center gap-0.5">
+      {/* ── Utility strip — icon buttons with tooltips ───────────────────── */}
+      <div className="border-t border-[#ebebf0] dark:border-[#1a1a1e] px-3 py-2.5 flex items-center gap-0.5">
         {/* Notifications */}
         <button
           onClick={() => setNotificationCenterOpen(true)}
           title={`Notifications${totalBadge > 0 ? ` (${totalBadge})` : ""}`}
-          className="relative flex-1 flex items-center justify-center p-1.5 rounded-md text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+          className="relative flex-1 flex items-center justify-center p-2 rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all duration-150"
         >
-          <Bell className="w-[15px] h-[15px]" />
+          <Bell className="w-[17px] h-[17px]" />
           {totalBadge > 0 && (
-            <span className="absolute top-1 right-1.5 w-[6px] h-[6px] bg-red-500 rounded-full ring-[1.5px] ring-white dark:ring-[#111113]" />
+            <span className="absolute top-1.5 right-1.5 w-[7px] h-[7px] bg-red-500 rounded-full ring-[2px] ring-white dark:ring-[#0f0f12] shadow-sm" />
           )}
         </button>
 
@@ -140,27 +140,27 @@ export default function Sidebar() {
         <button
           onClick={() => setSettingsOpen(true, "connections")}
           title="Connections"
-          className="flex-1 flex items-center justify-center p-1.5 rounded-md text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+          className="flex-1 flex items-center justify-center p-2 rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all duration-150"
         >
-          <Link2 className="w-[15px] h-[15px]" />
+          <Link2 className="w-[17px] h-[17px]" />
         </button>
 
         {/* Settings */}
         <button
           onClick={() => setSettingsOpen(true, "ai")}
           title={t("nav.settings")}
-          className="flex-1 flex items-center justify-center p-1.5 rounded-md text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+          className="flex-1 flex items-center justify-center p-2 rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all duration-150"
         >
-          <Settings className="w-[15px] h-[15px]" />
+          <Settings className="w-[17px] h-[17px]" />
         </button>
 
         {/* Theme */}
         <button
           onClick={cycleTheme}
           title={themeLabel}
-          className="flex-1 flex items-center justify-center p-1.5 rounded-md text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+          className="flex-1 flex items-center justify-center p-2 rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all duration-150"
         >
-          <ThemeIcon className="w-[15px] h-[15px]" />
+          <ThemeIcon className="w-[17px] h-[17px]" />
         </button>
       </div>
 
@@ -185,10 +185,10 @@ function NavItem({
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] transition-colors ${
+      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-all duration-150 ${
         active
-          ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50 font-medium"
-          : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 hover:text-zinc-800 dark:hover:text-zinc-200"
+          ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50 font-medium shadow-[inset_2px_0_0_0_#6366f1]"
+          : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 hover:text-zinc-800 dark:hover:text-zinc-200"
       }`}
     >
       {icon}

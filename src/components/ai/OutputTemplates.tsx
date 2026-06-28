@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FileText, ChevronRight } from "lucide-react";
-import { getPromptTemplates, generateOutput } from "@/lib/tauri";
+import { getPromptTemplates } from "@/lib/tauri";
 import type { PromptTemplate } from "@/lib/tauri";
 
 interface Props {
@@ -13,8 +13,6 @@ export default function OutputTemplates({ projectId, onOutput }: Props) {
   const { t } = useTranslation();
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [expanded, setExpanded] = useState(false);
-  const [generating, setGenerating] = useState<string | null>(null);
-  const [genError, setGenError] = useState<string | null>(null);
 
   const load = async () => {
     if (templates.length > 0) { setExpanded(!expanded); return; }
@@ -23,18 +21,9 @@ export default function OutputTemplates({ projectId, onOutput }: Props) {
     setExpanded(true);
   };
 
-  const handleGenerate = async (template: PromptTemplate) => {
-    if (!projectId) return;
-    setGenerating(template.id);
-    setGenError(null);
-    try {
-      const result = await generateOutput({ projectId, templateId: template.id });
-      onOutput(result);
-    } catch (e) {
-      setGenError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setGenerating(null);
-    }
+  const handleSelect = (template: PromptTemplate) => {
+    onOutput(template.user_prompt_template);
+    setExpanded(false);
   };
 
   return (
@@ -53,19 +42,16 @@ export default function OutputTemplates({ projectId, onOutput }: Props) {
           {templates.map((tpl) => (
             <button
               key={tpl.id}
-              onClick={() => handleGenerate(tpl)}
-              disabled={generating === tpl.id || !projectId}
+              onClick={() => handleSelect(tpl)}
+              disabled={!projectId}
               className="flex items-center justify-between w-full px-2 py-1.5 text-xs text-left rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 disabled:opacity-50 transition-colors"
             >
               <span className="font-medium">{tpl.name}</span>
-              {generating === tpl.id && (
-                <span className="text-zinc-400 animate-pulse">Generating...</span>
+              {tpl.description && (
+                <span className="text-zinc-400 truncate ml-2 max-w-[120px]">{tpl.description}</span>
               )}
             </button>
           ))}
-          {genError && (
-            <p className="text-xs text-red-500 px-2 py-1">{genError}</p>
-          )}
         </div>
       )}
     </div>

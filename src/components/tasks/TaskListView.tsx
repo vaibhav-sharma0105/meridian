@@ -24,7 +24,7 @@ export default function TaskListView({ projectId }: Props) {
   };
 
   return (
-    <div className="p-4 space-y-2">
+    <div className="p-5 space-y-2.5">
       {filtered.length === 0 && !adding && (
         <EmptyState
           title={t("tasks.noTasks")}
@@ -39,7 +39,7 @@ export default function TaskListView({ projectId }: Props) {
       ))}
 
       {adding ? (
-        <div className="flex gap-2">
+        <div className="flex gap-2 animate-fade-in">
           <input
             type="text"
             value={newTitle}
@@ -50,18 +50,18 @@ export default function TaskListView({ projectId }: Props) {
               if (e.key === "Enter") handleAdd();
               if (e.key === "Escape") setAdding(false);
             }}
-            className="flex-1 px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50"
+            className="flex-1 px-3.5 py-2.5 text-[13.5px] rounded-xl border border-[#e2e2e8] dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50 outline-none focus:ring-2 focus:ring-indigo-400/40 focus:border-indigo-400 transition-all"
           />
           <button
             onClick={handleAdd}
             disabled={!newTitle.trim()}
-            className="px-3 py-2 bg-indigo-500 text-white rounded-lg text-sm disabled:opacity-50"
+            className="px-4 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-[13.5px] font-medium disabled:opacity-50 transition-all shadow-sm hover:shadow-md"
           >
             {t("common.add")}
           </button>
           <button
             onClick={() => setAdding(false)}
-            className="px-3 py-2 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm text-zinc-600 dark:text-zinc-400"
+            className="px-4 py-2.5 border border-[#e2e2e8] dark:border-zinc-700 rounded-xl text-[13.5px] text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
           >
             {t("common.cancel")}
           </button>
@@ -70,7 +70,7 @@ export default function TaskListView({ projectId }: Props) {
         filtered.length > 0 && (
           <button
             onClick={() => setAdding(true)}
-            className="flex items-center gap-1.5 w-full px-3 py-2 text-sm text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+            className="flex items-center gap-2 w-full px-4 py-2.5 text-[13.5px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 rounded-xl transition-all duration-150"
           >
             <Plus className="w-4 h-4" />
             {t("tasks.addTask")}
