@@ -34,9 +34,9 @@ export function useAI(projectId: string | null) {
         content: text,
       };
       addMessage(userMsg);
-      setStreaming(true);
 
       try {
+        setStreaming(true);
         // Read latest messages from store to avoid stale closure
         const currentMessages = useAIStore.getState().messages;
         const history = currentMessages.slice(-10).map((m) => ({

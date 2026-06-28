@@ -253,12 +253,19 @@ async fn sync_sheets_relay(db: &Mutex<DbConn>) -> Result<(usize, usize), String>
         }
     }
 
-    // Persist the new high-water mark so next sync only fetches newer rows
+    // Persist the new high-water mark so next sync only fetches newer rows.
+    // +1 avoids re-fetching the row at exactly max_ts_ms (Apps Script uses >= on the since param).
+    // If no row had a valid timestamp, advance to now so the same batch is never replayed.
+    let next_since_ms = if max_ts_ms > since_ms {
+        max_ts_ms + 1
+    } else {
+        chrono::Utc::now().timestamp_millis()
+    };
     {
         let conn = db.lock().map_err(|e| e.to_string())?;
         conn.execute(
             "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('sheets_relay_last_sync_ms', ?1)",
-            rusqlite::params![max_ts_ms.to_string()],
+            rusqlite::params![next_since_ms.to_string()],
         )
         .map_err(|e| e.to_string())?;
         conn_repo::update_last_sync(&conn, "sheets_relay")?;
