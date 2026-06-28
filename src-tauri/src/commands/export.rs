@@ -14,7 +14,7 @@ pub async fn export_project(
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         let project = proj_repo::get_project(&conn, &project_id)?
             .ok_or_else(|| "Project not found".to_string())?;
-        let meetings = mtg_repo::get_meetings_for_project(&conn, &project_id)?;
+        let meetings = mtg_repo::get_meetings_for_project(&conn, &project_id, false)?;
         let tasks = task_repo::get_tasks_for_project(&conn, &project_id, &Default::default())?;
         let docs = if include_docs {
             doc_repo::get_documents_for_project(&conn, &project_id)?
@@ -76,7 +76,7 @@ pub async fn export_all(state: State<'_, AppState>) -> Result<Value, String> {
     for project in &projects {
         let (meetings, tasks) = {
             let conn = state.db.lock().map_err(|e| e.to_string())?;
-            let meetings = mtg_repo::get_meetings_for_project(&conn, &project.id)?;
+            let meetings = mtg_repo::get_meetings_for_project(&conn, &project.id, false)?;
             let tasks = task_repo::get_tasks_for_project(&conn, &project.id, &Default::default())?;
             (meetings, tasks)
         };

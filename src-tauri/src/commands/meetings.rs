@@ -256,10 +256,11 @@ pub async fn ingest_meeting_from_file(
 #[tauri::command]
 pub async fn get_meetings_for_project(
     project_id: String,
+    show_archived: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<Vec<Meeting>, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    repo::get_meetings_for_project(&conn, &project_id)
+    repo::get_meetings_for_project(&conn, &project_id, show_archived.unwrap_or(false))
 }
 
 #[tauri::command]
@@ -272,6 +273,18 @@ pub async fn get_meeting(id: String, state: State<'_, AppState>) -> Result<Optio
 pub async fn delete_meeting(id: String, state: State<'_, AppState>) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     repo::soft_delete_meeting(&conn, &id)
+}
+
+#[tauri::command]
+pub async fn force_delete_meeting(id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    repo::delete_meeting_hard(&conn, &id)
+}
+
+#[tauri::command]
+pub async fn unarchive_meeting(id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    repo::unarchive_meeting(&conn, &id)
 }
 
 #[tauri::command]

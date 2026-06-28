@@ -318,7 +318,7 @@ pub async fn chat_with_project(
         let done_filters = crate::models::task::TaskFilters { status: Some("done".to_string()), ..Default::default() };
         let done_tasks = task_repo::get_tasks_for_project(&conn, &project_id, &done_filters)?;
 
-        let meetings = mtg_repo::get_meetings_for_project(&conn, &project_id)?;
+        let meetings = mtg_repo::get_meetings_for_project(&conn, &project_id, false)?;
 
         // FTS document search
         let doc_results: Vec<SearchResult> = if !message.is_empty() {
@@ -622,7 +622,7 @@ pub async fn generate_output(
         let open_tasks = task_repo::get_tasks_for_project(&conn, &project_id, &open_filters)?;
         let done_filters = crate::models::task::TaskFilters { status: Some("done".to_string()), ..Default::default() };
         let done_tasks = task_repo::get_tasks_for_project(&conn, &project_id, &done_filters)?;
-        let meetings = mtg_repo::get_meetings_for_project(&conn, &project_id)?;
+        let meetings = mtg_repo::get_meetings_for_project(&conn, &project_id, false)?;
         let template = crate::db::repositories::prompt_templates::get_template(&conn, &template_id)?
             .ok_or_else(|| "Template not found".to_string())?;
         (settings, api_key, project, open_tasks, done_tasks, meetings, template)

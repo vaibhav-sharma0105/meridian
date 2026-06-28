@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Search, X, Video, Calendar, ChevronDown } from "lucide-react";
+import { Search, X, Video, Calendar, ChevronDown, Archive } from "lucide-react";
 import { useTaskStore } from "@/stores/taskStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useTasks } from "@/hooks/useTasks";
@@ -8,6 +8,7 @@ import { useMeetings } from "@/hooks/useMeetings";
 import AssigneeChipInput, { parseAssignees } from "./AssigneeChipInput";
 import { KANBAN_COLUMNS } from "@/lib/constants";
 import type { Meeting } from "@/lib/tauri";
+import * as api from "@/lib/tauri";
 
 interface Props {
   showProjectFilter?: boolean;
@@ -305,11 +306,18 @@ function DateFilter({
 
 export default function TaskFilters({ showProjectFilter = false }: Props) {
   const { t } = useTranslation();
-  const { filters, setFilters } = useTaskStore();
+  const { filters, setFilters, baselineDate, setBaselineDate } = useTaskStore();
   const { activeProjectId, projects } = useProjectStore();
+  const [editingBaseline, setEditingBaseline] = useState(false);
   const { meetings } = useMeetings(activeProjectId);
 
   const { tasks: allTasks } = useTasks(activeProjectId, {});
+
+  async function handleBaselineChange(date: string | null) {
+    setBaselineDate(date);
+    await api.setAppSetting("baseline_date", date ?? "");
+    setEditingBaseline(false);
+  }
   const assignees = Array.from(
     new Set(allTasks.flatMap((task) => parseAssignees(task.assignee ?? "")))
   );
@@ -324,7 +332,7 @@ export default function TaskFilters({ showProjectFilter = false }: Props) {
     filters.date_from ||
     filters.date_to;
 
-  const clearAll = () =>
+  const clearAll = () => {
     setFilters({
       search_query: undefined,
       status: undefined,
@@ -334,10 +342,50 @@ export default function TaskFilters({ showProjectFilter = false }: Props) {
       meeting_ids: undefined,
       date_from: undefined,
       date_to: undefined,
+      // preserve show_archived across clear — it's an explicit persistent toggle
     });
+    // Clear persisted assignee
+    void api.setAppSetting("persistent_assignee", "");
+  };
 
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
+      {/* Baseline date chip — global persistent floor */}
+      {editingBaseline ? (
+        <div className="flex items-center gap-1">
+          <input
+            type="date"
+            autoFocus
+            defaultValue={baselineDate ?? ""}
+            onBlur={(e) => { void handleBaselineChange(e.target.value || null); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void handleBaselineChange((e.target as HTMLInputElement).value || null);
+              if (e.key === "Escape") setEditingBaseline(false);
+            }}
+            className={`${inputCls} w-36`}
+          />
+        </div>
+      ) : baselineDate ? (
+        <span className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 text-[12px] font-medium rounded-md border border-indigo-200 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300">
+          <Calendar className="w-2.5 h-2.5" />
+          From {baselineDate}
+          <button
+            onClick={() => setEditingBaseline(true)}
+            className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+            title="Change baseline date"
+          >
+            <Search className="w-2 h-2" />
+          </button>
+          <button
+            onClick={() => { void handleBaselineChange(null); }}
+            className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+            title="Remove baseline date"
+          >
+            <X className="w-2.5 h-2.5" />
+          </button>
+        </span>
+      ) : null}
+
       {/* Search */}
       <div className="relative">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-400 pointer-events-none" />
@@ -391,11 +439,14 @@ export default function TaskFilters({ showProjectFilter = false }: Props) {
         </select>
       )}
 
-      {/* Assignee */}
-      <div className="w-40">
+      {/* Assignee — value persists across restarts */}
+      <div className="w-40 relative">
         <AssigneeChipInput
           value={filters.assignee ?? ""}
-          onChange={(v) => setFilters({ assignee: v || undefined })}
+          onChange={(v) => {
+            setFilters({ assignee: v || undefined });
+            void api.setAppSetting("persistent_assignee", v ?? "");
+          }}
           suggestions={assignees}
           placeholder={t("tasks.filterAssignee")}
           showHint={false}
@@ -431,6 +482,20 @@ export default function TaskFilters({ showProjectFilter = false }: Props) {
           ))}
         </select>
       )}
+
+      {/* Show archived toggle */}
+      <button
+        onClick={() => setFilters({ show_archived: !filters.show_archived })}
+        title={filters.show_archived ? "Hide archived tasks" : "Show archived tasks"}
+        className={`flex items-center gap-1 px-2 py-1 text-[12px] rounded-md border transition-colors ${
+          filters.show_archived
+            ? "border-zinc-400 dark:border-zinc-500 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+            : "border-zinc-200 dark:border-zinc-700/60 bg-white dark:bg-zinc-800/80 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-400"
+        }`}
+      >
+        <Archive className="w-3 h-3" />
+        {filters.show_archived ? "Archived on" : "Archived"}
+      </button>
 
       {/* Clear all */}
       {hasFilters && (

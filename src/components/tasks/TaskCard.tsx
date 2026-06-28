@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Calendar, User, Tag, Video, Check } from "lucide-react";
+import { Calendar, User, Tag, Video, Check, Archive } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 import { useTaskStore } from "@/stores/taskStore";
 import TaskConfidenceBadge from "./TaskConfidenceBadge";
@@ -73,10 +73,14 @@ export default function TaskCard({ task, compact = false }: Props) {
     });
   }
 
+  const isArchived = !!task.archived_at;
+
   return (
     <div
       className={`group bg-white dark:bg-[#18181b] border border-zinc-100 dark:border-zinc-800/50 rounded-lg cursor-pointer transition-all duration-120 border-l-[3px] ${priorityBorder} ${
-        isSelected
+        isArchived
+          ? "opacity-60"
+          : isSelected
           ? "bg-indigo-50/60 dark:bg-indigo-950/30 border-zinc-200 dark:border-indigo-900/60 shadow-sm shadow-indigo-500/5"
           : "hover:bg-zinc-50 dark:hover:bg-zinc-800/60 hover:border-zinc-200 dark:hover:border-zinc-700 hover:shadow-sm"
       }`}
@@ -110,6 +114,12 @@ export default function TaskCard({ task, compact = false }: Props) {
             <p className={`text-zinc-900 dark:text-zinc-100 font-semibold leading-snug min-w-0 break-words tracking-[-0.01em] ${compact ? "text-xs line-clamp-2" : "text-[13.5px]"}`}>
               {task.title}
             </p>
+            {isArchived && (
+              <span className="flex items-center gap-0.5 text-[10px] text-zinc-400 dark:text-zinc-500 flex-shrink-0">
+                <Archive className="w-2.5 h-2.5" />
+                Archived
+              </span>
+            )}
             {task.confidence_score !== undefined && task.confidence_score !== null && (
               <TaskConfidenceBadge confidence={task.confidence_score} />
             )}

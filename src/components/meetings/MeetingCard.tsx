@@ -11,6 +11,8 @@ import {
   FolderInput,
   Loader2,
   AlertCircle,
+  Archive,
+  ArchiveRestore,
 } from "lucide-react";
 import MeetingHealthBadge from "./MeetingHealthBadge";
 import { format } from "date-fns";
@@ -22,9 +24,12 @@ import toast from "react-hot-toast";
 interface Props {
   meeting: Meeting;
   onDelete?: (id: string) => void;
+  onArchive?: (id: string) => void;
+  onUnarchive?: (id: string) => void;
+  onForceDelete?: (id: string) => void;
 }
 
-export default function MeetingCard({ meeting, onDelete }: Props) {
+export default function MeetingCard({ meeting, onDelete, onArchive, onUnarchive, onForceDelete }: Props) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const { projects, fetchProjects } = useProjectStore();
@@ -158,7 +163,7 @@ export default function MeetingCard({ meeting, onDelete }: Props) {
     }
   }
 
-  // ── Delete ───────────────────────────────────────────────────────────────
+  // ── Archive / Delete ─────────────────────────────────────────────────────
   function handleDelete(e: React.MouseEvent) {
     e.stopPropagation();
     if (window.confirm(t("meetings.confirmDelete", { title: meeting.title }))) {
@@ -166,12 +171,31 @@ export default function MeetingCard({ meeting, onDelete }: Props) {
     }
   }
 
+  function handleArchive(e: React.MouseEvent) {
+    e.stopPropagation();
+    onArchive?.(meeting.id);
+  }
+
+  function handleUnarchive(e: React.MouseEvent) {
+    e.stopPropagation();
+    onUnarchive?.(meeting.id);
+  }
+
+  function handleForceDelete(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (window.confirm(`Permanently delete "${meeting.title}"? This cannot be undone.`)) {
+      onForceDelete?.(meeting.id);
+    }
+  }
+
+  const isArchived = !!meeting.archived_at;
+
   const attendees = meeting.attendees
     ? meeting.attendees.split(",").map((a) => a.trim()).filter(Boolean)
     : [];
 
   return (
-    <div className="bg-white dark:bg-zinc-900/80 border border-zinc-100 dark:border-zinc-800/60 rounded-lg overflow-visible transition-shadow hover:shadow-sm">
+    <div className={`bg-white dark:bg-zinc-900/80 border border-zinc-100 dark:border-zinc-800/60 rounded-lg overflow-visible transition-shadow hover:shadow-sm ${isArchived ? "opacity-60" : ""}`}>
       {/* ── Card header row ─────────────────────────────────────────────── */}
       <div
         className="flex items-center gap-2.5 px-3.5 py-3 cursor-pointer hover:bg-zinc-50/80 dark:hover:bg-zinc-800/30 transition-colors"
@@ -201,13 +225,21 @@ export default function MeetingCard({ meeting, onDelete }: Props) {
                 className="flex-1 min-w-0 text-[13px] font-semibold bg-transparent border-b-2 border-indigo-400 outline-none text-zinc-900 dark:text-zinc-100 pb-0.5"
               />
             ) : (
-              <h3
-                className="text-[13px] font-semibold text-zinc-900 dark:text-zinc-100 truncate cursor-text hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
-                title="Click to rename"
-                onClick={(e) => { e.stopPropagation(); setEditingTitle(true); }}
-              >
-                {meeting.title}
-              </h3>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <h3
+                  className="text-[13px] font-semibold text-zinc-900 dark:text-zinc-100 truncate cursor-text hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors"
+                  title="Click to rename"
+                  onClick={(e) => { e.stopPropagation(); setEditingTitle(true); }}
+                >
+                  {meeting.title}
+                </h3>
+                {isArchived && (
+                  <span className="flex items-center gap-0.5 text-[10px] text-zinc-400 dark:text-zinc-500 flex-shrink-0">
+                    <Archive className="w-2.5 h-2.5" />
+                    Archived
+                  </span>
+                )}
+              </div>
             )}
             {meeting.health_score !== null && meeting.health_score !== undefined && (
               <MeetingHealthBadge score={meeting.health_score} showLabel />
@@ -314,12 +346,35 @@ export default function MeetingCard({ meeting, onDelete }: Props) {
             )}
           </div>
 
-          {/* Delete */}
-          {onDelete && (
+          {/* Archive / Unarchive */}
+          {isArchived ? (
+            onUnarchive && (
+              <button
+                onClick={handleUnarchive}
+                className="p-1.5 rounded-md text-zinc-400 hover:text-indigo-500 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
+                title="Unarchive meeting"
+              >
+                <ArchiveRestore className="w-3.5 h-3.5" />
+              </button>
+            )
+          ) : (
+            onArchive && (
+              <button
+                onClick={handleArchive}
+                className="p-1.5 rounded-md text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                title="Archive meeting"
+              >
+                <Archive className="w-3.5 h-3.5" />
+              </button>
+            )
+          )}
+
+          {/* Hard delete — only shown on archived meetings */}
+          {isArchived && onForceDelete && (
             <button
-              onClick={handleDelete}
+              onClick={handleForceDelete}
               className="p-1.5 rounded-md text-zinc-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-              title={t("meetings.delete")}
+              title="Permanently delete meeting"
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>

@@ -25,6 +25,7 @@ pub struct Task {
     pub created_at: String,
     pub updated_at: String,
     pub completed_at: Option<String>,
+    pub archived_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -75,6 +76,7 @@ pub struct TaskFilters {
     pub search_query: Option<String>,
     pub date_from: Option<String>,
     pub date_to: Option<String>,
+    pub show_archived: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]

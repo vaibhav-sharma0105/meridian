@@ -21,13 +21,14 @@ fn row_to_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
         confidence_score: row.get(13)?,
         tags: row.get(14)?,
         kanban_column: row.get(15)?,
-        kanban_order: row.get(16 + 1)?,  // shift for new columns
+        kanban_order: row.get(16 + 1)?,
         notes: row.get(18)?,
         is_duplicate: is_dup != 0,
         duplicate_of_id: row.get(20)?,
         created_at: row.get(21)?,
         updated_at: row.get(22)?,
         completed_at: row.get(23)?,
+        archived_at: None,
     })
 }
 
@@ -57,20 +58,29 @@ fn row_to_task_v2(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
         created_at: row.get(20)?,
         updated_at: row.get(21)?,
         completed_at: row.get(22)?,
+        archived_at: row.get(23)?,
     })
 }
 
 const TASK_COLUMNS: &str = "id, project_id, meeting_id, title, description, assignee,
     assignee_confidence, assignee_source_quote, due_date, due_confidence, due_source_quote,
     status, priority, confidence_score, tags, kanban_column, kanban_order, notes, is_duplicate,
-    duplicate_of_id, created_at, updated_at, completed_at";
+    duplicate_of_id, created_at, updated_at, completed_at, archived_at";
 
 pub fn get_tasks_for_project(
     conn: &Connection,
     project_id: &str,
     filters: &TaskFilters,
 ) -> Result<Vec<Task>, String> {
-    let mut conditions = vec!["project_id = ?1".to_string()];
+    let show_archived = filters.show_archived.unwrap_or(false);
+    let mut conditions = vec![
+        "project_id = ?1".to_string(),
+        if show_archived {
+            "1=1".to_string()
+        } else {
+            "archived_at IS NULL".to_string()
+        },
+    ];
     let mut bind_values: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(project_id.to_string())];
     let mut param_idx = 2;
 
@@ -347,12 +357,38 @@ pub fn delete_task(conn: &Connection, id: &str) -> Result<(), String> {
     Ok(())
 }
 
+pub fn archive_task(conn: &Connection, id: &str) -> Result<(), String> {
+    conn.execute(
+        "UPDATE tasks SET archived_at = datetime('now'), updated_at = datetime('now') WHERE id = ?1",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn unarchive_task(conn: &Connection, id: &str) -> Result<(), String> {
+    conn.execute(
+        "UPDATE tasks SET archived_at = NULL, updated_at = datetime('now') WHERE id = ?1",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// Count open/in-progress tasks linked to a meeting that still live in `current_project_id`.
 /// These are exactly the tasks that will be moved when the meeting moves.
 /// Fetch tasks across ALL projects, applying optional filters.
 /// Used by the "All Tasks" cross-project view.
 pub fn get_all_tasks(conn: &Connection, filters: &TaskFilters) -> Result<Vec<Task>, String> {
-    let mut conditions: Vec<String> = vec!["is_duplicate = 0".to_string()];
+    let show_archived = filters.show_archived.unwrap_or(false);
+    let mut conditions: Vec<String> = vec![
+        "is_duplicate = 0".to_string(),
+        if show_archived {
+            "1=1".to_string()
+        } else {
+            "archived_at IS NULL".to_string()
+        },
+    ];
     let mut bind_values: Vec<Box<dyn rusqlite::ToSql>> = vec![];
     let mut param_idx = 1usize;
 

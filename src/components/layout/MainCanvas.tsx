@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LayoutList, Columns, Table, Plus, FileText, Upload, BarChart2, MessageSquare } from "lucide-react";
+import { LayoutList, Columns, Table, Plus, FileText, Upload, BarChart2, MessageSquare, Archive } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore } from "@/stores/projectStore";
 import TaskListView from "@/components/tasks/TaskListView";
@@ -27,9 +28,9 @@ export default function MainCanvas() {
   const { viewMode, setViewMode, activeView, setActiveView, setIngestModalOpen } = useUIStore();
   const { activeProjectId, getActiveProject } = useProjectStore();
   const { selectedTaskIds } = useTaskStore();
-  const { meetings, deleteMeeting } = useMeetings(activeProjectId);
-
   const activeProject = getActiveProject();
+  const [showArchivedMeetings, setShowArchivedMeetings] = useState(false);
+  const { meetings, deleteMeeting, forceDeleteMeeting, unarchiveMeeting } = useMeetings(activeProjectId, showArchivedMeetings);
 
   const tabs = [
     { id: "tasks", label: t("tasks.title"), icon: LayoutList },
@@ -96,15 +97,29 @@ export default function MainCanvas() {
             </div>
           )}
 
-          {/* New meeting button */}
+          {/* Meetings tab controls */}
           {activeView === "meetings" && (
-            <button
-              onClick={() => setIngestModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 active:bg-indigo-700 text-white rounded-md text-[13px] font-medium transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              {t("meetings.new")}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowArchivedMeetings((s) => !s)}
+                title={showArchivedMeetings ? "Hide archived meetings" : "Show archived meetings"}
+                className={`flex items-center gap-1 px-2 py-1 text-[12px] rounded-md border transition-colors ${
+                  showArchivedMeetings
+                    ? "border-zinc-400 dark:border-zinc-500 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+                    : "border-zinc-200 dark:border-zinc-700/60 bg-white dark:bg-zinc-800/80 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600"
+                }`}
+              >
+                <Archive className="w-3 h-3" />
+                {showArchivedMeetings ? "Archived on" : "Archived"}
+              </button>
+              <button
+                onClick={() => setIngestModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 active:bg-indigo-700 text-white rounded-md text-[13px] font-medium transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {t("meetings.new")}
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -173,7 +188,13 @@ export default function MainCanvas() {
               />
             ) : (
               meetings.map((meeting) => (
-                <MeetingCard key={meeting.id} meeting={meeting} onDelete={deleteMeeting} />
+                <MeetingCard
+                  key={meeting.id}
+                  meeting={meeting}
+                  onArchive={deleteMeeting}
+                  onUnarchive={unarchiveMeeting}
+                  onForceDelete={forceDeleteMeeting}
+                />
               ))
             )}
           </div>

@@ -7,6 +7,7 @@ import AppShell from "@/components/layout/AppShell";
 import OnboardingWizard from "@/components/onboarding/OnboardingWizard";
 import { getAppSettings } from "@/lib/tauri";
 import { useUIStore } from "@/stores/uiStore";
+import { useTaskStore } from "@/stores/taskStore";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -20,6 +21,7 @@ const queryClient = new QueryClient({
 function AppContent() {
   const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(null);
   const { theme, setTheme, setLanguage } = useUIStore();
+  const { setBaselineDate, setFilters } = useTaskStore();
   const { i18n } = useTranslation();
 
   useEffect(() => {
@@ -34,6 +36,14 @@ function AppContent() {
       const lang = settings["language"] || "en";
       setLanguage(lang);
       i18n.changeLanguage(lang);
+
+      // Feature 1: Baseline date floor (hides tasks/meetings before this date by default)
+      const baseline = settings["baseline_date"] ?? null;
+      setBaselineDate(baseline);
+
+      // Feature 2: Persistent assignee filter
+      const persistedAssignee = settings["persistent_assignee"] ?? "";
+      if (persistedAssignee) setFilters({ assignee: persistedAssignee });
     }).catch(() => {
       setOnboardingComplete(false);
     });

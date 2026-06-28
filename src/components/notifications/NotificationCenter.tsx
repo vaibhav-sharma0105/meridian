@@ -48,8 +48,8 @@ export default function NotificationCenter({ open, onClose }: Props) {
 
         {/* ── Pending imports section ── */}
         {pendingImports.length > 0 && (
-          <div className="border-b border-zinc-200 dark:border-zinc-800">
-            <div className="px-4 py-2 bg-indigo-50 dark:bg-indigo-900/20">
+          <div className="border-b border-zinc-200 dark:border-zinc-800 flex-shrink-0 max-h-[40vh] overflow-y-auto">
+            <div className="px-4 py-2 bg-indigo-50 dark:bg-indigo-900/20 sticky top-0 z-10">
               <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide">
                 {pendingImports.length} New Meeting
                 {pendingImports.length > 1 ? "s" : ""} Found

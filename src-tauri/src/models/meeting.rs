@@ -18,6 +18,7 @@ pub struct Meeting {
     pub ingested_at: String,
     pub created_at: String,            // alias for ingested_at
     pub updated_at: String,
+    pub archived_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

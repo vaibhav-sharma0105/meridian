@@ -13,7 +13,7 @@ fn row_to_meeting(row: &rusqlite::Row<'_>) -> rusqlite::Result<Meeting> {
         raw_transcript: row.get(4)?,
         ai_summary: ai_summary.clone(),
         summary: ai_summary,
-        decisions: row.get(5 + 1)?,   // decisions is col 6 with new schema... actually recompute
+        decisions: row.get(5 + 1)?,
         health_score: row.get(7)?,
         health_breakdown: row.get(8)?,
         attendees: row.get(9)?,
@@ -22,13 +22,14 @@ fn row_to_meeting(row: &rusqlite::Row<'_>) -> rusqlite::Result<Meeting> {
         ingested_at: ingested_at.clone(),
         created_at: ingested_at,
         updated_at: row.get(13)?,
+        archived_at: None,
     })
 }
 
 // Explicit select list with new columns in correct order
 const MEETING_COLS: &str = "id, project_id, title, platform, raw_transcript, ai_summary,
     decisions, health_score, health_breakdown, attendees, duration_minutes, ingested_at,
-    meeting_at, updated_at";
+    meeting_at, updated_at, archived_at";
 
 fn row_to_meeting_v2(row: &rusqlite::Row<'_>) -> rusqlite::Result<Meeting> {
     let ai_summary: Option<String> = row.get(5)?;
@@ -50,15 +51,21 @@ fn row_to_meeting_v2(row: &rusqlite::Row<'_>) -> rusqlite::Result<Meeting> {
         ingested_at: ingested_at.clone(),
         created_at: ingested_at,
         updated_at: row.get(13)?,
+        archived_at: row.get(14)?,
     })
 }
 
-pub fn get_meetings_for_project(conn: &Connection, project_id: &str) -> Result<Vec<Meeting>, String> {
+pub fn get_meetings_for_project(
+    conn: &Connection,
+    project_id: &str,
+    show_archived: bool,
+) -> Result<Vec<Meeting>, String> {
+    let archive_clause = if show_archived { "1=1" } else { "archived_at IS NULL" };
     let mut stmt = conn
         .prepare(&format!(
-            "SELECT {} FROM meetings WHERE project_id = ?1
+            "SELECT {} FROM meetings WHERE project_id = ?1 AND {}
              ORDER BY COALESCE(meeting_at, ingested_at) DESC",
-            MEETING_COLS
+            MEETING_COLS, archive_clause
         ))
         .map_err(|e| e.to_string())?;
 
@@ -161,14 +168,31 @@ pub fn move_meeting_project(
 }
 
 pub fn soft_delete_meeting(conn: &Connection, id: &str) -> Result<(), String> {
-    // Disassociate tasks from this meeting before deleting
+    conn.execute(
+        "UPDATE meetings SET archived_at = datetime('now'), updated_at = datetime('now') WHERE id = ?1",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn delete_meeting_hard(conn: &Connection, id: &str) -> Result<(), String> {
+    // Disassociate tasks before permanently deleting
     conn.execute(
         "UPDATE tasks SET meeting_id = NULL WHERE meeting_id = ?1",
         params![id],
     )
     .map_err(|e| e.to_string())?;
-    // Hard delete the meeting row
     conn.execute("DELETE FROM meetings WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn unarchive_meeting(conn: &Connection, id: &str) -> Result<(), String> {
+    conn.execute(
+        "UPDATE meetings SET archived_at = NULL, updated_at = datetime('now') WHERE id = ?1",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }

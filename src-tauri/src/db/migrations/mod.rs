@@ -3,6 +3,7 @@ pub mod v002_fts;
 pub mod v003_embeddings;
 pub mod v004_task_priority;
 pub mod v005_connectors;
+pub mod v006_archive;
 
 pub struct Migration {
     pub version: i32,
@@ -30,6 +31,10 @@ pub fn get_all_migrations() -> Vec<Migration> {
         Migration {
             version: 5,
             sql: v005_connectors::SQL,
+        },
+        Migration {
+            version: 6,
+            sql: v006_archive::SQL,
         },
     ]
 }

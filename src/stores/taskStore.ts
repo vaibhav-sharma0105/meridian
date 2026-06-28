@@ -5,6 +5,7 @@ interface TaskStore {
   tasksByProject: Record<string, Task[]>;
   selectedTaskIds: string[];
   filters: TaskFilters;
+  baselineDate: string | null;
   // Actions
   setTasks: (projectId: string, tasks: Task[]) => void;
   updateTaskLocally: (task: Task) => void;
@@ -17,12 +18,14 @@ interface TaskStore {
   setFilters: (filters: Partial<TaskFilters>) => void;
   clearFilters: () => void;
   getTasksForProject: (projectId: string) => Task[];
+  setBaselineDate: (date: string | null) => void;
 }
 
 export const useTaskStore = create<TaskStore>((set, get) => ({
   tasksByProject: {},
   selectedTaskIds: [],
   filters: {},
+  baselineDate: null,
 
   setTasks: (projectId, tasks) =>
     set((state) => ({
@@ -79,6 +82,8 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     set((state) => ({ filters: { ...state.filters, ...filters } })),
 
   clearFilters: () => set({ filters: {} }),
+
+  setBaselineDate: (date) => set({ baselineDate: date }),
 
   getTasksForProject: (projectId) =>
     get().tasksByProject[projectId] || [],

@@ -38,6 +38,8 @@ pub fn run() {
             commands::meetings::get_meetings_for_project,
             commands::meetings::get_meeting,
             commands::meetings::delete_meeting,
+            commands::meetings::force_delete_meeting,
+            commands::meetings::unarchive_meeting,
             commands::meetings::rename_meeting,
             commands::meetings::count_moveable_tasks,
             commands::meetings::move_meeting_to_project,
@@ -49,6 +51,8 @@ pub fn run() {
             commands::tasks::bulk_update_tasks,
             commands::tasks::reorder_tasks,
             commands::tasks::delete_task,
+            commands::tasks::archive_task,
+            commands::tasks::unarchive_task,
             // Documents
             commands::documents::upload_document,
             commands::documents::upload_text,

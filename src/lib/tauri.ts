@@ -44,6 +44,7 @@ export interface Meeting {
   ingested_at: string;
   created_at: string; // alias for ingested_at
   updated_at: string;
+  archived_at: string | null;
 }
 
 export interface Task {
@@ -70,6 +71,7 @@ export interface Task {
   created_at: string;
   updated_at: string;
   completed_at: string | null;
+  archived_at: string | null;
 }
 
 export interface CreateTaskInput {
@@ -114,6 +116,7 @@ export interface TaskFilters {
   search_query?: string;
   date_from?: string;
   date_to?: string;
+  show_archived?: boolean;
 }
 
 export interface Document {
@@ -283,12 +286,16 @@ export const ingestMeetingFromFile = (args: {
     title: args.title,
     platform: args.platform,
   });
-export const getMeetingsForProject = (projectId: string) =>
-  invoke<Meeting[]>("get_meetings_for_project", { projectId });
+export const getMeetingsForProject = (projectId: string, showArchived = false) =>
+  invoke<Meeting[]>("get_meetings_for_project", { projectId, showArchived });
 export const getMeeting = (id: string) =>
   invoke<Meeting | null>("get_meeting", { id });
 export const deleteMeeting = (id: string) =>
   invoke<void>("delete_meeting", { id });
+export const forceDeleteMeeting = (id: string) =>
+  invoke<void>("force_delete_meeting", { id });
+export const unarchiveMeeting = (id: string) =>
+  invoke<void>("unarchive_meeting", { id });
 export const renameMeeting = (id: string, title: string) =>
   invoke<void>("rename_meeting", { id, title });
 
@@ -334,6 +341,10 @@ export const reorderTask = (
 ) => invoke<void>("reorder_tasks", { taskId, newColumn, newOrder });
 export const deleteTask = (id: string) =>
   invoke<void>("delete_task", { id });
+export const archiveTask = (id: string) =>
+  invoke<void>("archive_task", { id });
+export const unarchiveTask = (id: string) =>
+  invoke<void>("unarchive_task", { id });
 
 // ─── Documents ───────────────────────────────────────────────────────────────
 

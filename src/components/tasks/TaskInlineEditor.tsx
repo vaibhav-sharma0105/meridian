@@ -4,7 +4,7 @@ import { useUIStore } from "@/stores/uiStore";
 import TaskConfidenceBadge from "./TaskConfidenceBadge";
 import AssigneeChipInput, { parseAssignees } from "./AssigneeChipInput";
 import { KANBAN_COLUMNS } from "@/lib/constants";
-import { X, Save } from "lucide-react";
+import { X, Save, Archive, ArchiveRestore, Trash2 } from "lucide-react";
 import { parseTags } from "@/lib/validators";
 import type { Task } from "@/lib/tauri";
 import { useAutoSave } from "@/hooks/useAutoSave";
@@ -17,7 +17,7 @@ interface Props {
 
 export default function TaskInlineEditor({ task }: Props) {
   const { t } = useTranslation();
-  const { tasks: allProjectTasks, updateTask } = useTasks(task.project_id);
+  const { tasks: allProjectTasks, updateTask, archiveTask, unarchiveTask, deleteTask } = useTasks(task.project_id);
   const { meetings } = useMeetings(task.project_id);
 
   // Build unique assignee suggestions from all tasks in this project
@@ -179,6 +179,39 @@ export default function TaskInlineEditor({ task }: Props) {
           Saved
         </div>
       )}
+
+      {/* Archive / Delete */}
+      <div className="flex items-center gap-2 pt-1 border-t border-zinc-100 dark:border-zinc-800">
+        {task.archived_at ? (
+          <button
+            onClick={async () => { await unarchiveTask(task.id); setSelectedTask(null); }}
+            className="flex items-center gap-1 text-xs text-zinc-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+          >
+            <ArchiveRestore className="w-3 h-3" />
+            Unarchive
+          </button>
+        ) : (
+          <button
+            onClick={async () => { await archiveTask(task.id); setSelectedTask(null); }}
+            className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
+          >
+            <Archive className="w-3 h-3" />
+            Archive
+          </button>
+        )}
+        <button
+          onClick={async () => {
+            if (window.confirm(`Delete "${task.title}"? This cannot be undone.`)) {
+              await deleteTask(task.id);
+              setSelectedTask(null);
+            }
+          }}
+          className="flex items-center gap-1 text-xs text-zinc-400 hover:text-red-500 dark:hover:text-red-400 transition-colors ml-auto"
+        >
+          <Trash2 className="w-3 h-3" />
+          Delete
+        </button>
+      </div>
     </div>
   );
 }

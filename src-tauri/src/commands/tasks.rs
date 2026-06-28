@@ -68,3 +68,15 @@ pub async fn delete_task(id: String, state: State<'_, AppState>) -> Result<(), S
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     repo::delete_task(&conn, &id)
 }
+
+#[tauri::command]
+pub async fn archive_task(id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    repo::archive_task(&conn, &id)
+}
+
+#[tauri::command]
+pub async fn unarchive_task(id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    repo::unarchive_task(&conn, &id)
+}
