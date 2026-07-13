@@ -4,6 +4,8 @@ pub mod v003_embeddings;
 pub mod v004_task_priority;
 pub mod v005_connectors;
 pub mod v006_archive;
+pub mod v007_audit_log;
+pub mod v008_daemon_jobs;
 
 pub struct Migration {
     pub version: i32,
@@ -35,6 +37,14 @@ pub fn get_all_migrations() -> Vec<Migration> {
         Migration {
             version: 6,
             sql: v006_archive::SQL,
+        },
+        Migration {
+            version: 7,
+            sql: v007_audit_log::SQL,
+        },
+        Migration {
+            version: 8,
+            sql: v008_daemon_jobs::V008_DAEMON_JOBS,
         },
     ]
 }

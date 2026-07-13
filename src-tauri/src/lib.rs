@@ -1,9 +1,12 @@
 pub mod ai;
+pub mod audit;
 pub mod commands;
 pub mod connectors;
+pub mod crypto;
 pub mod db;
 pub mod models;
 pub mod utils;
+pub mod vectors;
 
 use std::sync::Mutex;
 use tauri::Manager;
@@ -60,6 +63,8 @@ pub fn run() {
             commands::documents::get_documents_for_project,
             commands::documents::delete_document,
             commands::documents::get_document_content,
+            commands::documents::find_orphaned_documents,
+            commands::documents::recover_orphaned_document,
             // AI
             commands::ai::verify_ai_connection,
             commands::ai::fetch_available_models,
@@ -103,6 +108,32 @@ pub fn run() {
             commands::connections::save_sheets_relay_config,
             commands::connections::test_sheets_relay,
             commands::connections::reset_sheets_relay_sync,
+            // Audit
+            commands::audit::get_audit_log,
+            commands::audit::export_audit_log,
+            commands::audit::prune_old_audit_logs,
+            commands::audit::get_audit_log_stats,
+            // Encryption
+            commands::encryption::get_encryption_status,
+            commands::encryption::check_password_strength,
+            // Daemon
+            commands::daemon::get_daemon_status,
+            commands::daemon::start_daemon,
+            commands::daemon::stop_daemon,
+            commands::daemon::daemon_health_check,
+            // Migration
+            commands::migration::get_migration_status,
+            commands::migration::migrate_database,
+            commands::migration::list_backups,
+            commands::migration::cleanup_old_backups,
+            commands::migration::restore_from_backup,
+            commands::migration::get_safe_backup_dir_path,
+            commands::migration::list_safe_backups_cmd,
+            commands::migration::restore_safe_backup,
+            // Scheduler
+            commands::scheduler::get_scheduler_status,
+            commands::scheduler::enable_system_scheduler,
+            commands::scheduler::disable_system_scheduler,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

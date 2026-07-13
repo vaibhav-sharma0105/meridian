@@ -158,6 +158,32 @@ export function buildTauriMockScript(overrides: Record<string, unknown> = {}) {
     move_task_to_project: null,
     rename_meeting: null,
     delete_meeting: null,
+    // Encryption
+    get_encryption_status: { initialized: true, mode: "device", version: 1 },
+    check_password_strength: { score: 5, strength: "good", label: "Good", suggestions: [] },
+    // Daemon
+    get_daemon_status: { running: false, pid: null, jobs_processed: null, uptime_seconds: null, last_error: null },
+    start_daemon: { running: true, pid: 12345, jobs_processed: 0, uptime_seconds: 0, last_error: null },
+    stop_daemon: null,
+    daemon_health_check: true,
+    // Audit
+    get_audit_log: { entries: [], total: 0, has_more: false },
+    export_audit_log: "/tmp/audit-export.json",
+    prune_old_audit_logs: 0,
+    get_audit_log_stats: { total_entries: 0, entries_by_action: {}, entries_by_entity: {} },
+    // Migration (defaults to no migration needed)
+    get_migration_status: { needs_migration: false, database_exists: true, is_encrypted: true, backup_exists: false, backup_path: null, database_size_mb: 1.5 },
+    migrate_database: { success: true, backup_path: "/tmp/backup.db", safe_backup_path: "~/Documents/Meridian Backups/meridian-backup.db", tables_migrated: 10, error: null },
+    get_safe_backup_dir_path: "~/Documents/Meridian Backups",
+    list_safe_backups_cmd: [],
+    restore_safe_backup: null,
+    list_backups: [],
+    cleanup_old_backups: 0,
+    restore_from_backup: null,
+    // Scheduler
+    get_scheduler_status: { enabled: false, platform: "macos", service_name: "com.meridian.daemon", error: null },
+    enable_system_scheduler: null,
+    disable_system_scheduler: null,
     ...overrides,
   };
 

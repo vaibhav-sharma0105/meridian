@@ -1,5 +1,6 @@
 import { useState } from "react";
 import WelcomeStep from "./steps/WelcomeStep";
+import EncryptionSetupStep from "./steps/EncryptionSetupStep";
 import AISetupStep from "./steps/AISetupStep";
 import FirstProjectStep from "./steps/FirstProjectStep";
 import FirstTranscriptStep from "./steps/FirstTranscriptStep";
@@ -29,18 +30,21 @@ export default function OnboardingWizard({ onComplete }: Props) {
         <WelcomeStep onNext={() => setStep(1)} onSkip={skip} />
       )}
       {step === 1 && (
-        <AISetupStep onNext={() => setStep(2)} onSkip={() => setStep(2)} />
+        <EncryptionSetupStep onNext={() => setStep(2)} onSkip={() => setStep(2)} />
       )}
       {step === 2 && (
+        <AISetupStep onNext={() => setStep(3)} onSkip={() => setStep(3)} />
+      )}
+      {step === 3 && (
         <FirstProjectStep
           onNext={(projectId) => {
             setCreatedProjectId(projectId);
-            setStep(3);
+            setStep(4);
           }}
-          onSkip={() => setStep(3)}
+          onSkip={() => setStep(4)}
         />
       )}
-      {step === 3 && (
+      {step === 4 && (
         <FirstTranscriptStep
           projectId={createdProjectId}
           onFinish={complete}

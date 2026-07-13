@@ -24,7 +24,9 @@ Meridian is a **local-first, AI-powered meeting intelligence desktop app** built
 | Async data | @tanstack/react-query | v5 |
 | Drag & drop | @dnd-kit | 6.x |
 | Backend | Rust (stable) | 1.77+ |
-| Database | SQLite via rusqlite + FTS5 | — |
+| Database | SQLite via rusqlite + SQLCipher | Encrypted at rest |
+| Vector storage | Qdrant (client) | For semantic search |
+| Encryption | ring crate (PBKDF2) | Key derivation |
 | Secrets | keyring crate (OS keychain) | — |
 | HTTP client | reqwest (async) | — |
 | Testing | Vitest (unit) + Playwright (E2E) | — |
@@ -57,12 +59,15 @@ meridian/
 │
 ├── src-tauri/src/                # Rust backend
 │   ├── lib.rs                    # ★ ALL TAURI COMMANDS MUST BE REGISTERED HERE ★
-│   ├── commands/                 # One file per domain (tasks, meetings, ai, ...)
+│   ├── commands/                 # One file per domain (tasks, meetings, ai, audit, ...)
 │   ├── db/
 │   │   ├── repositories/         # All SQL lives here (never in commands/)
-│   │   └── migrations/           # Versioned schema files (v001–v005+)
+│   │   └── migrations/           # Versioned schema files (v001–v007+)
 │   ├── models/                   # Rust structs with serde (match TS interfaces)
 │   ├── connectors/               # zoom.rs, sheets_relay.rs, sync.rs
+│   ├── crypto/                   # Encryption key derivation (PBKDF2, device-key modes)
+│   ├── audit/                    # Audit logging (action tracking, risk classification)
+│   ├── vectors/                  # Qdrant vector storage client
 │   └── ai/                       # litellm.rs, extractor.rs, embeddings.rs
 │
 ├── tests/e2e/                    # Playwright tests
@@ -158,6 +163,30 @@ Missing `transformCallback` → `@tauri-apps/api` event listeners crash → Reac
 ### 6. Database Migrations
 
 New schema changes go in a new migration file `src-tauri/src/db/migrations/v00N_description.rs`. The migration runner in `db/connection.rs` applies them in order. Never modify existing migration files — always add a new one.
+
+### 7. Database Encryption
+
+SQLCipher encrypts the database at rest. Key derivation modes:
+- **Device mode** (default for new installs): Key derived from machine fingerprint (hostname + username + salt). Transparent to users but not portable.
+- **Password mode**: User-provided password with PBKDF2 (100k iterations). Portable across machines.
+
+Key config stored in `~/.meridian/key.json`:
+```json
+{ "mode": "device", "salt": "hex...", "pbkdf2_iterations": 100000 }
+```
+
+Backward compatibility: Existing unencrypted databases continue to work. Migration to encrypted DB is optional and requires explicit user action.
+
+### 8. Audit Logging
+
+All CRUD operations on tasks, meetings, and projects are logged to `audit_log` table with:
+- `action_type`: create, update, delete, archive, bulk_update, etc.
+- `entity_type`: task, meeting, project
+- `risk_level`: low, medium, high, critical
+- `agent_initiated`: boolean flag for agent vs user actions
+- `autonomy_mode`: supervised, semi_autonomous, autonomous
+
+Query via `get_audit_log` command with filters. 2-year retention with automatic pruning.
 
 ---
 
@@ -314,3 +343,6 @@ Update the following before marking work complete:
 | `getByText` strict mode | Playwright's `.or()` locator fails if both branches match. Use `.first()` or target one specific element. |
 | Client filter fields | `meeting_ids` and `project_id` in `TaskFilters` are client-only — strip them in `useTasks.ts` before the `invoke` call. |
 | `INSERT OR IGNORE` dedup | `upsert_pending_import` silently skips duplicates (returns `false`). Track in `SyncResult.skipped_duplicates`. |
+| Encrypted DB auto-init | New installs auto-initialize device-mode encryption. Existing unencrypted DBs continue working (backward compatible). |
+| Qdrant not embedded | Qdrant runs as external service (localhost:6334). Check `is_available()` before operations. |
+| Audit log performance | Always query with filters and pagination. Unfiltered queries on large logs are slow. |

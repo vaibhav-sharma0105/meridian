@@ -320,12 +320,28 @@ pub async fn chat_with_project(
 
         let meetings = mtg_repo::get_meetings_for_project(&conn, &project_id, false)?;
 
-        // FTS document search
-        let doc_results: Vec<SearchResult> = if !message.is_empty() {
+        // Get ALL documents for the project (for full context)
+        let all_docs = crate::db::repositories::documents::get_documents_for_project(&conn, &project_id)?;
+
+        // Also do FTS search to highlight most relevant chunks
+        let search_results: Vec<SearchResult> = if !message.is_empty() {
             search_documents_fts(&conn, &project_id, &message).unwrap_or_default()
         } else {
             vec![]
         };
+
+        // Convert all docs to SearchResult format for context building
+        let doc_results: Vec<SearchResult> = all_docs.iter().map(|d| {
+            SearchResult {
+                document_id: d.id.clone(),
+                document_title: d.title.clone().unwrap_or_else(|| d.filename.clone()),
+                filename: d.filename.clone(),
+                content: d.content_text.clone().unwrap_or_default(),
+                chunk_text: d.content_text.clone().unwrap_or_default(),
+                score: if search_results.iter().any(|sr| sr.document_id == d.id) { 2.0 } else { 1.0 },
+                search_type: "full".to_string(),
+            }
+        }).collect();
 
         (settings, api_key, project, open_tasks, done_tasks, meetings, doc_results)
     };

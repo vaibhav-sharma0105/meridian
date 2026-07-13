@@ -1,3 +1,4 @@
+use crate::audit::{log_user_action, ActionType, EntityType};
 use crate::db::repositories::{meetings as repo, projects as proj_repo, tasks as task_repo};
 use crate::models::meeting::{CreateMeetingInput, Meeting};
 use crate::AppState;
@@ -67,6 +68,19 @@ async fn ingest_meeting_core_inner(
             meeting_at,
         };
         let meeting = repo::create_meeting(&conn, &input)?;
+
+        // Log meeting creation
+        let _ = log_user_action(
+            &conn,
+            ActionType::Create,
+            EntityType::Meeting,
+            Some(meeting.id.clone()),
+            Some(json!({
+                "title": meeting.title,
+                "platform": meeting.platform,
+                "project_id": meeting.project_id
+            })),
+        );
 
         // Get project name for context
         let project = proj_repo::get_project(&conn, &project_id)?
@@ -272,13 +286,33 @@ pub async fn get_meeting(id: String, state: State<'_, AppState>) -> Result<Optio
 #[tauri::command]
 pub async fn delete_meeting(id: String, state: State<'_, AppState>) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    repo::soft_delete_meeting(&conn, &id)
+    repo::soft_delete_meeting(&conn, &id)?;
+
+    let _ = log_user_action(
+        &conn,
+        ActionType::Delete,
+        EntityType::Meeting,
+        Some(id),
+        Some(json!({"type": "soft_delete"})),
+    );
+
+    Ok(())
 }
 
 #[tauri::command]
 pub async fn force_delete_meeting(id: String, state: State<'_, AppState>) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    repo::delete_meeting_hard(&conn, &id)
+    repo::delete_meeting_hard(&conn, &id)?;
+
+    let _ = log_user_action(
+        &conn,
+        ActionType::Delete,
+        EntityType::Meeting,
+        Some(id),
+        Some(json!({"type": "hard_delete"})),
+    );
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -297,7 +331,17 @@ pub async fn rename_meeting(
         return Err("Meeting title cannot be empty".to_string());
     }
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    repo::rename_meeting(&conn, &id, title.trim())
+    repo::rename_meeting(&conn, &id, title.trim())?;
+
+    let _ = log_user_action(
+        &conn,
+        ActionType::Update,
+        EntityType::Meeting,
+        Some(id),
+        Some(json!({"new_title": title.trim()})),
+    );
+
+    Ok(())
 }
 
 /// Return the number of open/in-progress tasks that would move with a meeting.

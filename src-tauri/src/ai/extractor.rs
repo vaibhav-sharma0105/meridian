@@ -121,11 +121,20 @@ pub fn build_project_context(
     }
 
     if !doc_chunks.is_empty() {
-        ctx.push_str("\n=== RELEVANT DOCUMENTS ===\n");
-        for chunk in doc_chunks.iter().take(5) {
+        ctx.push_str("\n=== PROJECT DOCUMENTS ===\n");
+        // Sort by score (higher = more relevant to query)
+        let mut sorted_docs: Vec<_> = doc_chunks.iter().collect();
+        sorted_docs.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+
+        for chunk in sorted_docs.iter().take(10) {
+            let preview = if chunk.chunk_text.len() > 2000 {
+                format!("{}...", &chunk.chunk_text[..2000])
+            } else {
+                chunk.chunk_text.clone()
+            };
             ctx.push_str(&format!(
-                "[{}]: {}\n\n",
-                chunk.filename, chunk.chunk_text
+                "--- Document: {} ---\n{}\n\n",
+                chunk.filename, preview
             ));
         }
     }

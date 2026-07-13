@@ -734,12 +734,17 @@ Your projects, meetings, and tasks should all be present. Check:
 ## Data & Privacy
 
 - **All data is local.** Nothing is sent to any Meridian server — there is no Meridian server.
+- **Database encryption:** Your database is encrypted at rest using SQLCipher (AES-256). New installations automatically use device-based encryption. You can upgrade to password-based encryption in Settings > Advanced.
 - **Database location:**
   - macOS/Linux: `~/.meridian/meridian.db`
   - Windows: `%APPDATA%\meridian\meridian.db`
 - **AI inference:** Your meeting transcripts are sent to your configured AI provider (OpenAI, Anthropic, Ollama, etc.) when you ingest a meeting or use the chat panel. If you use Ollama, data never leaves your machine.
 - **API keys** are stored in your OS keychain (macOS Keychain, Windows Credential Manager) — never in the database or log files.
-- **Backups** are stored at `~/.meridian/backups/` and created automatically before schema migrations.
+- **Audit logging:** All data changes are logged with timestamps, action types, and risk levels. Logs are retained for 2 years. View in Settings > Advanced.
+- **Backups** are stored at `~/.meridian/backups/` and created automatically before schema migrations and encryption upgrades.
+- **Background service:** The optional meridian-daemon handles scheduled syncs and maintenance. Enable "Start at login" in Settings > Advanced to keep it running.
+
+For detailed security information, see [docs/SECURITY.md](docs/SECURITY.md).
 
 ---
 

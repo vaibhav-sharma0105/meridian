@@ -383,6 +383,20 @@ export const ingestDocument = (args: {
   return invoke<Document>("upload_text", { projectId: args.projectId, content: args.content, title: args.title });
 };
 
+// Document recovery
+export interface OrphanedDocument {
+  folder_id: string;
+  filename: string;
+  file_path: string;
+  file_size_bytes: number;
+}
+
+export const findOrphanedDocuments = () =>
+  invoke<OrphanedDocument[]>("find_orphaned_documents");
+
+export const recoverOrphanedDocument = (projectId: string, filePath: string) =>
+  invoke<Document>("recover_orphaned_document", { projectId, filePath });
+
 // ─── AI ──────────────────────────────────────────────────────────────────────
 
 export const verifyAiConnection = (args: {
@@ -577,3 +591,114 @@ export const testSheetsRelay = () =>
 
 export const resetSheetsRelaySync = () =>
   invoke<void>("reset_sheets_relay_sync");
+
+// ─── Encryption ───────────────────────────────────────────────────────────────
+
+export interface EncryptionStatus {
+  initialized: boolean;
+  mode: "password" | "device" | null;
+  version: number | null;
+}
+
+export interface PasswordStrength {
+  score: number;
+  strength: "weak" | "fair" | "good" | "strong";
+  label: string;
+  suggestions: string[];
+}
+
+export const getEncryptionStatus = () =>
+  invoke<EncryptionStatus>("get_encryption_status");
+
+export const checkPasswordStrength = (password: string) =>
+  invoke<PasswordStrength>("check_password_strength", { password });
+
+// ─── Daemon ───────────────────────────────────────────────────────────────────
+
+export interface DaemonStatus {
+  running: boolean;
+  pid: number | null;
+  jobs_processed: number | null;
+  uptime_seconds: number | null;
+  last_error: string | null;
+}
+
+export const getDaemonStatus = () =>
+  invoke<DaemonStatus>("get_daemon_status");
+
+export const startDaemon = () =>
+  invoke<DaemonStatus>("start_daemon");
+
+export const stopDaemon = () =>
+  invoke<void>("stop_daemon");
+
+export const daemonHealthCheck = () =>
+  invoke<boolean>("daemon_health_check");
+
+// ─── Migration ────────────────────────────────────────────────────────────────
+
+export interface MigrationStatus {
+  needs_migration: boolean;
+  database_exists: boolean;
+  is_encrypted: boolean;
+  backup_exists: boolean;
+  backup_path: string | null;
+  database_size_mb: number;
+}
+
+export interface MigrationResult {
+  success: boolean;
+  backup_path: string;
+  safe_backup_path: string;
+  tables_migrated: number;
+  error: string | null;
+}
+
+export interface BackupInfo {
+  path: string;
+  size_mb: number;
+  created_at: string;
+  age_days: number;
+}
+
+export const getMigrationStatus = () =>
+  invoke<MigrationStatus>("get_migration_status");
+
+export const migrateDatabase = (password?: string) =>
+  invoke<MigrationResult>("migrate_database", { password });
+
+export const listBackups = () =>
+  invoke<BackupInfo[]>("list_backups");
+
+export const cleanupOldBackups = (maxAgeDays: number) =>
+  invoke<number>("cleanup_old_backups", { maxAgeDays });
+
+export const restoreFromBackup = (backupPath: string) =>
+  invoke<void>("restore_from_backup", { backupPath });
+
+export const getSafeBackupDirPath = () =>
+  invoke<string>("get_safe_backup_dir_path");
+
+export const listSafeBackups = () =>
+  invoke<BackupInfo[]>("list_safe_backups_cmd");
+
+export const restoreSafeBackup = (backupPath: string) =>
+  invoke<void>("restore_safe_backup", { backupPath });
+
+// ─── System Scheduler ─────────────────────────────────────────────────────────
+
+export interface SchedulerStatus {
+  enabled: boolean;
+  platform: string;
+  service_name: string;
+  error: string | null;
+}
+
+export const getSchedulerStatus = () =>
+  invoke<SchedulerStatus>("get_scheduler_status");
+
+export const enableSystemScheduler = () =>
+  invoke<void>("enable_system_scheduler");
+
+export const disableSystemScheduler = () =>
+  invoke<void>("disable_system_scheduler");

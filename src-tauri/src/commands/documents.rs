@@ -178,3 +178,133 @@ pub async fn get_document_content(id: String, state: State<'_, AppState>) -> Res
         "chunks": doc.chunks,
     }))
 }
+
+#[derive(serde::Serialize)]
+pub struct OrphanedDocument {
+    pub folder_id: String,
+    pub filename: String,
+    pub file_path: String,
+    pub file_size_bytes: i64,
+}
+
+#[tauri::command]
+pub async fn find_orphaned_documents(
+    state: State<'_, AppState>,
+) -> Result<Vec<OrphanedDocument>, String> {
+    let docs_dir = crate::db::connection::get_documents_dir();
+    if !docs_dir.exists() {
+        return Ok(vec![]);
+    }
+
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let mut orphans = Vec::new();
+
+    for entry in std::fs::read_dir(&docs_dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let folder_path = entry.path();
+
+        if !folder_path.is_dir() {
+            continue;
+        }
+
+        let folder_name = folder_path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+
+        for file_entry in std::fs::read_dir(&folder_path).map_err(|e| e.to_string())? {
+            let file_entry = file_entry.map_err(|e| e.to_string())?;
+            let file_path = file_entry.path();
+
+            if !file_path.is_file() {
+                continue;
+            }
+
+            let filename = file_path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+
+            let file_path_str = file_path.to_string_lossy().to_string();
+
+            // Check if this file exists in the database
+            let exists: bool = conn
+                .query_row(
+                    "SELECT 1 FROM documents WHERE file_path = ?1 LIMIT 1",
+                    rusqlite::params![file_path_str],
+                    |_| Ok(true),
+                )
+                .unwrap_or(false);
+
+            if !exists {
+                let metadata = std::fs::metadata(&file_path).ok();
+                orphans.push(OrphanedDocument {
+                    folder_id: folder_name.clone(),
+                    filename,
+                    file_path: file_path_str,
+                    file_size_bytes: metadata.map(|m| m.len() as i64).unwrap_or(0),
+                });
+            }
+        }
+    }
+
+    Ok(orphans)
+}
+
+#[tauri::command]
+pub async fn recover_orphaned_document(
+    project_id: String,
+    file_path: String,
+    state: State<'_, AppState>,
+) -> Result<Document, String> {
+    let path = std::path::Path::new(&file_path);
+
+    if !path.exists() {
+        return Err("File not found".to_string());
+    }
+
+    // Parse the file content
+    let parsed = crate::utils::file_parser::parse_file(path).await?;
+    let filename = path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+
+    // Move file to the project's document folder
+    let docs_dir = crate::db::connection::get_documents_dir().join(&project_id);
+    std::fs::create_dir_all(&docs_dir)
+        .map_err(|e| format!("Failed to create documents directory: {}", e))?;
+
+    let dest_path = docs_dir.join(&filename);
+
+    // Copy (not move) to preserve the original
+    std::fs::copy(path, &dest_path)
+        .map_err(|e| format!("Failed to copy file: {}", e))?;
+
+    let chunks_json = serde_json::to_string(&parsed.chunks).unwrap_or_default();
+
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let doc = repo::create_document(
+        &conn,
+        &project_id,
+        Some(&filename.trim_end_matches(".txt").replace("_", " ")),
+        &filename,
+        &dest_path.to_string_lossy(),
+        &parsed.file_type,
+        None,
+        Some(&parsed.content_text),
+        Some(&chunks_json),
+        Some(parsed.file_size_bytes as i64),
+    )?;
+
+    // Clean up old orphan folder if empty
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_dir(parent);
+    }
+
+    Ok(doc)
+}

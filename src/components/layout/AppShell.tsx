@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useTasks } from "@/hooks/useTasks";
@@ -12,7 +12,8 @@ import UpdateBanner from "@/components/shared/UpdateBanner";
 import NotificationCenter from "@/components/notifications/NotificationCenter";
 import AISettings from "@/components/ai/AISettings";
 import ConnectionsSettings from "@/components/connections/ConnectionsSettings";
-import { getNotifications } from "@/lib/tauri";
+import MigrationWizard from "@/components/settings/MigrationWizard";
+import { getNotifications, getMigrationStatus } from "@/lib/tauri";
 import { useNotificationStore } from "@/stores/notificationStore";
 import { useSync } from "@/hooks/useSync";
 
@@ -22,6 +23,7 @@ export default function AppShell() {
   const { setNotifications } = useNotificationStore();
   const { tasks } = useTasks(activeProjectId);
   const selectedTask = selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) ?? null : null;
+  const [showMigration, setShowMigration] = useState(false);
 
   useKeyboardShortcuts();
   const { runSync, isSyncing } = useSync();
@@ -29,6 +31,13 @@ export default function AppShell() {
   useEffect(() => {
     fetchProjects();
     getNotifications().then(setNotifications).catch(console.error);
+
+    // Check if database needs migration
+    getMigrationStatus().then((status) => {
+      if (status.needs_migration) {
+        setShowMigration(true);
+      }
+    }).catch(console.error);
   }, []);
 
   return (
@@ -62,6 +71,7 @@ export default function AppShell() {
       <NotificationCenter open={notificationCenterOpen} onClose={() => setNotificationCenterOpen(false)} />
       <AISettings open={settingsOpen && settingsTab !== "connections"} onClose={() => setSettingsOpen(false)} />
       <ConnectionsSettings open={settingsOpen && settingsTab === "connections"} onClose={() => setSettingsOpen(false)} runSync={runSync} isSyncing={isSyncing} />
+      <MigrationWizard open={showMigration} onClose={() => setShowMigration(false)} onComplete={() => setShowMigration(false)} />
       {selectedTask && <TaskEditModal task={selectedTask} />}
     </div>
   );

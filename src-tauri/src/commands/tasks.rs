@@ -1,6 +1,8 @@
+use crate::audit::{log_user_action, ActionType, EntityType};
 use crate::db::repositories::tasks as repo;
 use crate::models::task::{CreateTaskInput, PartialTaskUpdate, Task, TaskFilters, UpdateTaskInput};
 use crate::AppState;
+use serde_json::json;
 use tauri::State;
 
 #[tauri::command]
@@ -30,7 +32,20 @@ pub async fn create_task(
     state: State<'_, AppState>,
 ) -> Result<Task, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    repo::create_task(&conn, &input)
+    let task = repo::create_task(&conn, &input)?;
+
+    let _ = log_user_action(
+        &conn,
+        ActionType::Create,
+        EntityType::Task,
+        Some(task.id.clone()),
+        Some(json!({
+            "title": task.title,
+            "project_id": task.project_id
+        })),
+    );
+
+    Ok(task)
 }
 
 #[tauri::command]
@@ -39,7 +54,20 @@ pub async fn update_task(
     state: State<'_, AppState>,
 ) -> Result<Task, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    repo::update_task(&conn, &input)
+    let task = repo::update_task(&conn, &input)?;
+
+    let _ = log_user_action(
+        &conn,
+        ActionType::Update,
+        EntityType::Task,
+        Some(task.id.clone()),
+        Some(json!({
+            "title": task.title,
+            "status": task.status
+        })),
+    );
+
+    Ok(task)
 }
 
 #[tauri::command]
@@ -49,7 +77,23 @@ pub async fn bulk_update_tasks(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    repo::bulk_update_tasks(&conn, &task_ids, &updates)
+    repo::bulk_update_tasks(&conn, &task_ids, &updates)?;
+
+    let _ = log_user_action(
+        &conn,
+        ActionType::Update,
+        EntityType::Task,
+        None,
+        Some(json!({
+            "task_ids": task_ids,
+            "updates": {
+                "status": updates.status,
+                "assignee": updates.assignee
+            }
+        })),
+    );
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -66,7 +110,17 @@ pub async fn reorder_tasks(
 #[tauri::command]
 pub async fn delete_task(id: String, state: State<'_, AppState>) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    repo::delete_task(&conn, &id)
+    repo::delete_task(&conn, &id)?;
+
+    let _ = log_user_action(
+        &conn,
+        ActionType::Delete,
+        EntityType::Task,
+        Some(id),
+        None,
+    );
+
+    Ok(())
 }
 
 #[tauri::command]

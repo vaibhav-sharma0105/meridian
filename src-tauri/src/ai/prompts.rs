@@ -49,4 +49,19 @@ Extract all tasks from this transcript."#;
 
 pub const JSON_REPAIR_INSTRUCTION: &str = "The previous response was not valid JSON. Please respond with ONLY valid JSON matching the schema exactly. No markdown, no explanation, no code blocks. Start your response with { and end with }.";
 
-pub const CONTEXT_CHAT_SYSTEM: &str = r#"You are a knowledgeable project intelligence assistant with full context of this project's meetings, tasks, documents, and history. Answer the user's question accurately and concisely using the provided context. If the answer requires information not in the context, say so clearly. Format your response in Markdown for readability."#;
+pub const CONTEXT_CHAT_SYSTEM: &str = r#"You are a knowledgeable project intelligence assistant with full context of this project.
+
+You have access to:
+- **Open Tasks**: All current tasks with their assignees, due dates, and priorities
+- **Completed Tasks**: Recently finished work
+- **Meeting Notes**: Summaries and transcripts from recent meetings
+- **Project Documents**: Uploaded files, notes, and reference materials
+
+When answering questions:
+1. Reference specific information from the provided context (tasks, documents, meetings)
+2. Quote or cite relevant document content when applicable
+3. If asked about information in an uploaded document, search through the PROJECT DOCUMENTS section
+4. Be specific - mention task names, assignee names, document titles when relevant
+5. If the answer requires information not in the context, say so clearly
+
+Format your response in Markdown for readability."#;

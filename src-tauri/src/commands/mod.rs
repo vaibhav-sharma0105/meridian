@@ -1,5 +1,10 @@
 pub mod ai;
+pub mod audit;
 pub mod connections;
+pub mod daemon;
+pub mod encryption;
+pub mod migration;
+pub mod scheduler;
 pub mod documents;
 pub mod export;
 pub mod import;

@@ -20,11 +20,13 @@ Meridian is a three-layer desktop application:
 └───────────────────┬─────────────────────────────────────┘
                     │  rusqlite
 ┌───────────────────▼─────────────────────────────────────┐
-│  SQLite (~/.meridian/meridian.db)                        │
-│  FTS5 full-text search · Schema v005                     │
+│  SQLite + SQLCipher (~/.meridian/meridian.db)            │
+│  FTS5 full-text search · Schema v007 · Encrypted at rest │
 └─────────────────────────────────────────────────────────┘
                     │  HTTP (outbound only)
            AI Provider (OpenAI / Anthropic / LiteLLM / Ollama)
+                    │
+           Qdrant (localhost:6334) — semantic vector search
 ```
 
 All data is local. The only outbound calls are to the user-configured AI endpoint.
@@ -152,7 +154,7 @@ Dynamic SQL is built by appending to `conditions` and `bind_values`. This avoids
 
 ### Database Schema
 
-Current version: **v005**. Migrations run automatically on startup.
+Current version: **v007**. Migrations run automatically on startup.
 
 **Core tables:**
 
@@ -170,6 +172,9 @@ connections       — id, provider, account_email, scopes, token_expires_at, las
 pending_imports   — id, provider, title, summary_full, source_email_id, status, ...
 app_settings      — key, value (key-value store for app config)
 notifications     — id, type, title, body, read_at, created_at
+audit_log         — id, timestamp, action_type, entity_type, entity_id, user_id,
+                    session_id, summary, details (JSON), before_state, after_state,
+                    risk_level, external_effects, agent_initiated, autonomy_mode
 ```
 
 **Unique indexes for deduplication:**
@@ -229,6 +234,8 @@ useSync() [hooks/useSync.ts]
 
 ## Security Model
 
+### Secret Storage
+
 | Secret | Storage |
 |---|---|
 | Zoom access/refresh tokens | OS keychain (keyring crate) |
@@ -236,7 +243,33 @@ useSync() [hooks/useSync.ts]
 | Sheets relay secret key | `app_settings` table (not keychain — avoids unsigned app prompts) |
 | OAuth client IDs/secrets | Build-time env vars (`ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`) |
 
-No secrets ever touch disk directly or appear in logs. The SQLite database is unencrypted but contains no API keys.
+No secrets ever touch disk directly or appear in logs.
+
+### Database Encryption
+
+The SQLite database uses SQLCipher for encryption at rest (AES-256-CBC).
+
+**Key derivation modes:**
+- **Device mode** (default): Key derived from machine fingerprint (hostname + username + salt) via PBKDF2 (100k iterations). Transparent to users but not portable across machines.
+- **Password mode**: User-provided password with PBKDF2 (100k iterations). Portable across machines.
+
+**Key configuration** stored in `~/.meridian/key.json`:
+```json
+{ "mode": "device", "salt": "hex...", "pbkdf2_iterations": 100000 }
+```
+
+**Backward compatibility**: Existing unencrypted databases continue to work. New installs auto-initialize device-mode encryption. Migration to encrypted DB is optional.
+
+### Audit Logging
+
+All CRUD operations on tasks, meetings, and projects are logged to `audit_log` table:
+- `action_type`: create, update, delete, archive, bulk_update, move, ingest, sync
+- `entity_type`: task, meeting, project, connection, pending_import
+- `risk_level`: low, medium, high, critical (classified by action type + external effects)
+- `agent_initiated`: boolean flag to distinguish agent vs user actions
+- `autonomy_mode`: supervised, semi_autonomous, autonomous
+
+Retention: 2 years, with automatic pruning via background job.
 
 ---
 
