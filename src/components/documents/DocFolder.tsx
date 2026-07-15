@@ -5,7 +5,9 @@ import { useDocuments } from "@/hooks/useDocuments";
 import DocCard from "./DocCard";
 import DocUpload from "./DocUpload";
 import DocSearch from "./DocSearch";
+import DocPreview from "./DocPreview";
 import EmptyState from "@/components/shared/EmptyState";
+import type { Document } from "@/lib/tauri";
 
 interface Props {
   projectId: string | null;
@@ -17,6 +19,7 @@ export default function DocFolder({ projectId }: Props) {
   const { t } = useTranslation();
   const { documents, refetch } = useDocuments(projectId);
   const [tab, setTab] = useState<Tab>("browse");
+  const [previewDoc, setPreviewDoc] = useState<Document | null>(null);
 
   if (!projectId) {
     return (
@@ -61,7 +64,7 @@ export default function DocFolder({ projectId }: Props) {
               />
             ) : (
               documents.map((doc) => (
-                <DocCard key={doc.id} doc={doc} onDeleted={refetch} />
+                <DocCard key={doc.id} doc={doc} onDeleted={refetch} onClick={() => setPreviewDoc(doc)} />
               ))
             )}
           </div>
@@ -75,6 +78,10 @@ export default function DocFolder({ projectId }: Props) {
           <DocSearch projectId={projectId} />
         )}
       </div>
+
+      {previewDoc && (
+        <DocPreview doc={previewDoc} onClose={() => setPreviewDoc(null)} />
+      )}
     </div>
   );
 }

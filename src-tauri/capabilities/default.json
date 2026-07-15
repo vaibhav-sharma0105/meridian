@@ -8,6 +8,14 @@
     "dialog:allow-open",
     "dialog:allow-save",
     "shell:allow-open",
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [{ "name": "binaries/meridian-daemon", "sidecar": true, "args": true }]
+    },
+    {
+      "identifier": "shell:allow-kill",
+      "allow": [{ "name": "binaries/meridian-daemon", "sidecar": true }]
+    },
     "notification:default",
     "fs:default",
     "fs:read-files",

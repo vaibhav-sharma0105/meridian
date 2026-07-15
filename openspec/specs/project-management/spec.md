@@ -16,8 +16,9 @@ The system SHALL support create, read, update, and delete operations for project
 - **THEN** system persists changes
 
 #### Scenario: Delete project
-- **WHEN** user deletes project
-- **THEN** system removes project and optionally associated tasks/meetings
+- **WHEN** user deletes (archives) project
+- **THEN** system archives project and navigates to null project (All Tasks)
+- **AND** React Query projects cache is invalidated so sidebar updates without reload
 
 #### Scenario: List projects
 - **WHEN** user views sidebar
@@ -69,7 +70,8 @@ The system SHALL provide project settings panel for editing project metadata.
 
 #### Scenario: Edit project metadata
 - **WHEN** user modifies name, description, or color in settings
-- **THEN** changes are saved and reflected immediately
+- **THEN** changes are saved and reflected immediately in sidebar and all views
+- **AND** React Query projects cache is invalidated so sidebar updates without reload
 
 ### Requirement: Default Project
 

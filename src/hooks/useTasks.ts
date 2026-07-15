@@ -62,7 +62,7 @@ export function useTasks(projectId: string | null, filters?: TaskFilters) {
     onError: (_err, _input, ctx) => {
       qc.setQueryData(["tasks", projectId, filtersWithBaseline], ctx?.prev);
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: ["tasks", projectId] }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
   });
 
   const createMutation = useMutation({
@@ -78,7 +78,18 @@ export function useTasks(projectId: string | null, filters?: TaskFilters) {
 
   const deleteMutation = useMutation({
     mutationFn: api.deleteTask,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks", projectId] }),
+    onMutate: async (taskId: string) => {
+      await qc.cancelQueries({ queryKey: ["tasks", projectId] });
+      const prev = qc.getQueryData(["tasks", projectId, filtersWithBaseline]);
+      qc.setQueryData(["tasks", projectId, filtersWithBaseline], (old: any[]) =>
+        old?.filter((t) => t.id !== taskId)
+      );
+      return { prev };
+    },
+    onError: (_err, _taskId, ctx) => {
+      qc.setQueryData(["tasks", projectId, filtersWithBaseline], ctx?.prev);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
   });
 
   const archiveMutation = useMutation({

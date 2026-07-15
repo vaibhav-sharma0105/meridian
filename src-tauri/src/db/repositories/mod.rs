@@ -1,6 +1,7 @@
 pub mod ai_settings;
 pub mod connections;
 pub mod documents;
+pub mod jobs;
 pub mod meetings;
 pub mod notifications;
 pub mod projects;

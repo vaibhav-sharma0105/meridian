@@ -3,8 +3,16 @@ pub mod audit;
 pub mod commands;
 pub mod connectors;
 pub mod crypto;
+pub mod daemon;
 pub mod db;
+pub mod documents;
+pub mod drafts;
 pub mod models;
+pub mod patterns;
+pub mod plans;
+pub mod sensitive;
+pub mod skills;
+pub mod suggestions;
 pub mod utils;
 pub mod vectors;
 
@@ -24,9 +32,16 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let conn = db::connection::init_db().expect("Failed to initialize database");
+
+            // Seed builtin skills on first run
+            if let Err(e) = skills::builtin::load_builtin_skills(&conn) {
+                eprintln!("Warning: Failed to load builtin skills: {}", e);
+            }
+
             app.manage(AppState {
                 db: Mutex::new(conn),
             });
+            app.manage(commands::embedding_worker::WorkerState::new());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -35,6 +50,8 @@ pub fn run() {
             commands::projects::create_project,
             commands::projects::update_project,
             commands::projects::archive_project,
+            commands::projects::get_archived_projects,
+            commands::projects::unarchive_project,
             // Meetings
             commands::meetings::ingest_meeting,
             commands::meetings::ingest_meeting_from_file,
@@ -65,6 +82,10 @@ pub fn run() {
             commands::documents::get_document_content,
             commands::documents::find_orphaned_documents,
             commands::documents::recover_orphaned_document,
+            commands::documents::get_document_embedding_status,
+            commands::documents::retry_document_embedding,
+            commands::documents::get_embedding_migration_status,
+            commands::documents::queue_embedding_migration,
             // AI
             commands::ai::verify_ai_connection,
             commands::ai::fetch_available_models,
@@ -75,6 +96,7 @@ pub fn run() {
             commands::ai::check_ollama_status,
             commands::ai::embed_document_chunks,
             commands::ai::search_documents,
+            commands::ai::hybrid_search_documents,
             commands::ai::generate_output,
             // Settings
             commands::settings::get_app_settings,
@@ -134,6 +156,71 @@ pub fn run() {
             commands::scheduler::get_scheduler_status,
             commands::scheduler::enable_system_scheduler,
             commands::scheduler::disable_system_scheduler,
+            // Embedding Worker
+            commands::embedding_worker::start_embedding_worker,
+            commands::embedding_worker::stop_embedding_worker,
+            commands::embedding_worker::get_indexing_status,
+            commands::embedding_worker::process_pending_embeddings,
+            // Patterns
+            commands::patterns::get_pattern_summaries,
+            commands::patterns::get_pattern_model,
+            commands::patterns::get_workflow_suggestions,
+            commands::patterns::dismiss_workflow_suggestion,
+            commands::patterns::get_smart_defaults,
+            commands::patterns::get_communication_style,
+            commands::patterns::record_draft_edit,
+            commands::patterns::export_learning_data,
+            commands::patterns::import_learning_data,
+            commands::patterns::reset_pattern_category,
+            commands::patterns::reset_all_learning,
+            // Suggestions
+            commands::suggestions::get_pending_suggestions,
+            commands::suggestions::accept_suggestion,
+            commands::suggestions::dismiss_suggestion,
+            commands::suggestions::stop_suggesting,
+            commands::suggestions::create_suggestion,
+            commands::suggestions::get_suggestion_count_today,
+            // Drafts
+            commands::drafts::get_drafts_for_task,
+            commands::drafts::generate_draft,
+            commands::drafts::update_draft,
+            commands::drafts::delete_draft,
+            commands::drafts::scan_draft,
+            // Plans
+            commands::plans::evaluate_task_plan,
+            commands::plans::get_task_plan,
+            commands::plans::accept_plan,
+            commands::plans::record_plan_correction,
+            // Skills
+            commands::skills::create_skill,
+            commands::skills::get_skill,
+            commands::skills::list_skills,
+            commands::skills::update_skill,
+            commands::skills::delete_skill,
+            commands::skills::toggle_skill_enabled,
+            commands::skills::run_skill_manually,
+            commands::skills::test_run_skill,
+            commands::skills::get_skill_runs,
+            commands::skills::get_skill_run,
+            commands::skills::approve_skill_run,
+            commands::skills::reject_skill_run,
+            commands::skills::clone_skill,
+            commands::skills::export_skill,
+            commands::skills::export_skill_to_directory,
+            commands::skills::import_skill,
+            commands::skills::get_skill_stats,
+            commands::skills::record_skill_output_edit,
+            commands::skills::extract_skill_from_chat,
+            commands::skills::initialize_builtin_skills,
+            commands::skills::reset_builtin_skills,
+            commands::skills::pick_folder_dialog,
+            commands::skills::list_skill_folders,
+            commands::skills::get_skill_folder,
+            commands::skills::install_skill_folder,
+            commands::skills::delete_skill_folder,
+            commands::skills::read_skill_file,
+            commands::skills::execute_skill_script,
+            commands::skills::toggle_folder_skill_enabled,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

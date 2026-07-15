@@ -108,3 +108,45 @@ pub fn archive_project(conn: &Connection, id: &str) -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     Ok(())
 }
+
+pub fn get_archived_projects(conn: &Connection) -> Result<Vec<Project>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT p.id, p.name, p.description, p.color, p.created_at, p.updated_at, p.archived_at,
+                    COUNT(CASE WHEN t.status = 'open' OR t.status = 'in_progress' THEN 1 END) as open_task_count
+             FROM projects p
+             LEFT JOIN tasks t ON t.project_id = p.id
+             WHERE p.archived_at IS NOT NULL
+             GROUP BY p.id
+             ORDER BY p.archived_at DESC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let projects = stmt
+        .query_map([], |row| {
+            Ok(Project {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                description: row.get(2)?,
+                color: row.get(3)?,
+                created_at: row.get(4)?,
+                updated_at: row.get(5)?,
+                archived_at: row.get(6)?,
+                open_task_count: row.get(7)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(projects)
+}
+
+pub fn unarchive_project(conn: &Connection, id: &str) -> Result<(), String> {
+    conn.execute(
+        "UPDATE projects SET archived_at = NULL WHERE id = ?1",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}

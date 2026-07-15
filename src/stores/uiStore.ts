@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 type Theme = "light" | "dark" | "system";
 type ViewMode = "list" | "kanban" | "table";
-type ActiveView = "tasks" | "meetings" | "documents" | "analytics" | "chat";
+type ActiveView = "tasks" | "meetings" | "documents" | "analytics" | "chat" | "skills";
 
 interface UIStore {
   theme: Theme;
@@ -18,6 +18,7 @@ interface UIStore {
   settingsOpen: boolean;
   settingsTab: string;
   ingestModalOpen: boolean;
+  skillEditorData: Record<string, unknown> | null;
   // Actions
   setTheme: (theme: Theme) => void;
   setLanguage: (lang: string) => void;
@@ -31,6 +32,7 @@ interface UIStore {
   setNotificationCenterOpen: (open: boolean) => void;
   setSettingsOpen: (open: boolean, tab?: string) => void;
   setIngestModalOpen: (open: boolean) => void;
+  setSkillEditorData: (data: Record<string, unknown> | null) => void;
 }
 
 export const useUIStore = create<UIStore>((set) => ({
@@ -47,6 +49,7 @@ export const useUIStore = create<UIStore>((set) => ({
   settingsOpen: false,
   settingsTab: "ai",
   ingestModalOpen: false,
+  skillEditorData: null,
 
   setTheme: (theme) => set({ theme }),
   setLanguage: (language) => set({ language }),
@@ -67,4 +70,5 @@ export const useUIStore = create<UIStore>((set) => ({
   setSettingsOpen: (settingsOpen, tab) =>
     set({ settingsOpen, ...(tab ? { settingsTab: tab } : {}) }),
   setIngestModalOpen: (ingestModalOpen) => set({ ingestModalOpen }),
+  setSkillEditorData: (skillEditorData) => set({ skillEditorData }),
 }));

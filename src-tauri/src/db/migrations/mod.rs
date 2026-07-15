@@ -6,6 +6,11 @@ pub mod v005_connectors;
 pub mod v006_archive;
 pub mod v007_audit_log;
 pub mod v008_daemon_jobs;
+pub mod v009_pattern_learning;
+pub mod v010_proactive_agent;
+pub mod v011_subtasks;
+pub mod v012_skills;
+pub mod v013_skill_builtin_flag;
 
 pub struct Migration {
     pub version: i32,
@@ -45,6 +50,26 @@ pub fn get_all_migrations() -> Vec<Migration> {
         Migration {
             version: 8,
             sql: v008_daemon_jobs::V008_DAEMON_JOBS,
+        },
+        Migration {
+            version: 9,
+            sql: v009_pattern_learning::SQL,
+        },
+        Migration {
+            version: 10,
+            sql: v010_proactive_agent::SQL,
+        },
+        Migration {
+            version: 11,
+            sql: v011_subtasks::SQL,
+        },
+        Migration {
+            version: 12,
+            sql: v012_skills::SQL,
+        },
+        Migration {
+            version: 13,
+            sql: v013_skill_builtin_flag::SQL,
         },
     ]
 }

@@ -15,11 +15,16 @@ const LAUNCHD_LABEL: &str = "com.meridian.daemon";
 const TASK_NAME: &str = "MeridianDaemon";
 
 fn get_daemon_path() -> PathBuf {
-    std::env::current_exe()
+    let exe_dir = std::env::current_exe()
         .unwrap_or_default()
         .parent()
-        .map(|p| p.join("meridian-daemon"))
-        .unwrap_or_default()
+        .unwrap_or_else(|| std::path::Path::new("."))
+        .to_path_buf();
+
+    let suffix = if cfg!(windows) { ".exe" } else { "" };
+    let binary_name = format!("meridian-daemon{}", suffix);
+
+    exe_dir.join(binary_name)
 }
 
 fn get_launchd_plist_path() -> PathBuf {

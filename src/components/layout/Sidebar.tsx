@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Bell, Settings, Settings2, Plus, LayoutList,
-  Sun, Moon, Monitor, Link2, Sparkles,
+  Bell, Settings, Settings2, Plus, LayoutList, Zap,
+  Sun, Moon, Monitor, Link2, Sparkles, ChevronDown, ChevronRight, ArchiveRestore,
 } from "lucide-react";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -11,7 +12,7 @@ import { useProjects } from "@/hooks/useProjects";
 import { usePendingImports } from "@/hooks/usePendingImports";
 import ProjectCreate from "@/components/projects/ProjectCreate";
 import ProjectSettings from "@/components/projects/ProjectSettings";
-import { setAppSetting } from "@/lib/tauri";
+import { setAppSetting, getArchivedProjects, unarchiveProject } from "@/lib/tauri";
 import type { Project } from "@/lib/tauri";
 
 function MeridianLogo() {
@@ -26,13 +27,30 @@ function MeridianLogo() {
 
 export default function Sidebar() {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const { projects } = useProjects();
-  const { activeProjectId, setActiveProject } = useProjectStore();
+  const { activeProjectId, setActiveProject, loadProjects } = useProjectStore();
   const { theme, setTheme, setNotificationCenterOpen, setSettingsOpen, activeView, setActiveView, rightPanelOpen, toggleRightPanel } = useUIStore();
   const { unreadCount } = useNotificationStore();
   const { pendingCount } = usePendingImports();
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [settingsProject, setSettingsProject] = useState<Project | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+
+  const { data: archivedProjects = [] } = useQuery({
+    queryKey: ["archivedProjects"],
+    queryFn: getArchivedProjects,
+  });
+
+  const handleUnarchive = async (id: string) => {
+    await unarchiveProject(id);
+    // Refetch both queries to ensure UI updates immediately
+    await Promise.all([
+      queryClient.refetchQueries({ queryKey: ["projects"] }),
+      queryClient.refetchQueries({ queryKey: ["archivedProjects"] }),
+    ]);
+    await loadProjects();
+  };
 
   const cycleTheme = async () => {
     const next = theme === "light" ? "dark" : theme === "dark" ? "system" : "light";
@@ -54,12 +72,18 @@ export default function Sidebar() {
       </div>
 
       {/* ── Global nav ─────────────────────────────────────────────────────── */}
-      <div className="px-3 pt-3 pb-1">
+      <div className="px-3 pt-3 pb-1 space-y-0.5">
         <NavItem
           icon={<LayoutList className="w-[17px] h-[17px]" />}
           label={t("nav.allTasks")}
           active={activeProjectId === null && activeView === "tasks"}
           onClick={() => { setActiveProject(null); setActiveView("tasks"); }}
+        />
+        <NavItem
+          icon={<Zap className="w-[17px] h-[17px]" />}
+          label="Skills"
+          active={activeView === "skills"}
+          onClick={() => { setActiveProject(null); setActiveView("skills"); }}
         />
       </div>
 
@@ -119,6 +143,46 @@ export default function Sidebar() {
 
         {projects.length === 0 && (
           <p className="text-[12.5px] text-zinc-400 dark:text-zinc-600 px-3 py-2.5 italic leading-relaxed">No projects yet.<br />Create one to get started.</p>
+        )}
+
+        {/* Archived Projects */}
+        {archivedProjects.length > 0 && (
+          <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+            <button
+              onClick={() => setShowArchived(!showArchived)}
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] font-medium text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-400"
+            >
+              {showArchived ? (
+                <ChevronDown className="w-3 h-3" />
+              ) : (
+                <ChevronRight className="w-3 h-3" />
+              )}
+              Archived ({archivedProjects.length})
+            </button>
+            {showArchived && (
+              <div className="mt-1 space-y-0.5">
+                {archivedProjects.map((project) => (
+                  <div
+                    key={project.id}
+                    className="group flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] text-zinc-400 dark:text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/30"
+                  >
+                    <span
+                      className="w-2 h-2 rounded-full flex-shrink-0 opacity-50"
+                      style={{ backgroundColor: project.color }}
+                    />
+                    <span className="flex-1 truncate line-through">{project.name}</span>
+                    <button
+                      onClick={() => handleUnarchive(project.id)}
+                      title="Restore project"
+                      className="p-1 rounded opacity-0 group-hover:opacity-100 text-zinc-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all"
+                    >
+                      <ArchiveRestore className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
 

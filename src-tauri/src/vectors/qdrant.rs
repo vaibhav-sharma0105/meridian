@@ -10,7 +10,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 const DEFAULT_QDRANT_URL: &str = "http://localhost:6334";
-const VECTOR_DIMENSION: u64 = 384; // MiniLM-L6-v2 dimension
+const DEFAULT_VECTOR_DIMENSION: u64 = 384; // MiniLM-L6-v2 dimension
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VectorPayload {
@@ -71,6 +71,10 @@ impl QdrantClient {
     }
 
     pub async fn create_collection(&self, name: &str) -> Result<(), String> {
+        self.create_collection_with_dimension(name, DEFAULT_VECTOR_DIMENSION).await
+    }
+
+    pub async fn create_collection_with_dimension(&self, name: &str, dimension: u64) -> Result<(), String> {
         let client = self.get_client().await?;
 
         // Check if collection exists
@@ -87,7 +91,7 @@ impl QdrantClient {
         client
             .create_collection(
                 CreateCollectionBuilder::new(name)
-                    .vectors_config(VectorParamsBuilder::new(VECTOR_DIMENSION, Distance::Cosine)),
+                    .vectors_config(VectorParamsBuilder::new(dimension, Distance::Cosine)),
             )
             .await
             .map_err(|e| format!("Failed to create collection '{}': {}", name, e))?;
@@ -126,10 +130,13 @@ impl QdrantClient {
             return Ok(());
         }
 
+        // Determine dimension from first vector
+        let dimension = vectors.first().map(|(_, v, _)| v.len() as u64).unwrap_or(DEFAULT_VECTOR_DIMENSION);
+
         let client = self.get_client().await?;
 
-        // Ensure collection exists
-        self.create_collection(collection).await?;
+        // Ensure collection exists with correct dimension
+        self.create_collection_with_dimension(collection, dimension).await?;
 
         // Convert to PointStruct
         let points: Vec<PointStruct> = vectors
@@ -302,6 +309,11 @@ pub fn get_collection_name(project_id: Option<&str>) -> String {
         Some(id) => format!("project_{}", id),
         None => "global".to_string(),
     }
+}
+
+pub fn get_collection_name_with_dimension(project_id: Option<&str>, dimension: usize) -> String {
+    let base = get_collection_name(project_id);
+    format!("{}_{}", base, dimension)
 }
 
 #[cfg(test)]

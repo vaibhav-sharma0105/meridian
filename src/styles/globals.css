@@ -82,12 +82,24 @@ body {
 
 /* ─── Focus rings ────────────────────────────────────────────────────────────── */
 :focus-visible {
-  outline: 2.5px solid #6366f1;
-  outline-offset: 2px;
-  border-radius: 6px;
+  outline: 1.5px solid #a1a1aa;
+  outline-offset: 1px;
+}
+
+.dark :focus-visible {
+  outline-color: #52525b;
 }
 
 :focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Remove focus ring from buttons and interactive elements that have their own focus states */
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[role="button"]:focus-visible {
   outline: none;
 }
 

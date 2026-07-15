@@ -9,11 +9,12 @@ import TaskEditModal from "@/components/tasks/TaskEditModal";
 import CommandPalette from "@/components/command-palette/CommandPalette";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import UpdateBanner from "@/components/shared/UpdateBanner";
+import IndexingBanner from "@/components/shared/IndexingBanner";
 import NotificationCenter from "@/components/notifications/NotificationCenter";
 import AISettings from "@/components/ai/AISettings";
 import ConnectionsSettings from "@/components/connections/ConnectionsSettings";
 import MigrationWizard from "@/components/settings/MigrationWizard";
-import { getNotifications, getMigrationStatus } from "@/lib/tauri";
+import { getNotifications, getMigrationStatus, queueEmbeddingMigration } from "@/lib/tauri";
 import { useNotificationStore } from "@/stores/notificationStore";
 import { useSync } from "@/hooks/useSync";
 
@@ -38,11 +39,15 @@ export default function AppShell() {
         setShowMigration(true);
       }
     }).catch(console.error);
+
+    // Queue embedding jobs for documents that need them (runs in background)
+    queueEmbeddingMigration().catch(console.error);
   }, []);
 
   return (
     <div className="flex flex-col h-full bg-[#f0f0f4] dark:bg-[#0a0a0d] overflow-hidden">
       <UpdateBanner />
+      <IndexingBanner />
       <div className="flex flex-1 overflow-hidden">
         {/* Left Sidebar */}
         {sidebarOpen && (

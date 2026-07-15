@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use tauri_plugin_shell::ShellExt;
 
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
@@ -120,37 +120,29 @@ pub async fn get_daemon_status() -> Result<DaemonStatus, String> {
 }
 
 #[tauri::command]
-pub async fn start_daemon() -> Result<DaemonStatus, String> {
-    // Check if already running
+pub async fn start_daemon(app_handle: tauri::AppHandle) -> Result<DaemonStatus, String> {
     if let Some(pid) = read_pid() {
         if is_process_running(pid) {
             return Err("Daemon is already running".to_string());
         }
     }
 
-    // Find the daemon binary
-    let daemon_path = std::env::current_exe()
-        .map_err(|e| format!("Failed to get current exe: {}", e))?
-        .parent()
-        .ok_or("Failed to get exe directory")?
-        .join("meridian-daemon");
+    let sidecar = app_handle
+        .shell()
+        .sidecar("meridian-daemon")
+        .map_err(|e| format!("Failed to create sidecar command: {}", e))?;
 
-    if !daemon_path.exists() {
-        return Err(format!("Daemon binary not found at {:?}", daemon_path));
-    }
-
-    // Start the daemon
-    let _child = Command::new(&daemon_path)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
+    let (mut rx, _child) = sidecar
         .spawn()
         .map_err(|e| format!("Failed to start daemon: {}", e))?;
 
-    // Wait a bit for it to start
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    // Drain the event receiver in background to prevent stdout pipe from blocking
+    tauri::async_runtime::spawn(async move {
+        while rx.recv().await.is_some() {}
+    });
 
-    // Return current status
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
     get_daemon_status().await
 }
 

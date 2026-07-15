@@ -8,6 +8,7 @@ fn row_to_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
         id: row.get(0)?,
         project_id: row.get(1)?,
         meeting_id: row.get(2)?,
+        parent_task_id: None, // Legacy queries don't select parent_task_id
         title: row.get(3)?,
         description: row.get(4)?,
         assignee: row.get(5)?,
@@ -29,43 +30,50 @@ fn row_to_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
         updated_at: row.get(22)?,
         completed_at: row.get(23)?,
         archived_at: None,
+        plan_complexity: None,
+        plan_data: None,
+        plan_generated_at: None,
     })
 }
 
 fn row_to_task_v2(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
-    let is_dup: i64 = row.get(18)?;
+    let is_dup: i64 = row.get(19)?;
     Ok(Task {
         id: row.get(0)?,
         project_id: row.get(1)?,
         meeting_id: row.get(2)?,
-        title: row.get(3)?,
-        description: row.get(4)?,
-        assignee: row.get(5)?,
-        assignee_confidence: row.get(6)?,
-        assignee_source_quote: row.get(7)?,
-        due_date: row.get(8)?,
-        due_confidence: row.get(9)?,
-        due_source_quote: row.get(10)?,
-        status: row.get(11)?,
-        priority: row.get::<_, Option<String>>(12)?.unwrap_or_else(|| "medium".to_string()),
-        confidence_score: row.get(13)?,
-        tags: row.get(14)?,
-        kanban_column: row.get(15)?,
-        kanban_order: row.get(16)?,
-        notes: row.get(17)?,
+        parent_task_id: row.get(3)?,
+        title: row.get(4)?,
+        description: row.get(5)?,
+        assignee: row.get(6)?,
+        assignee_confidence: row.get(7)?,
+        assignee_source_quote: row.get(8)?,
+        due_date: row.get(9)?,
+        due_confidence: row.get(10)?,
+        due_source_quote: row.get(11)?,
+        status: row.get(12)?,
+        priority: row.get::<_, Option<String>>(13)?.unwrap_or_else(|| "medium".to_string()),
+        confidence_score: row.get(14)?,
+        tags: row.get(15)?,
+        kanban_column: row.get(16)?,
+        kanban_order: row.get(17)?,
+        notes: row.get(18)?,
         is_duplicate: is_dup != 0,
-        duplicate_of_id: row.get(19)?,
-        created_at: row.get(20)?,
-        updated_at: row.get(21)?,
-        completed_at: row.get(22)?,
-        archived_at: row.get(23)?,
+        duplicate_of_id: row.get(20)?,
+        created_at: row.get(21)?,
+        updated_at: row.get(22)?,
+        completed_at: row.get(23)?,
+        archived_at: row.get(24)?,
+        plan_complexity: row.get(25)?,
+        plan_data: row.get(26)?,
+        plan_generated_at: row.get(27)?,
     })
 }
 
-const TASK_COLUMNS: &str = "id, project_id, meeting_id, title, description, assignee,
+const TASK_COLUMNS: &str = "id, project_id, meeting_id, parent_task_id, title, description, assignee,
     assignee_confidence, assignee_source_quote, due_date, due_confidence, due_source_quote,
     status, priority, confidence_score, tags, kanban_column, kanban_order, notes, is_duplicate,
-    duplicate_of_id, created_at, updated_at, completed_at, archived_at";
+    duplicate_of_id, created_at, updated_at, completed_at, archived_at, plan_complexity, plan_data, plan_generated_at";
 
 pub fn get_tasks_for_project(
     conn: &Connection,
@@ -192,15 +200,16 @@ pub fn create_task(conn: &Connection, input: &CreateTaskInput) -> Result<Task, S
     let kanban_col = input.kanban_column.as_deref().unwrap_or("open");
 
     conn.execute(
-        "INSERT INTO tasks (id, project_id, meeting_id, title, description, assignee,
+        "INSERT INTO tasks (id, project_id, meeting_id, parent_task_id, title, description, assignee,
             assignee_confidence, assignee_source_quote, due_date, due_confidence,
             due_source_quote, priority, confidence_score, tags, status, kanban_column, notes,
             is_duplicate, duplicate_of_id)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
         params![
             id,
             input.project_id,
             input.meeting_id,
+            input.parent_task_id,
             input.title,
             input.description,
             input.assignee,
@@ -513,4 +522,80 @@ pub fn move_tasks_for_meeting(
         )
         .map_err(|e| e.to_string())?;
     Ok(rows)
+}
+
+pub fn get_overdue_tasks(conn: &Connection, hours_overdue: i64) -> Result<Vec<Task>, String> {
+    let sql = format!(
+        "SELECT {} FROM tasks
+         WHERE status IN ('open', 'in_progress')
+           AND due_date IS NOT NULL
+           AND datetime(due_date) < datetime('now', '-{} hours')
+           AND is_archived = 0
+         ORDER BY due_date ASC
+         LIMIT 50",
+        TASK_COLUMNS, hours_overdue
+    );
+
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    let tasks = stmt
+        .query_map([], row_to_task_v2)
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(tasks)
+}
+
+pub fn get_stale_tasks(conn: &Connection, days_stale: i64) -> Result<Vec<Task>, String> {
+    let sql = format!(
+        "SELECT {} FROM tasks
+         WHERE status = 'in_progress'
+           AND datetime(updated_at) < datetime('now', '-{} days')
+           AND is_archived = 0
+         ORDER BY updated_at ASC
+         LIMIT 50",
+        TASK_COLUMNS, days_stale
+    );
+
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    let tasks = stmt
+        .query_map([], row_to_task_v2)
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(tasks)
+}
+
+pub fn get_recently_completed_tasks(conn: &Connection, within_hours: i64) -> Result<Vec<Task>, String> {
+    let sql = format!(
+        "SELECT {} FROM tasks
+         WHERE status = 'done'
+           AND datetime(updated_at) > datetime('now', '-{} hours')
+           AND is_archived = 0
+         ORDER BY updated_at DESC
+         LIMIT 50",
+        TASK_COLUMNS, within_hours
+    );
+
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    let tasks = stmt
+        .query_map([], row_to_task_v2)
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(tasks)
+}
+
+pub fn update_task_plan(
+    conn: &Connection,
+    task_id: &str,
+    complexity: &str,
+    plan_data: &str,
+) -> Result<(), String> {
+    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    conn.execute(
+        "UPDATE tasks SET plan_complexity = ?1, plan_data = ?2, plan_generated_at = ?3, updated_at = ?4 WHERE id = ?5",
+        params![complexity, plan_data, now, now, task_id],
+    )
+    .map_err(|e| format!("Failed to update task plan: {}", e))?;
+    Ok(())
 }

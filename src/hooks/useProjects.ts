@@ -24,7 +24,17 @@ export function useProjects() {
 
   const archiveMutation = useMutation({
     mutationFn: api.archiveProject,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["projects"] }),
+    onSuccess: async (_, projectId) => {
+      // Optimistically remove from active projects cache
+      qc.setQueryData<api.Project[]>(["projects"], (old) =>
+        old?.filter((p) => p.id !== projectId)
+      );
+      // Refetch both queries to ensure UI updates immediately
+      await Promise.all([
+        qc.refetchQueries({ queryKey: ["projects"] }),
+        qc.refetchQueries({ queryKey: ["archivedProjects"] }),
+      ]);
+    },
   });
 
   return {

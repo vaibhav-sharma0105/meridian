@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useQueryClient } from "@tanstack/react-query";
 import { X, Trash2 } from "lucide-react";
 import { updateProject, archiveProject } from "@/lib/tauri";
 import { useProjectStore } from "@/stores/projectStore";
@@ -15,6 +16,7 @@ interface Props {
 
 export default function ProjectSettings({ project, open, onClose }: Props) {
   const { t } = useTranslation();
+  const qc = useQueryClient();
   const { loadProjects, setActiveProject } = useProjectStore();
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description ?? "");
@@ -29,6 +31,7 @@ export default function ProjectSettings({ project, open, onClose }: Props) {
     try {
       await updateProject({ id: project.id, name, description, color });
       await loadProjects();
+      qc.invalidateQueries({ queryKey: ["projects"] });
       onClose();
     } finally {
       setSaving(false);
@@ -37,6 +40,11 @@ export default function ProjectSettings({ project, open, onClose }: Props) {
 
   const handleDelete = async () => {
     await archiveProject(project.id);
+    // Refetch both queries to ensure UI updates immediately
+    await Promise.all([
+      qc.refetchQueries({ queryKey: ["projects"] }),
+      qc.refetchQueries({ queryKey: ["archivedProjects"] }),
+    ]);
     await loadProjects();
     setActiveProject(null);
     onClose();
@@ -126,7 +134,7 @@ export default function ProjectSettings({ project, open, onClose }: Props) {
 
       <ConfirmDialog
         open={confirmDelete}
-        title={t("projects.archiveConfirmTitle")}
+        title={t("projects.archiveConfirmTitle", { name: project.name })}
         message={t("projects.archiveConfirmMessage")}
         confirmLabel={t("projects.archive")}
         onConfirm={handleDelete}

@@ -112,3 +112,31 @@ pub fn check_url_exists(conn: &Connection, project_id: &str, url: &str) -> Resul
         .map_err(|e| e.to_string())?;
     Ok(count > 0)
 }
+
+pub fn get_documents_needing_embedding(conn: &Connection) -> Result<Vec<Document>, String> {
+    let mut stmt = conn
+        .prepare(&format!(
+            "SELECT {} FROM documents WHERE embeddings_ready = 0 AND content_text IS NOT NULL ORDER BY uploaded_at DESC",
+            DOC_COLS
+        ))
+        .map_err(|e| e.to_string())?;
+
+    let docs = stmt
+        .query_map([], row_to_document)
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(docs)
+}
+
+pub fn count_documents_needing_embedding(conn: &Connection) -> Result<usize, String> {
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM documents WHERE embeddings_ready = 0 AND content_text IS NOT NULL",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(count as usize)
+}

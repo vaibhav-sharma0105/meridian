@@ -1,6 +1,9 @@
 use crate::audit::{log_user_action, ActionType, EntityType};
 use crate::db::repositories::tasks as repo;
 use crate::models::task::{CreateTaskInput, PartialTaskUpdate, Task, TaskFilters, UpdateTaskInput};
+use crate::patterns::models::CreateObservationInput;
+use crate::patterns::repository as patterns_repo;
+use crate::skills::EventDispatcher;
 use crate::AppState;
 use serde_json::json;
 use tauri::State;
@@ -45,6 +48,16 @@ pub async fn create_task(
         })),
     );
 
+    // Fire event for skill triggers
+    let _ = EventDispatcher::fire_task_created(
+        &conn,
+        &task.id,
+        &task.project_id,
+        &task.title,
+        &task.priority,
+        task.assignee.as_deref(),
+    );
+
     Ok(task)
 }
 
@@ -54,6 +67,9 @@ pub async fn update_task(
     state: State<'_, AppState>,
 ) -> Result<Task, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
+
+    let old_task = repo::get_task(&conn, &input.id).ok();
+
     let task = repo::update_task(&conn, &input)?;
 
     let _ = log_user_action(
@@ -67,7 +83,87 @@ pub async fn update_task(
         })),
     );
 
+    if let Some(old) = old_task {
+        if let Some(new_status) = &input.status {
+            if new_status == "done" && old.status != "done" {
+                let _ = patterns_repo::insert_observation(
+                    &conn,
+                    CreateObservationInput {
+                        observation_type: "task_completion".to_string(),
+                        entity_type: Some("task".to_string()),
+                        entity_id: Some(task.id.clone()),
+                        project_id: Some(task.project_id.clone()),
+                        context_data: json!({
+                            "task_title": task.title,
+                            "task_keywords": extract_keywords(&task.title),
+                            "completed_at": task.completed_at
+                        }),
+                    },
+                );
+
+                // Fire event for skill triggers
+                let _ = EventDispatcher::fire_task_completed(
+                    &conn,
+                    &task.id,
+                    &task.project_id,
+                    &task.title,
+                );
+            }
+        }
+
+        if let Some(new_priority) = &input.priority {
+            if new_priority != &old.priority {
+                let _ = patterns_repo::insert_observation(
+                    &conn,
+                    CreateObservationInput {
+                        observation_type: "priority_set".to_string(),
+                        entity_type: Some("task".to_string()),
+                        entity_id: Some(task.id.clone()),
+                        project_id: Some(task.project_id.clone()),
+                        context_data: json!({
+                            "old_priority": old.priority,
+                            "new_priority": new_priority,
+                            "task_title": task.title,
+                            "task_keywords": extract_keywords(&task.title)
+                        }),
+                    },
+                );
+            }
+        }
+
+        if let Some(new_assignee) = &input.assignee {
+            let old_assignee = old.assignee.as_deref().unwrap_or("");
+            if new_assignee != old_assignee {
+                let _ = patterns_repo::insert_observation(
+                    &conn,
+                    CreateObservationInput {
+                        observation_type: "assignee_set".to_string(),
+                        entity_type: Some("task".to_string()),
+                        entity_id: Some(task.id.clone()),
+                        project_id: Some(task.project_id.clone()),
+                        context_data: json!({
+                            "old_assignee": old_assignee,
+                            "new_assignee": new_assignee,
+                            "task_title": task.title,
+                            "task_keywords": extract_keywords(&task.title)
+                        }),
+                    },
+                );
+            }
+        }
+    }
+
     Ok(task)
+}
+
+fn extract_keywords(title: &str) -> Vec<String> {
+    let stopwords = ["the", "a", "an", "is", "are", "to", "for", "of", "and", "or", "in", "on", "at", "with"];
+    title
+        .to_lowercase()
+        .split_whitespace()
+        .filter(|w| w.len() > 2 && !stopwords.contains(w))
+        .map(|s| s.to_string())
+        .collect()
 }
 
 #[tauri::command]

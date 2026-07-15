@@ -14,10 +14,14 @@ The system SHALL provide create, read, update, and delete operations for tasks. 
 #### Scenario: Update task fields
 - **WHEN** user modifies task title, description, status, priority, assignee, or due_date
 - **THEN** system persists changes and updates updated_at timestamp
+- **AND** UI optimistically patches the task in cache immediately (no reload required)
+- **AND** on error, task reverts to previous state
 
 #### Scenario: Delete task
 - **WHEN** user deletes a task
 - **THEN** system removes task from database
+- **AND** UI optimistically removes task from list immediately (no reload required)
+- **AND** on error, task reappears in the list
 
 #### Scenario: Archive task
 - **WHEN** user archives a task

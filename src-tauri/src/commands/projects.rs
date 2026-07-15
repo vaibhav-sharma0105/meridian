@@ -64,3 +64,25 @@ pub async fn archive_project(id: String, state: State<'_, AppState>) -> Result<(
 
     Ok(())
 }
+
+#[tauri::command]
+pub async fn get_archived_projects(state: State<'_, AppState>) -> Result<Vec<Project>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    repo::get_archived_projects(&conn)
+}
+
+#[tauri::command]
+pub async fn unarchive_project(id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    repo::unarchive_project(&conn, &id)?;
+
+    let _ = log_user_action(
+        &conn,
+        ActionType::Update,
+        EntityType::Project,
+        Some(id),
+        Some(json!({"type": "unarchive"})),
+    );
+
+    Ok(())
+}

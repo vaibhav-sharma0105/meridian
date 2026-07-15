@@ -15,6 +15,7 @@ pub enum ActionType {
     Login,
     Export,
     Import,
+    SensitiveDetected,
 }
 
 impl ActionType {
@@ -30,6 +31,7 @@ impl ActionType {
             ActionType::Login => "login",
             ActionType::Export => "export",
             ActionType::Import => "import",
+            ActionType::SensitiveDetected => "sensitive_detected",
         }
     }
 }
@@ -42,10 +44,12 @@ pub enum EntityType {
     Project,
     Document,
     Skill,
+    SkillRun,
     Message,
     Integration,
     Settings,
     Notification,
+    Draft,
 }
 
 impl EntityType {
@@ -56,10 +60,12 @@ impl EntityType {
             EntityType::Project => "project",
             EntityType::Document => "document",
             EntityType::Skill => "skill",
+            EntityType::SkillRun => "skill_run",
             EntityType::Message => "message",
             EntityType::Integration => "integration",
             EntityType::Settings => "settings",
             EntityType::Notification => "notification",
+            EntityType::Draft => "draft",
         }
     }
 }
@@ -170,6 +176,7 @@ pub fn classify_risk(action: &ActionType, entity: &EntityType, is_external: bool
         ActionType::Sync | ActionType::Login | ActionType::Export | ActionType::Import => {
             RiskLevel::Low
         }
+        ActionType::SensitiveDetected => RiskLevel::High,
     }
 }
 

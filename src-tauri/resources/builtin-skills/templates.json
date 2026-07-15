@@ -1,0 +1,82 @@
+[
+  {
+    "name": "Weekly Progress Report",
+    "description": "Every Monday at 9am, produce a structured progress report from actual task and meeting data",
+    "trigger_type": "schedule",
+    "trigger_config": { "cron": "0 9 * * 1", "timezone": null },
+    "context_config": {
+      "scope": "project",
+      "max_tokens": 6000,
+      "system_prompt": "# Instructions\n\nGenerate a weekly progress report for {{project_name}} using the data below.\n\n1. Group completed tasks by assignee. Show task title and completion date.\n2. List in-progress tasks with days since creation.\n3. List overdue tasks ({{overdue_count}} total). For each, state how many days overdue and suggest whether to escalate, reschedule, or close.\n4. Pull key decisions from meeting summaries this week.\n5. Recommend top 3 priorities for next week based on due dates.\n\n# Context\n\nDate: {{date}}\nProject: {{project_name}}\nOverdue count: {{overdue_count}}\nCompleted today: {{completed_today}}\n\n{{tasks}}\n{{meetings}}\n\n# Output Format\n\n## Weekly Report — {{project_name}} ({{date}})\n\n### Completed This Week\n| Task | Assignee | Done |\n|------|----------|------|\n\n### In Progress\n| Task | Assignee | Days Open |\n|------|----------|-----------|\n\n### Overdue ({{overdue_count}})\n| Task | Days Late | Recommendation |\n|------|-----------|----------------|\n\n### Meeting Decisions\n- decision\n\n### Next Week Priorities\n1. \n2. \n3. "
+    },
+    "action_config": { "action_type": "summarize", "format": "markdown" },
+    "approval_mode": "notify",
+    "category": "reporting",
+    "icon": "clipboard-list",
+    "tags": ["reporting", "weekly", "status"]
+  },
+  {
+    "name": "Meeting Action Extractor",
+    "description": "After each meeting import, extract action items with owners and deadlines, then draft a follow-up message",
+    "trigger_type": "event",
+    "trigger_config": { "event_type": "meeting_imported" },
+    "context_config": {
+      "scope": "project",
+      "max_tokens": 4000,
+      "system_prompt": "# Instructions\n\nExtract action items from the most recently imported meeting and draft a follow-up.\n\n1. Parse the meeting transcript for every commitment, request, or next-step mentioned.\n2. For each action item identify: owner (from attendees), deadline (stated or infer from context), priority (high/medium/low).\n3. Cross-reference with {{tasks}} — if an action item already exists as a task, note it as \"already tracked\".\n4. Draft a follow-up message (suitable for email or Slack) that lists all action items in a table and flags anything needing clarification.\n\n# Context\n\nProject: {{project_name}}\nDate: {{date}}\n\n{{meetings}}\n{{tasks}}\n\n# Output Format\n\n## Action Items from [Meeting Title]\n\n| # | Action | Owner | Deadline | Priority | Status |\n|---|--------|-------|----------|----------|--------|\n| 1 | ... | ... | ... | ... | new/already tracked |\n\n## Follow-up Draft\n\nHi team,\n\nFollowing up on [meeting title]. Here are the action items:\n\n[table]\n\nPlease flag anything that needs clarification by [date].\n\n## Needs Clarification\n- [item] — what's unclear"
+    },
+    "action_config": { "action_type": "draft_message", "channel": "email" },
+    "approval_mode": "approve_first",
+    "category": "communication",
+    "icon": "mail",
+    "tags": ["meetings", "follow-up", "action-items"]
+  },
+  {
+    "name": "Overdue Task Triage",
+    "description": "Every weekday at 10am, identify overdue tasks and categorize them for escalation, rescheduling, or closure",
+    "trigger_type": "schedule",
+    "trigger_config": { "cron": "0 10 * * 1-5", "timezone": null },
+    "context_config": {
+      "scope": "project",
+      "max_tokens": 4000,
+      "system_prompt": "# Instructions\n\nTriage overdue tasks in {{project_name}}.\n\nIf {{overdue_count}} is 0, output: \"All clear — no overdue tasks in {{project_name}}.\" and stop.\n\nOtherwise:\n\n1. List every task past its due date. Calculate days overdue.\n2. Categorize each:\n   - ESCALATE: critical or high priority, overdue 3+ days\n   - RESCHEDULE: medium/low priority, can be pushed back. Suggest a new date (current date + reasonable buffer).\n   - CLOSE: overdue 30+ days with no recent activity — likely abandoned.\n3. For ESCALATE items, suggest a concrete next action (reassign, break into subtasks, remove blocker).\n\n# Context\n\nProject: {{project_name}}\nDate: {{date}}\nOverdue count: {{overdue_count}}\n\n{{tasks}}\n\n# Output Format\n\n## Overdue Triage — {{project_name}} ({{date}})\n\n**{{overdue_count}} tasks overdue**\n\n### Escalate\n| Task | Priority | Days Overdue | Action |\n|------|----------|--------------|--------|\n\n### Reschedule\n| Task | Suggested New Date | Reason |\n|------|-------------------|--------|\n\n### Consider Closing\n| Task | Days Overdue | Last Activity |\n|------|--------------|---------------|"
+    },
+    "action_config": { "action_type": "analyze", "format": "markdown" },
+    "approval_mode": "notify",
+    "category": "productivity",
+    "icon": "alert-triangle",
+    "tags": ["overdue", "triage", "priorities"]
+  },
+  {
+    "name": "Standup Prep",
+    "description": "Every weekday at 8:45am, generate a ready-to-read standup update from yesterday's completions and today's plan",
+    "trigger_type": "schedule",
+    "trigger_config": { "cron": "45 8 * * 1-5", "timezone": null },
+    "context_config": {
+      "scope": "project",
+      "max_tokens": 3000,
+      "system_prompt": "# Instructions\n\nGenerate a standup update for {{project_name}} that can be read in under 60 seconds.\n\n1. Yesterday: List tasks completed since yesterday. If none, say \"No tasks completed yesterday.\"\n2. Today: List tasks currently in_progress — these are today's plan. Limit to top 3 by priority.\n3. Blockers: Identify tasks in_progress for 3+ days without status change, or tasks with no assignee. These are potential blockers.\n\nKeep each section to 2-3 bullets max.\n\n# Context\n\nProject: {{project_name}}\nDate: {{date}}\nCompleted today: {{completed_today}}\n\n{{tasks}}\n\n# Output Format\n\n**Yesterday:**\n- Completed: [task title]\n\n**Today:**\n- [task title] (priority)\n\n**Blockers:**\n- [task] — stuck X days, needs [action]"
+    },
+    "action_config": { "action_type": "summarize", "format": "markdown" },
+    "approval_mode": "auto",
+    "category": "productivity",
+    "icon": "coffee",
+    "tags": ["standup", "daily", "planning"]
+  },
+  {
+    "name": "End of Day Wrap-up",
+    "description": "Every weekday at 5pm, summarize today's progress and set tomorrow's priority",
+    "trigger_type": "schedule",
+    "trigger_config": { "cron": "0 17 * * 1-5", "timezone": null },
+    "context_config": {
+      "scope": "project",
+      "max_tokens": 4000,
+      "system_prompt": "# Instructions\n\nGenerate an end-of-day summary for {{project_name}}.\n\n1. List tasks completed today ({{completed_today}} total). One line each.\n2. List tasks worked on but not finished. Note what remains for each.\n3. If meetings occurred today, extract one key takeaway per meeting.\n4. Identify the single most important task to start with tomorrow morning. Explain why (due date, priority, unblocks others).\n\n# Context\n\nProject: {{project_name}}\nDate: {{date}}\nCompleted today: {{completed_today}}\nOverdue: {{overdue_count}}\n\n{{tasks}}\n{{meetings}}\n\n# Output Format\n\n## End of Day — {{project_name}} ({{date}})\n\n### Done Today ({{completed_today}})\n- [task]\n\n### In Progress (carries over)\n- [task] — remaining: [what's left]\n\n### Meeting Takeaways\n- [meeting title]: [one-line takeaway]\n\n### Tomorrow Morning\n→ Start with: [task] — because [reason]"
+    },
+    "action_config": { "action_type": "summarize", "format": "markdown" },
+    "approval_mode": "auto",
+    "category": "productivity",
+    "icon": "sunset",
+    "tags": ["daily", "wrap-up", "digest"]
+  }
+]

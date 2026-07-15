@@ -13,6 +13,7 @@ import { format } from "date-fns";
 interface Props {
   task: Task;
   compact?: boolean;
+  isSubtask?: boolean;
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -22,7 +23,7 @@ const PRIORITY_COLORS: Record<string, string> = {
   low: "border-l-zinc-300 dark:border-l-zinc-600",
 };
 
-export default function TaskCard({ task, compact = false }: Props) {
+export default function TaskCard({ task, compact = false, isSubtask = false }: Props) {
   const { setSelectedTask } = useUIStore();
   const { selectedTaskIds, toggleTaskSelection } = useTaskStore();
   const { meetings } = useMeetings(task.project_id);
@@ -76,7 +77,11 @@ export default function TaskCard({ task, compact = false }: Props) {
 
   return (
     <div
-      className={`group bg-white dark:bg-[#18181b] border border-[#ebebf0] dark:border-zinc-800/60 rounded-xl cursor-pointer transition-all duration-150 border-l-[3px] ${priorityBorder} ${
+      className={`group bg-white dark:bg-[#18181b] border border-[#ebebf0] dark:border-zinc-800/60 cursor-pointer transition-all duration-150 ${
+        isSubtask
+          ? "rounded-lg border-l-2"
+          : "rounded-xl border-l-[3px]"
+      } ${priorityBorder} ${
         isArchived
           ? "opacity-55"
           : isSelected
@@ -85,7 +90,7 @@ export default function TaskCard({ task, compact = false }: Props) {
       }`}
       onClick={() => setSelectedTask(task.id)}
     >
-      <div className="flex items-start gap-3 px-4 py-3">
+      <div className={`flex items-start gap-3 ${isSubtask ? "px-3 py-2" : "px-4 py-3"}`}>
         {/* Custom checkbox */}
         <label
           className="flex-shrink-0 pt-[3px] cursor-pointer"
@@ -110,7 +115,9 @@ export default function TaskCard({ task, compact = false }: Props) {
         <div className="flex-1 min-w-0">
           {/* Title row */}
           <div className="flex items-start justify-between gap-2 min-w-0">
-            <p className={`text-zinc-900 dark:text-zinc-100 font-semibold leading-snug min-w-0 break-words tracking-[-0.012em] ${compact ? "text-[13px] line-clamp-2" : "text-[14.5px]"}`}>
+            <p className={`text-zinc-900 dark:text-zinc-100 leading-snug min-w-0 break-words tracking-[-0.012em] ${
+              isSubtask ? "text-[13px] font-medium" : compact ? "text-[13px] font-semibold line-clamp-2" : "text-[14.5px] font-semibold"
+            }`}>
               {task.title}
             </p>
             {isArchived && (

@@ -1,10 +1,15 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { X, Bell, CheckCheck } from "lucide-react";
+import { X, Bell, CheckCheck, AlertTriangle } from "lucide-react";
 import { useNotificationStore } from "@/stores/notificationStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { usePendingImports } from "@/hooks/usePendingImports";
 import PendingImportCard from "./PendingImportCard";
+import { SuggestionsList } from "@/components/suggestions/SuggestionsList";
+import { SkillApprovalModal } from "@/components/skills/SkillApprovalModal";
 import { format } from "date-fns";
+import { getSkillRun } from "@/lib/tauri";
+import type { SkillRun } from "@/lib/tauri";
 
 interface Props {
   open: boolean;
@@ -13,9 +18,24 @@ interface Props {
 
 export default function NotificationCenter({ open, onClose }: Props) {
   const { t } = useTranslation();
-  const { notifications, markAllRead, dismiss } = useNotificationStore();
+  const { notifications, markAllRead, dismiss, markRead } = useNotificationStore();
   const { pendingImports, approveImport, dismissImport } = usePendingImports();
   const { projects } = useProjectStore();
+  const [approvalRun, setApprovalRun] = useState<SkillRun | null>(null);
+
+  const handleNotificationClick = async (notif: typeof notifications[0]) => {
+    if (notif.type === "skill_approval_needed" && notif.task_id) {
+      try {
+        const run = await getSkillRun(notif.task_id);
+        if (run.status === "approval_pending") {
+          setApprovalRun(run);
+          markRead(notif.id);
+        }
+      } catch (err) {
+        console.error("Failed to load skill run:", err);
+      }
+    }
+  };
 
   if (!open) return null;
 
@@ -75,31 +95,52 @@ export default function NotificationCenter({ open, onClose }: Props) {
           </div>
         )}
 
+        {/* ── Suggestions section ── */}
+        <div className="border-b border-zinc-200 dark:border-zinc-800">
+          <SuggestionsList />
+        </div>
+
         {notifications.length > 0 && (
           <div className="flex-1 overflow-y-auto">
             <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-              {notifications.map((notif) => (
-                <div
-                  key={notif.id}
-                  className={`flex gap-3 px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors ${!notif.is_read ? "bg-indigo-50/50 dark:bg-indigo-900/10" : ""}`}
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">{notif.title}</p>
-                    {notif.body && (
-                      <p className="text-xs text-zinc-500 mt-0.5 line-clamp-2">{notif.body}</p>
-                    )}
-                    <p className="text-xs text-zinc-400 mt-1">
-                      {format(new Date(notif.created_at), "MMM d, h:mm a")}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => dismiss(notif.id)}
-                    className="flex-shrink-0 p-1 text-zinc-300 hover:text-zinc-500 dark:hover:text-zinc-400 mt-0.5"
+              {notifications.map((notif) => {
+                const isApproval = notif.type === "skill_approval_needed";
+                return (
+                  <div
+                    key={notif.id}
+                    onClick={() => handleNotificationClick(notif)}
+                    className={`flex gap-3 px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors ${
+                      !notif.is_read ? "bg-indigo-50/50 dark:bg-indigo-900/10" : ""
+                    } ${isApproval ? "cursor-pointer" : ""}`}
                   >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
+                    {isApproval && (
+                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mt-0.5">
+                        <AlertTriangle className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">{notif.title}</p>
+                      {notif.body && (
+                        <p className="text-xs text-zinc-500 mt-0.5 line-clamp-2">{notif.body}</p>
+                      )}
+                      <p className="text-xs text-zinc-400 mt-1">
+                        {format(new Date(notif.created_at), "MMM d, h:mm a")}
+                      </p>
+                      {isApproval && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                          Click to review
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); dismiss(notif.id); }}
+                      className="flex-shrink-0 p-1 text-zinc-300 hover:text-zinc-500 dark:hover:text-zinc-400 mt-0.5"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -111,6 +152,13 @@ export default function NotificationCenter({ open, onClose }: Props) {
           </div>
         )}
       </div>
+
+      {approvalRun && (
+        <SkillApprovalModal
+          run={approvalRun}
+          onClose={() => setApprovalRun(null)}
+        />
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 use crate::audit::{log_user_action, ActionType, EntityType};
 use crate::db::repositories::{meetings as repo, projects as proj_repo, tasks as task_repo};
 use crate::models::meeting::{CreateMeetingInput, Meeting};
+use crate::skills::EventDispatcher;
 use crate::AppState;
 use serde_json::{json, Value};
 use tauri::State;
@@ -160,6 +161,16 @@ async fn ingest_meeting_core_inner(
             &health_json,
             &attendees_str,
         )?;
+
+        // Fire event for skill triggers
+        let _ = EventDispatcher::fire_meeting_imported(
+            &conn,
+            &meeting.id,
+            &meeting.project_id,
+            &meeting.title,
+            &meeting.platform,
+            Some(&attendees_str),
+        );
     }
 
     // Insert extracted tasks
@@ -181,6 +192,7 @@ async fn ingest_meeting_core_inner(
             let input = crate::models::task::CreateTaskInput {
                 project_id: target_project_id,
                 meeting_id: Some(meeting.id.clone()),
+                parent_task_id: None,
                 title: extracted.title.clone(),
                 description: extracted.description.clone(),
                 assignee: extracted.assignee.clone(),

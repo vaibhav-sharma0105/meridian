@@ -1,4 +1,5 @@
 use crate::db::repositories::documents as repo;
+use crate::db::repositories::jobs as jobs_repo;
 use crate::models::document::Document;
 use crate::AppState;
 use serde_json::Value;
@@ -57,6 +58,9 @@ async fn upload_file(
         Some(parsed.file_size_bytes as i64),
     )?;
 
+    // Queue embedding job with normal priority
+    let _ = jobs_repo::queue_embed_document_job(&conn, &doc.id, &project_id, 5);
+
     Ok(doc)
 }
 
@@ -105,6 +109,9 @@ async fn upload_url(
         Some(parsed.file_size_bytes as i64),
     )?;
 
+    // Queue embedding job with normal priority
+    let _ = jobs_repo::queue_embed_document_job(&conn, &doc.id, &project_id, 5);
+
     Ok(doc)
 }
 
@@ -132,7 +139,7 @@ pub async fn upload_text(
         .map_err(|e| format!("Failed to write text file: {}", e))?;
 
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    repo::create_document(
+    let doc = repo::create_document(
         &conn,
         &project_id,
         title.as_deref(),
@@ -143,7 +150,12 @@ pub async fn upload_text(
         Some(&content),
         Some(&chunks_json),
         Some(file_size),
-    )
+    )?;
+
+    // Queue embedding job with normal priority
+    let _ = jobs_repo::queue_embed_document_job(&conn, &doc.id, &project_id, 5);
+
+    Ok(doc)
 }
 
 #[tauri::command]
@@ -300,6 +312,9 @@ pub async fn recover_orphaned_document(
         Some(parsed.file_size_bytes as i64),
     )?;
 
+    // Queue embedding job with normal priority
+    let _ = jobs_repo::queue_embed_document_job(&conn, &doc.id, &project_id, 5);
+
     // Clean up old orphan folder if empty
     if let Some(parent) = path.parent() {
         let _ = std::fs::remove_file(path);
@@ -307,4 +322,93 @@ pub async fn recover_orphaned_document(
     }
 
     Ok(doc)
+}
+
+#[derive(serde::Serialize)]
+pub struct DocumentEmbeddingStatus {
+    pub document_id: String,
+    pub embeddings_ready: bool,
+    pub embedding_model: Option<String>,
+    pub job_status: Option<String>,
+    pub job_error: Option<String>,
+}
+
+#[tauri::command]
+pub async fn get_document_embedding_status(
+    document_id: String,
+    state: State<'_, AppState>,
+) -> Result<DocumentEmbeddingStatus, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+
+    let doc = repo::get_document(&conn, &document_id)?
+        .ok_or_else(|| "Document not found".to_string())?;
+
+    let job = jobs_repo::get_embedding_job_for_document(&conn, &document_id)?;
+
+    Ok(DocumentEmbeddingStatus {
+        document_id: doc.id,
+        embeddings_ready: doc.embeddings_ready,
+        embedding_model: doc.embedding_model,
+        job_status: job.as_ref().map(|j| j.status.clone()),
+        job_error: job.and_then(|j| j.error),
+    })
+}
+
+#[tauri::command]
+pub async fn retry_document_embedding(
+    document_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+
+    let doc = repo::get_document(&conn, &document_id)?
+        .ok_or_else(|| "Document not found".to_string())?;
+
+    // Queue a new embedding job with high priority
+    jobs_repo::queue_embed_document_job(&conn, &document_id, &doc.project_id, 10)?;
+
+    Ok(())
+}
+
+#[derive(serde::Serialize)]
+pub struct EmbeddingMigrationStatus {
+    pub documents_needing_embedding: usize,
+    pub jobs_queued: usize,
+}
+
+#[tauri::command]
+pub async fn get_embedding_migration_status(
+    state: State<'_, AppState>,
+) -> Result<EmbeddingMigrationStatus, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let count = repo::count_documents_needing_embedding(&conn)?;
+
+    Ok(EmbeddingMigrationStatus {
+        documents_needing_embedding: count,
+        jobs_queued: 0,
+    })
+}
+
+#[tauri::command]
+pub async fn queue_embedding_migration(
+    state: State<'_, AppState>,
+) -> Result<EmbeddingMigrationStatus, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let docs = repo::get_documents_needing_embedding(&conn)?;
+
+    let mut jobs_queued = 0;
+    for doc in &docs {
+        // Check if there's already a pending job for this document
+        if let Ok(Some(_)) = jobs_repo::get_embedding_job_for_document(&conn, &doc.id) {
+            continue;
+        }
+        // Queue with low priority (migration jobs run after user-initiated ones)
+        let _ = jobs_repo::queue_embed_document_job(&conn, &doc.id, &doc.project_id, 1);
+        jobs_queued += 1;
+    }
+
+    Ok(EmbeddingMigrationStatus {
+        documents_needing_embedding: docs.len(),
+        jobs_queued,
+    })
 }

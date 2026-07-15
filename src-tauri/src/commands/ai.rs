@@ -1,7 +1,8 @@
-use crate::ai::{embeddings, extractor, litellm::LiteLLMClient, ollama::OllamaClient};
+use crate::ai::{embeddings, extractor, litellm::LiteLLMClient, ollama::OllamaClient, search as hybrid_search};
 use crate::db::repositories::{ai_settings as ai_repo, meetings as mtg_repo, projects as proj_repo, tasks as task_repo};
 use crate::models::ai_settings::{AiSettings, AiSettingsInput, ModelInfo};
 use crate::models::document::SearchResult;
+use crate::vectors::qdrant::QdrantClient;
 use crate::AppState;
 use serde_json::{json, Value};
 use tauri::{Emitter, State};
@@ -270,6 +271,7 @@ pub async fn extract_tasks_from_transcript(
         let input = crate::models::task::CreateTaskInput {
             project_id: target_project_id,
             meeting_id: Some(meeting_id.clone()),
+            parent_task_id: None,
             title: task.title.clone(),
             description: task.description.clone(),
             assignee: task.assignee.clone(),
@@ -301,6 +303,7 @@ pub async fn chat_with_project(
     message: String,
     template_id: Option<String>,
     conversation_history: Option<Vec<Value>>,
+    skill_context: Option<String>,
     app_handle: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
@@ -358,7 +361,7 @@ pub async fn chat_with_project(
     );
 
     // Build system prompt
-    let system_prompt = if let Some(tid) = &template_id {
+    let base_system_prompt = if let Some(tid) = &template_id {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         if let Some(template) = crate::db::repositories::prompt_templates::get_template(&conn, tid)? {
             let user_content = template.user_prompt_template
@@ -376,6 +379,33 @@ pub async fn chat_with_project(
         }
     } else {
         crate::ai::prompts::CONTEXT_CHAT_SYSTEM.to_string() + "\n\nContext:\n" + &context
+    };
+
+    // Add skill context if provided
+    let system_prompt = if let Some(ref skills) = skill_context {
+        format!(r#"{}
+
+## Available Skills
+
+You have specialized skills available. Use them when they genuinely help accomplish the user's goal.
+
+**Invoke a skill when:**
+- The user explicitly asks to use a skill or its functionality
+- The task directly matches what a skill does (e.g., "summarize tasks" → a summarize skill)
+- A skill would produce better results than a general response
+
+**Do NOT invoke a skill when:**
+- The user asks a simple question you can answer directly
+- Having a normal conversation
+- The user is asking about skills rather than using them
+- No skill clearly matches the request
+
+**To invoke:** Include `**[SKILL_INVOKE: skill_name]**` at the start of your response (exact skill name from list below), then provide your response. Only invoke ONE skill per response. The system executes it automatically.
+
+**Skills:**
+{}"#, base_system_prompt, skills)
+    } else {
+        base_system_prompt
     };
 
     // Build messages
@@ -665,4 +695,69 @@ pub async fn generate_output(
     ];
 
     litellm.chat_completion(messages, None).await
+}
+
+#[tauri::command]
+pub async fn hybrid_search_documents(
+    project_id: String,
+    query: String,
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<Vec<SearchResult>, String> {
+    let limit = limit.unwrap_or(10);
+
+    let (settings, embedding_provider, fts_results) = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        let settings = ai_repo::get_active_settings(&conn)?;
+        let embedding_provider = settings
+            .as_ref()
+            .map(|s| s.embedding_provider.clone())
+            .unwrap_or_else(|| "bundled".to_string());
+        let fts = search_documents_fts(&conn, &project_id, &query).unwrap_or_default();
+        (settings, embedding_provider, fts)
+    };
+
+    let query_embedding: Option<Vec<f32>> = match embedding_provider.as_str() {
+        "bundled" => None,
+        "ollama" => {
+            if let Some(ref s) = settings {
+                let ollama = OllamaClient::new(s.ollama_base_url.clone(), s.ollama_model.clone());
+                ollama.embed(&query).await.ok()
+            } else {
+                None
+            }
+        }
+        _ => None,
+    };
+
+    let qdrant = QdrantClient::new(None);
+
+    let mut results = fts_results;
+
+    if let Some(emb) = query_embedding {
+        if qdrant.is_available().await {
+            let collection = crate::vectors::qdrant::get_collection_name(Some(&project_id));
+            if let Ok(semantic_results) = qdrant.search(&collection, emb, (limit * 2) as u64, Some(&project_id)).await {
+                for (rank, sr) in semantic_results.iter().enumerate() {
+                    if sr.score >= 0.3 {
+                        results.push(SearchResult {
+                            document_id: sr.payload.document_id.clone(),
+                            document_title: sr.payload.document_id.clone(),
+                            filename: sr.payload.chunk_text.chars().take(50).collect(),
+                            content: sr.payload.chunk_text.clone(),
+                            chunk_text: sr.payload.chunk_text.clone(),
+                            score: sr.score as f64,
+                            search_type: "semantic".to_string(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    results.dedup_by(|a, b| a.document_id == b.document_id && a.chunk_text == b.chunk_text);
+    results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    results.truncate(limit);
+
+    Ok(results)
 }

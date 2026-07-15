@@ -51,6 +51,7 @@ export interface Task {
   id: string;
   project_id: string;
   meeting_id: string | null;
+  parent_task_id: string | null;
   title: string;
   description: string | null;
   assignee: string | null;
@@ -77,6 +78,7 @@ export interface Task {
 export interface CreateTaskInput {
   project_id: string;
   meeting_id?: string;
+  parent_task_id?: string;
   title: string;
   description?: string;
   assignee?: string;
@@ -253,6 +255,10 @@ export const updateProject = (input: UpdateProjectInput) =>
   invoke<Project>("update_project", { input });
 export const archiveProject = (id: string) =>
   invoke<void>("archive_project", { id });
+export const getArchivedProjects = () =>
+  invoke<Project[]>("get_archived_projects");
+export const unarchiveProject = (id: string) =>
+  invoke<void>("unarchive_project", { id });
 
 // ─── Meetings ────────────────────────────────────────────────────────────────
 
@@ -370,6 +376,61 @@ export const searchDocuments = (args: {
     useSemantic: args.useSemantic ?? true,
   });
 
+export const hybridSearchDocuments = (args: {
+  projectId: string;
+  query: string;
+  limit?: number;
+}) =>
+  invoke<SearchResult[]>("hybrid_search_documents", {
+    projectId: args.projectId,
+    query: args.query,
+    limit: args.limit ?? 10,
+  });
+
+export interface DocumentEmbeddingStatus {
+  document_id: string;
+  embeddings_ready: boolean;
+  embedding_model: string | null;
+  job_status: string | null;
+  job_error: string | null;
+}
+
+export const getDocumentEmbeddingStatus = (documentId: string) =>
+  invoke<DocumentEmbeddingStatus>("get_document_embedding_status", { documentId });
+
+export const retryDocumentEmbedding = (documentId: string) =>
+  invoke<void>("retry_document_embedding", { documentId });
+
+export interface EmbeddingMigrationStatus {
+  documents_needing_embedding: number;
+  jobs_queued: number;
+}
+
+export const getEmbeddingMigrationStatus = () =>
+  invoke<EmbeddingMigrationStatus>("get_embedding_migration_status");
+
+export const queueEmbeddingMigration = () =>
+  invoke<EmbeddingMigrationStatus>("queue_embedding_migration");
+
+export interface IndexingStatus {
+  worker_running: boolean;
+  jobs_processed: number;
+  pending_jobs: number;
+  running_jobs: number;
+}
+
+export const startEmbeddingWorker = () =>
+  invoke<void>("start_embedding_worker");
+
+export const stopEmbeddingWorker = () =>
+  invoke<void>("stop_embedding_worker");
+
+export const getIndexingStatus = () =>
+  invoke<IndexingStatus>("get_indexing_status");
+
+export const processPendingEmbeddings = () =>
+  invoke<IndexingStatus>("process_pending_embeddings");
+
 // Convenience wrapper for uploading documents by various methods
 export const ingestDocument = (args: {
   projectId: string;
@@ -430,6 +491,7 @@ export const chatWithProject = (args: {
   message: string;
   templateId?: string;
   conversationHistory?: Array<{ role: string; content: string }>;
+  skillContext?: string;
 }) => invoke<ChatMessage>("chat_with_project", args);
 
 export const checkOllamaStatus = () =>
@@ -702,3 +764,529 @@ export const enableSystemScheduler = () =>
 
 export const disableSystemScheduler = () =>
   invoke<void>("disable_system_scheduler");
+
+// ─── Pattern Learning ─────────────────────────────────────────────────────────
+
+export interface PatternObservation {
+  id: string;
+  observation_type: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  project_id: string | null;
+  context_data: string;
+  created_at: string;
+  processed_at: string | null;
+}
+
+export interface PatternModel {
+  id: string;
+  pattern_type: string;
+  project_id: string | null;
+  model_data: string;
+  confidence: number;
+  observation_count: number;
+  last_updated: string;
+}
+
+export interface PatternSummary {
+  pattern_type: string;
+  confidence: number;
+  observation_count: number;
+  last_updated: string;
+}
+
+export interface WorkflowSequence {
+  trigger_action: string;
+  follow_action: string;
+  occurrence_count: number;
+  avg_delay_minutes: number;
+}
+
+export interface WorkflowSequenceModelData {
+  sequences: WorkflowSequence[];
+  negative_sequences: string[];
+}
+
+export interface PriorityPattern {
+  keyword: string;
+  priority: string;
+  occurrence_count: number;
+}
+
+export interface AssigneePattern {
+  keyword: string;
+  assignee: string;
+  occurrence_count: number;
+}
+
+export interface ProjectDefault {
+  default_priority: string | null;
+  default_assignee: string | null;
+}
+
+export interface SmartDefaultsModelData {
+  priority_patterns: PriorityPattern[];
+  assignee_patterns: AssigneePattern[];
+  project_defaults: Record<string, ProjectDefault>;
+}
+
+export interface CommunicationStyleModelData {
+  length_preference: "concise" | "verbose" | "neutral";
+  formality_level: "formal" | "casual" | "neutral";
+  common_additions: [string, number][];
+  common_removals: [string, number][];
+  signature_patterns: string[];
+}
+
+export interface WorkflowSuggestion {
+  trigger_task_id: string;
+  suggested_action: string;
+  confidence: number;
+  sequence_id: string;
+}
+
+export interface SmartDefaults {
+  suggested_priority: string | null;
+  priority_confidence: number;
+  suggested_assignee: string | null;
+  assignee_confidence: number;
+  source: string;
+}
+
+export interface LearningExport {
+  version: string;
+  exported_at: string;
+  pattern_models: PatternModel[];
+}
+
+export interface LearningImport {
+  version: string;
+  pattern_models: PatternModel[];
+}
+
+export const getPatternSummaries = (projectId?: string) =>
+  invoke<PatternSummary[]>("get_pattern_summaries", { projectId });
+
+export const getPatternModel = (patternType: string, projectId?: string) =>
+  invoke<PatternModel>("get_pattern_model", { patternType, projectId });
+
+export const getWorkflowSuggestions = (completedTaskId: string, projectId: string) =>
+  invoke<WorkflowSuggestion[]>("get_workflow_suggestions", { completedTaskId, projectId });
+
+export const dismissWorkflowSuggestion = (sequenceId: string, projectId: string) =>
+  invoke<void>("dismiss_workflow_suggestion", { sequenceId, projectId });
+
+export const getSmartDefaults = (taskTitle: string, projectId: string) =>
+  invoke<SmartDefaults>("get_smart_defaults", { taskTitle, projectId });
+
+export const getCommunicationStyle = (context?: string, projectId?: string) =>
+  invoke<CommunicationStyleModelData | null>("get_communication_style", { context, projectId });
+
+export const recordDraftEdit = (
+  originalText: string,
+  editedText: string,
+  contextType?: string,
+  projectId?: string
+) =>
+  invoke<void>("record_draft_edit", { originalText, editedText, contextType, projectId });
+
+export const exportLearningData = () =>
+  invoke<LearningExport>("export_learning_data");
+
+export const importLearningData = (data: LearningImport) =>
+  invoke<number>("import_learning_data", { data });
+
+export const resetPatternCategory = (patternType: string, projectId?: string) =>
+  invoke<boolean>("reset_pattern_category", { patternType, projectId });
+
+export const resetAllLearning = () =>
+  invoke<number>("reset_all_learning");
+
+// ─── Suggestions ──────────────────────────────────────────────────────────────
+
+export interface Suggestion {
+  id: string;
+  type: string;
+  title: string;
+  description: string | null;
+  reasoning: string | null;
+  action_config: string | null;
+  severity: "info" | "warning" | "critical";
+  status: "pending" | "accepted" | "dismissed" | "expired";
+  project_id: string | null;
+  created_at: string;
+  acted_at: string | null;
+}
+
+export interface CreateSuggestionInput {
+  suggestion_type: string;
+  title: string;
+  description?: string;
+  reasoning?: string;
+  action_config?: string;
+  severity?: string;
+  project_id?: string;
+}
+
+export const getPendingSuggestions = (projectId?: string) =>
+  invoke<Suggestion[]>("get_pending_suggestions", { projectId });
+
+export const acceptSuggestion = (id: string) =>
+  invoke<void>("accept_suggestion", { id });
+
+export const dismissSuggestion = (id: string) =>
+  invoke<void>("dismiss_suggestion", { id });
+
+export const stopSuggesting = (id: string, suggestionType: string) =>
+  invoke<void>("stop_suggesting", { id, suggestionType });
+
+export const createSuggestion = (input: CreateSuggestionInput) =>
+  invoke<Suggestion>("create_suggestion", { input });
+
+export const getSuggestionCountToday = () =>
+  invoke<number>("get_suggestion_count_today");
+
+// ─── Drafts ───────────────────────────────────────────────────────────────────
+
+export interface DraftMessage {
+  id: string;
+  task_id: string | null;
+  channel: string;
+  recipient: string | null;
+  subject: string | null;
+  body: string;
+  ai_signature: boolean;
+  status: "draft" | "sent" | "archived";
+  sensitive_warnings: string | null;
+  created_at: string;
+  updated_at: string;
+  sent_at: string | null;
+}
+
+export interface CreateDraftInput {
+  task_id?: string;
+  channel: string;
+  recipient?: string;
+  subject?: string;
+  body: string;
+  ai_signature?: boolean;
+}
+
+export interface UpdateDraftInput {
+  recipient?: string;
+  subject?: string;
+  body?: string;
+  ai_signature?: boolean;
+  sensitive_warnings?: string;
+  status?: string;
+}
+
+export interface SensitiveWarning {
+  warning_type: "pii" | "credentials" | "financial";
+  severity: "info" | "warning" | "critical";
+  message: string;
+  pattern_name: string;
+  start_pos: number;
+  end_pos: number;
+}
+
+export const getDraftsForTask = (taskId: string) =>
+  invoke<DraftMessage[]>("get_drafts_for_task", { taskId });
+
+export const generateDraft = (taskId: string, channel: string) =>
+  invoke<DraftMessage>("generate_draft", { taskId, channel });
+
+export const updateDraft = (id: string, input: UpdateDraftInput) =>
+  invoke<DraftMessage>("update_draft", { id, input });
+
+export const deleteDraft = (id: string) =>
+  invoke<void>("delete_draft", { id });
+
+export const scanDraft = (content: string, draftId?: string) =>
+  invoke<SensitiveWarning[]>("scan_draft", { content, draftId });
+
+// ─── Task Plans ───────────────────────────────────────────────────────────────
+
+export interface TaskPlan {
+  complexity: "simple" | "medium" | "complex";
+  reasoning: string;
+  suggested_subtasks: string[];
+  suggested_action?: string;
+}
+
+export const evaluateTaskPlan = (taskId: string) =>
+  invoke<TaskPlan>("evaluate_task_plan", { taskId });
+
+export const getTaskPlan = (taskId: string) =>
+  invoke<TaskPlan | null>("get_task_plan", { taskId });
+
+export const acceptPlan = (taskId: string, subtaskTitles: string[]) =>
+  invoke<Task[]>("accept_plan", { taskId, subtaskTitles });
+
+export const recordPlanCorrection = (
+  taskId: string,
+  originalSubtasks: string[],
+  editedSubtasks: string[],
+  action: string
+) =>
+  invoke<void>("record_plan_correction", { taskId, originalSubtasks, editedSubtasks, action });
+
+// ─── Skills ──────────────────────────────────────────────────────────────────
+
+export type TriggerType = "schedule" | "event" | "manual";
+export type ApprovalMode = "auto" | "notify" | "approve_first" | "approve_always";
+export type SkillRunStatus = "pending" | "running" | "completed" | "failed" | "partial_failure" | "cancelled" | "approval_pending";
+
+export interface TriggerConfig {
+  cron?: string;
+  timezone?: string;
+  event_type?: string;
+  filter?: Record<string, unknown>;
+}
+
+export interface ContextConfig {
+  scope?: "global" | "project";
+  project_id?: string;
+  include_documents?: boolean;
+  document_filter?: string;
+  max_documents?: number;
+  max_tokens?: number;
+  include_archived?: boolean;
+  priority_order?: string[];
+  system_prompt?: string;
+  output_instructions?: string;
+}
+
+export interface ActionConfig {
+  action_type?: "summarize" | "draft_message" | "create_tasks" | "analyze" | "custom";
+  format?: "markdown" | "plain" | "html";
+  channel?: string;
+  template?: string;
+  max_length?: number;
+  has_side_effects?: boolean;
+}
+
+export interface Skill {
+  id: string;
+  name: string;
+  description: string | null;
+  trigger_type: TriggerType;
+  trigger_config: string | null;
+  context_config: string | null;
+  action_config: string | null;
+  approval_mode: string;
+  enabled: boolean;
+  shared: boolean;
+  owner_id: string | null;
+  category: string | null;
+  icon: string | null;
+  tags: string | null;
+  next_run_at: string | null;
+  cloned_from_id: string | null;
+  is_builtin: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateSkillInput {
+  name: string;
+  description?: string;
+  trigger_type: TriggerType;
+  trigger_config?: TriggerConfig;
+  context_config?: ContextConfig;
+  action_config?: ActionConfig;
+  approval_mode?: ApprovalMode;
+  category?: string;
+  icon?: string;
+  tags?: string[];
+  shared?: boolean;
+}
+
+export interface UpdateSkillInput {
+  id: string;
+  name?: string;
+  description?: string;
+  trigger_type?: TriggerType;
+  trigger_config?: TriggerConfig;
+  context_config?: ContextConfig;
+  action_config?: ActionConfig;
+  approval_mode?: ApprovalMode;
+  enabled?: boolean;
+  shared?: boolean;
+  category?: string;
+  icon?: string;
+  tags?: string[];
+}
+
+export interface SkillRun {
+  id: string;
+  skill_id: string;
+  status: SkillRunStatus;
+  trigger_type: string;
+  trigger_context: string | null;
+  output: string | null;
+  error: string | null;
+  pending_changes: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  duration_ms: number | null;
+  approval_decision: string | null;
+  approval_reason: string | null;
+  created_at: string;
+}
+
+export interface SkillStats {
+  total_runs: number;
+  successful_runs: number;
+  failed_runs: number;
+  avg_duration_ms: number | null;
+  last_run_at: string | null;
+  success_rate: number;
+}
+
+export interface SkillTestResult {
+  skill_id: string;
+  skill_name: string;
+  context: {
+    tasks: unknown[];
+    meetings: unknown[];
+    documents: unknown[];
+    project: unknown | null;
+    truncated: boolean;
+  };
+  context_tasks_count: number;
+  context_meetings_count: number;
+  context_truncated: boolean;
+  action_type: string | null;
+  approval_mode: string;
+}
+
+// Skill CRUD
+export const createSkill = (input: CreateSkillInput) =>
+  invoke<Skill>("create_skill", { input });
+
+export const getSkill = (id: string) =>
+  invoke<Skill>("get_skill", { id });
+
+export const listSkills = (args?: {
+  shared?: boolean;
+  category?: string;
+  enabled?: boolean;
+}) => invoke<Skill[]>("list_skills", args ?? {});
+
+export const updateSkill = (input: UpdateSkillInput) =>
+  invoke<Skill>("update_skill", { input });
+
+export const deleteSkill = (id: string) =>
+  invoke<void>("delete_skill", { id });
+
+export const toggleSkillEnabled = (id: string, enabled: boolean) =>
+  invoke<Skill>("toggle_skill_enabled", { id, enabled });
+
+// Skill execution
+export const runSkillManually = (skillId: string) =>
+  invoke<SkillRun>("run_skill_manually", { skillId });
+
+export const testRunSkill = (skillId: string) =>
+  invoke<SkillTestResult>("test_run_skill", { skillId });
+
+// Skill runs
+export const getSkillRuns = (args: {
+  skillId: string;
+  status?: string;
+  limit?: number;
+  offset?: number;
+}) => invoke<SkillRun[]>("get_skill_runs", args);
+
+export const getSkillRun = (id: string) =>
+  invoke<SkillRun>("get_skill_run", { id });
+
+// Approval
+export const approveSkillRun = (runId: string, projectId?: string) =>
+  invoke<unknown>("approve_skill_run", { runId, projectId });
+
+export const rejectSkillRun = (runId: string, reason?: string) =>
+  invoke<void>("reject_skill_run", { runId, reason });
+
+// Skill utilities
+export const cloneSkill = (skillId: string, newName?: string) =>
+  invoke<Skill>("clone_skill", { skillId, newName });
+
+export const exportSkill = (skillId: string) =>
+  invoke<unknown>("export_skill", { skillId });
+
+export const exportSkillToDirectory = (skillMdContent: string, skillName: string) =>
+  invoke<string>("export_skill_to_directory", { skillMdContent, skillName });
+
+export const importSkill = (skillJson: unknown) =>
+  invoke<Skill>("import_skill", { skillJson });
+
+export const getSkillStats = (skillId: string) =>
+  invoke<SkillStats>("get_skill_stats", { skillId });
+
+export const recordSkillOutputEdit = (skillId: string, runId: string, originalOutput: string, editedOutput: string) =>
+  invoke<void>("record_skill_output_edit", { skillId, runId, originalOutput, editedOutput });
+
+export interface ExtractedSkillDefinition {
+  name: string;
+  description: string;
+  trigger_type: "schedule" | "event" | "manual";
+  trigger_config: Record<string, unknown>;
+  action_type: string;
+  system_prompt?: string;
+  approval_mode?: string;
+}
+
+export const extractSkillFromChat = (description: string) =>
+  invoke<ExtractedSkillDefinition>("extract_skill_from_chat", { description });
+
+export const initializeBuiltinSkills = () =>
+  invoke<string[]>("initialize_builtin_skills");
+
+export const resetBuiltinSkills = () =>
+  invoke<string[]>("reset_builtin_skills");
+
+// ─── Skill Folders ────────────────────────────────────────────────────────────
+
+export interface SkillFileEntry {
+  name: string;
+  path: string;
+  is_directory: boolean;
+  is_executable: boolean;
+  size: number;
+  children: SkillFileEntry[] | null;
+}
+
+export interface SkillFolder {
+  name: string;
+  path: string;
+  description: string | null;
+  files: SkillFileEntry[];
+  has_executables: boolean;
+  created_at: string;
+  enabled: boolean;
+}
+
+export const pickFolderDialog = () =>
+  invoke<string | null>("pick_folder_dialog");
+
+export const listSkillFolders = () =>
+  invoke<SkillFolder[]>("list_skill_folders");
+
+export const getSkillFolder = (folderName: string) =>
+  invoke<SkillFolder>("get_skill_folder", { folderName });
+
+export const installSkillFolder = (sourcePath: string) =>
+  invoke<SkillFolder>("install_skill_folder", { sourcePath });
+
+export const deleteSkillFolder = (folderName: string) =>
+  invoke<void>("delete_skill_folder", { folderName });
+
+export const readSkillFile = (folderName: string, filePath: string) =>
+  invoke<string>("read_skill_file", { folderName, filePath });
+
+export const toggleFolderSkillEnabled = (folderName: string, enabled: boolean) =>
+  invoke<boolean>("toggle_folder_skill_enabled", { folderName, enabled });
+
+export const executeSkillScript = (folderName: string, scriptPath: string) =>
+  invoke<string>("execute_skill_script", { folderName, scriptPath });

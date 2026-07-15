@@ -16,6 +16,7 @@ import ProjectDashboard from "@/components/analytics/ProjectDashboard";
 import AIChatPanel from "@/components/ai/AIChatPanel";
 import EmptyState from "@/components/shared/EmptyState";
 import { useTaskStore } from "@/stores/taskStore";
+import { SkillsPage } from "@/components/skills/SkillsPage";
 
 const VIEW_ICONS = {
   list: LayoutList,
@@ -39,6 +40,11 @@ export default function MainCanvas() {
     { id: "analytics", label: t("analytics.title"), icon: BarChart2 },
     { id: "chat", label: t("ai.title"), icon: MessageSquare },
   ] as const;
+
+  // Skills view is global (no project needed)
+  if (activeView === "skills") {
+    return <SkillsPage />;
+  }
 
   if (!activeProjectId && activeView !== "tasks") {
     return (

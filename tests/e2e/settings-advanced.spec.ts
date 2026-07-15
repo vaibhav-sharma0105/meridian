@@ -117,20 +117,24 @@ test.describe("Daemon Status", () => {
 test.describe("Audit Log Viewer", () => {
   test("audit log section appears in advanced settings", async ({ page }) => {
     await page.addInitScript(buildTauriMockScript({
-      get_audit_log: [
-        {
-          id: "log-1",
-          timestamp: new Date().toISOString(),
-          action_type: "create",
-          entity_type: "task",
-          entity_id: "task-123",
-          details: null,
-          agent_initiated: false,
-          autonomy_mode: null,
-          risk_level: "low",
-          created_at: new Date().toISOString(),
-        }
-      ],
+      get_audit_log: {
+        entries: [
+          {
+            id: "log-1",
+            timestamp: new Date().toISOString(),
+            action_type: "create",
+            entity_type: "task",
+            entity_id: "task-123",
+            details: null,
+            agent_initiated: false,
+            autonomy_mode: null,
+            risk_level: "low",
+            created_at: new Date().toISOString(),
+          }
+        ],
+        total: 1,
+        has_more: false,
+      },
     }));
     await page.goto("http://localhost:1420");
 

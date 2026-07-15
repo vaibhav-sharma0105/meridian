@@ -1,11 +1,26 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Send, Copy, CheckCheck, Bot, User, AlertCircle, Settings, Sparkles } from "lucide-react";
+import { Send, Copy, CheckCheck, User, AlertCircle, Settings, Sparkles, Wand2, Zap, CheckCircle2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
-import { useAI } from "@/hooks/useAI";
+import { useAI, UnifiedSkill } from "@/hooks/useAI";
 import { useUIStore } from "@/stores/uiStore";
-import OutputTemplates from "./OutputTemplates";
+import { ChatToSkillPreview } from "@/components/skills/ChatToSkillPreview";
+import { SkillPicker, SkillBadge } from "./SkillPicker";
 import { MAX_CHAT_CHARS } from "@/lib/constants";
+import type { ExtractedSkillDefinition } from "@/lib/tauri";
+
+// Parse skill invocation markers from AI response
+function parseSkillInvocation(content: string): { skillName: string | null; cleanContent: string } {
+  const match = content.match(/\*\*\[SKILL_INVOKE:\s*([^\]]+)\]\*\*/);
+  if (match) {
+    const skillName = match[1].trim();
+    const cleanContent = content.replace(match[0], "").trim();
+    return { skillName, cleanContent };
+  }
+  return { skillName: null, cleanContent: content };
+}
+
+type SkillExecStatus = "running" | "completed";
 
 interface Props {
   projectId: string | null;
@@ -32,22 +47,122 @@ function TypingDots() {
 export default function AIChatPanel({ projectId, fullPage = false }: Props) {
   const { t } = useTranslation();
   const { setSettingsOpen } = useUIStore();
-  const { messages, streaming, chatError, sendMessage, clearMessages, settings } = useAI(projectId);
+  const {
+    messages,
+    streaming,
+    chatError,
+    sendMessage,
+    clearMessages,
+    settings,
+    allEnabledSkills,
+    markSkillInvoked,
+    isSkillInvoked,
+    executeSkill,
+  } = useAI(projectId);
+
   const [input, setInput] = useState("");
   const [copied, setCopied] = useState<number | null>(null);
+  const [skillExtractMsg, setSkillExtractMsg] = useState<number | null>(null);
+  const [showSkillPicker, setShowSkillPicker] = useState(false);
+  const [selectedSkill, setSelectedSkill] = useState<UnifiedSkill | null>(null);
+  const [skillExecStatus, setSkillExecStatus] = useState<Record<number, { status: SkillExecStatus; skillName: string }>>({});
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const inputContainerRef = useRef<HTMLDivElement>(null);
+  // Track processed messages to prevent duplicate execution
+  const processedMsgIndices = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     const el = messagesContainerRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, streaming]);
 
+  // Execute skill for a message
+  const executeSkillForMessage = useCallback(async (
+    idx: number,
+    skillName: string,
+    matchedSkill: UnifiedSkill
+  ) => {
+    // Prevent duplicate execution
+    if (processedMsgIndices.current.has(idx)) return;
+    processedMsgIndices.current.add(idx);
+
+    // Check if already invoked in this conversation
+    if (isSkillInvoked(skillName)) {
+      setSkillExecStatus(prev => ({
+        ...prev,
+        [idx]: { status: "completed", skillName }
+      }));
+      return;
+    }
+
+    setSkillExecStatus(prev => ({ ...prev, [idx]: { status: "running", skillName } }));
+    markSkillInvoked(skillName);
+
+    // Execute the skill
+    const result = await executeSkill(matchedSkill);
+
+    // Always mark as completed (subtle UI - don't show failures prominently)
+    setSkillExecStatus(prev => ({ ...prev, [idx]: { status: "completed", skillName } }));
+
+    if (!result.success) {
+      console.warn(`Skill "${skillName}" execution completed with issues`);
+    }
+  }, [isSkillInvoked, markSkillInvoked, executeSkill]);
+
+  // Auto-execute skills when LLM invokes them
+  useEffect(() => {
+    const lastIdx = messages.length - 1;
+    if (lastIdx < 0) return;
+
+    const msg = messages[lastIdx];
+    if (msg.role !== "assistant") return;
+    if (processedMsgIndices.current.has(lastIdx)) return;
+    if (skillExecStatus[lastIdx]) return;
+
+    const { skillName } = parseSkillInvocation(msg.content);
+    if (!skillName) return;
+
+    // Find matching skill
+    const matchedSkill = allEnabledSkills.find(
+      s => s.name.toLowerCase() === skillName.toLowerCase()
+    );
+
+    if (matchedSkill) {
+      executeSkillForMessage(lastIdx, skillName, matchedSkill);
+    }
+  }, [messages.length, allEnabledSkills, skillExecStatus, executeSkillForMessage]);
+
+  // Reset on clear
+  useEffect(() => {
+    if (messages.length === 0) {
+      processedMsgIndices.current.clear();
+      setSkillExecStatus({});
+    }
+  }, [messages.length]);
+
+  useEffect(() => {
+    if (input.endsWith("/skill") || input === "/skill") {
+      setShowSkillPicker(true);
+    }
+  }, [input]);
+
+  const handleSkillSelect = (skill: UnifiedSkill) => {
+    setSelectedSkill(skill);
+    setShowSkillPicker(false);
+    setInput(input.replace(/\/skill\s*$/, "").trim());
+    inputRef.current?.focus();
+  };
+
   const handleSend = async (text?: string) => {
     const msg = (text ?? input).trim();
-    if (!msg || streaming) return;
+    if (!msg && !selectedSkill) return;
+    if (streaming) return;
+
+    const skillToUse = selectedSkill;
     setInput("");
-    await sendMessage(msg);
+    setSelectedSkill(null);
+    await sendMessage(msg, skillToUse);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -63,23 +178,22 @@ export default function AIChatPanel({ projectId, fullPage = false }: Props) {
     setTimeout(() => setCopied(null), 2000);
   };
 
-  const handleTemplateOutput = (text: string) => {
-    setInput(text.slice(0, MAX_CHAT_CHARS));
-    inputRef.current?.focus();
-  };
-
   const isEmpty = messages.length === 0 && !chatError;
 
   return (
     <div className="flex flex-col bg-white dark:bg-[#0f0f12] h-full">
-
-      {/* ── Header ──────────────────────────────────────────────────────── */}
+      {/* Header */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#ebebf0] dark:border-[#1a1a1e] flex-shrink-0">
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded-lg ai-gradient flex items-center justify-center shadow-sm">
             <Sparkles className="w-3.5 h-3.5 text-white" />
           </div>
           <span className="text-[13.5px] font-semibold text-zinc-800 dark:text-zinc-200">AI Chat</span>
+          {allEnabledSkills.length > 0 && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
+              {allEnabledSkills.length} skills
+            </span>
+          )}
         </div>
         {messages.length > 0 && (
           <button
@@ -91,7 +205,7 @@ export default function AIChatPanel({ projectId, fullPage = false }: Props) {
         )}
       </div>
 
-      {/* ── No AI configured banner ──────────────────────────────────────── */}
+      {/* No AI configured banner */}
       {!settings && projectId && (
         <div className="mx-3 mt-3 flex items-start gap-2 px-3 py-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl flex-shrink-0">
           <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
@@ -107,10 +221,9 @@ export default function AIChatPanel({ projectId, fullPage = false }: Props) {
         </div>
       )}
 
-      {/* ── Messages / Empty state ───────────────────────────────────────── */}
+      {/* Messages */}
       <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4 min-h-0">
-
-        {/* AI-first empty state with suggested prompts */}
+        {/* Empty state */}
         {isEmpty && (
           <div className="flex flex-col items-center justify-center h-full text-center space-y-5 pb-4 animate-fade-in">
             <div className="w-14 h-14 rounded-2xl ai-gradient flex items-center justify-center shadow-lg">
@@ -144,42 +257,75 @@ export default function AIChatPanel({ projectId, fullPage = false }: Props) {
           </div>
         )}
 
-        {/* Messages */}
-        {messages.map((msg, i) => (
-          <div key={i} className={`flex gap-2.5 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"} animate-fade-in`}>
-            <div className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center shadow-sm ${
-              msg.role === "user"
-                ? "bg-indigo-500"
-                : "ai-gradient"
-            }`}>
-              {msg.role === "user"
-                ? <User className="w-3.5 h-3.5 text-white" />
-                : <Sparkles className="w-3.5 h-3.5 text-white" />
-              }
-            </div>
-            <div className={`group relative max-w-[84%] flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
-              <div className={`px-3.5 py-2.5 rounded-2xl text-[13.5px] leading-relaxed ${
-                msg.role === "user"
-                  ? "bg-indigo-500 text-white rounded-tr-md"
-                  : "bg-[#f4f4f8] dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 rounded-tl-md"
+        {/* Message list */}
+        {messages.map((msg, i) => {
+          const { skillName, cleanContent } = msg.role === "assistant"
+            ? parseSkillInvocation(msg.content)
+            : { skillName: null, cleanContent: msg.content };
+
+          const execStatus = skillExecStatus[i];
+
+          return (
+            <div key={i} className={`flex gap-2.5 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"} animate-fade-in`}>
+              <div className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center shadow-sm ${
+                msg.role === "user" ? "bg-indigo-500" : "ai-gradient"
               }`}>
-                {msg.role === "assistant"
-                  ? <ReactMarkdown className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-pre:my-1">{msg.content}</ReactMarkdown>
-                  : msg.content
+                {msg.role === "user"
+                  ? <User className="w-3.5 h-3.5 text-white" />
+                  : <Sparkles className="w-3.5 h-3.5 text-white" />
                 }
               </div>
-              {msg.role === "assistant" && (
-                <button
-                  onClick={() => handleCopy(msg.content, i)}
-                  className="mt-1 opacity-0 group-hover:opacity-100 transition-opacity text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 p-0.5"
-                  title="Copy"
-                >
-                  {copied === i ? <CheckCheck className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-                </button>
-              )}
+              <div className={`group relative max-w-[84%] flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
+                {/* Subtle skill indicator - only show when completed */}
+                {skillName && execStatus?.status === "completed" && (
+                  <div className="mb-1 flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400">
+                    <CheckCircle2 className="w-3 h-3" />
+                    <span>{skillName}</span>
+                  </div>
+                )}
+                <div className={`px-3.5 py-2.5 rounded-2xl text-[13.5px] leading-relaxed ${
+                  msg.role === "user"
+                    ? "bg-indigo-500 text-white rounded-tr-md"
+                    : "bg-[#f4f4f8] dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 rounded-tl-md"
+                }`}>
+                  {msg.role === "assistant"
+                    ? <ReactMarkdown className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-pre:my-1">{cleanContent}</ReactMarkdown>
+                    : cleanContent
+                  }
+                </div>
+                {msg.role === "assistant" && (
+                  <div className="mt-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => handleCopy(msg.content, i)}
+                      className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 p-0.5"
+                      title="Copy"
+                    >
+                      {copied === i ? <CheckCheck className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                    <button
+                      onClick={() => setSkillExtractMsg(skillExtractMsg === i ? null : i)}
+                      className="text-zinc-400 hover:text-indigo-500 dark:hover:text-indigo-400 p-0.5"
+                      title="Create skill from this"
+                    >
+                      <Wand2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+                {skillExtractMsg === i && msg.role === "assistant" && (
+                  <ChatToSkillPreview
+                    description={msg.content}
+                    onCreateSkill={(def: ExtractedSkillDefinition) => {
+                      setSkillExtractMsg(null);
+                      useUIStore.getState().setActiveView("skills");
+                      useUIStore.getState().setSkillEditorData(def as unknown as Record<string, unknown>);
+                    }}
+                    onCancel={() => setSkillExtractMsg(null)}
+                  />
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {/* Typing indicator */}
         {streaming && (
@@ -201,33 +347,57 @@ export default function AIChatPanel({ projectId, fullPage = false }: Props) {
         )}
       </div>
 
-      {/* ── Templates ───────────────────────────────────────────────────── */}
-      <OutputTemplates projectId={projectId} onOutput={handleTemplateOutput} />
+      {/* Input area */}
+      <div className="px-4 py-3 border-t border-[#ebebf0] dark:border-[#1a1a1e] flex-shrink-0">
+        <div ref={inputContainerRef} className="relative">
+          {/* Selected skill badge */}
+          {selectedSkill && (
+            <div className="mb-2">
+              <SkillBadge skill={selectedSkill} onRemove={() => setSelectedSkill(null)} />
+            </div>
+          )}
 
-      {/* ── Input ───────────────────────────────────────────────────────── */}
-      <div className="flex-shrink-0 px-3 pb-3 pt-2 border-t border-[#ebebf0] dark:border-[#1a1a1e]">
-        <div className="relative flex items-end gap-0 bg-[#f4f4f8] dark:bg-zinc-800 rounded-2xl border border-[#e2e2e8] dark:border-zinc-700 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-400/20 transition-all duration-150">
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value.slice(0, MAX_CHAT_CHARS))}
-            onKeyDown={handleKeyDown}
-            placeholder={projectId ? t("ai.inputPlaceholder") : t("ai.noProject")}
-            disabled={!projectId}
-            rows={2}
-            className="flex-1 px-4 py-3 text-[13.5px] bg-transparent text-zinc-900 dark:text-zinc-50 resize-none placeholder:text-zinc-400 disabled:opacity-50 outline-none leading-relaxed"
-          />
-          <button
-            onClick={() => void handleSend()}
-            disabled={streaming || !input.trim() || !projectId}
-            className="m-2 p-2 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl transition-all duration-150 shadow-sm hover:shadow-md flex-shrink-0"
-          >
-            <Send className="w-4 h-4" />
-          </button>
+          {/* Skill picker popup */}
+          {showSkillPicker && inputContainerRef.current && (
+            <SkillPicker
+              skills={allEnabledSkills}
+              onSelect={handleSkillSelect}
+              onClose={() => setShowSkillPicker(false)}
+              position={{
+                bottom: inputContainerRef.current.offsetHeight + 8,
+                left: 0,
+              }}
+            />
+          )}
+
+          <div className="flex gap-2 items-end">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={projectId ? "Ask about this project... (type /skill to use a skill)" : "Select a project first"}
+              disabled={!projectId || streaming}
+              rows={1}
+              maxLength={MAX_CHAT_CHARS}
+              className="flex-1 resize-none px-3.5 py-2.5 text-[13.5px] bg-[#f4f4f8] dark:bg-zinc-800 border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 placeholder:text-zinc-400"
+              style={{ minHeight: "42px", maxHeight: "120px" }}
+            />
+            <button
+              onClick={() => void handleSend()}
+              disabled={(!input.trim() && !selectedSkill) || !projectId || streaming}
+              className="p-2.5 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-40 disabled:hover:bg-indigo-500 text-white rounded-xl transition-colors flex-shrink-0"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Hint */}
+          <div className="mt-1.5 flex items-center justify-between text-[10px] text-zinc-400">
+            <span>Type /skill to use a skill</span>
+            <span>{input.length}/{MAX_CHAT_CHARS}</span>
+          </div>
         </div>
-        <p className="text-[11px] text-zinc-300 dark:text-zinc-600 mt-1.5 text-right tabular-nums">
-          {input.length}/{MAX_CHAT_CHARS}
-        </p>
       </div>
     </div>
   );

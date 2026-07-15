@@ -68,7 +68,8 @@ meridian/
 │   ├── crypto/                   # Encryption key derivation (PBKDF2, device-key modes)
 │   ├── audit/                    # Audit logging (action tracking, risk classification)
 │   ├── vectors/                  # Qdrant vector storage client
-│   └── ai/                       # litellm.rs, extractor.rs, embeddings.rs
+│   ├── documents/                # Document parsers (XLSX, PDF, etc.)
+│   └── ai/                       # litellm.rs, extractor.rs, embeddings.rs, chunking.rs, search.rs
 │
 ├── tests/e2e/                    # Playwright tests
 │   ├── fixtures.ts               # mockedPage fixture (injects Tauri mock)
@@ -187,6 +188,328 @@ All CRUD operations on tasks, meetings, and projects are logged to `audit_log` t
 - `autonomy_mode`: supervised, semi_autonomous, autonomous
 
 Query via `get_audit_log` command with filters. 2-year retention with automatic pruning.
+
+### 9. Embeddings & Semantic Search
+
+Document embeddings enable semantic search across project documents. Three providers are available:
+
+- **Bundled (default)**: MiniLM-L6-v2 via ONNX Runtime (~86MB model). Works offline, 384-dimensional vectors.
+- **Ollama**: Uses local Ollama server with nomic-embed-text or other models. Requires Ollama running.
+- **OpenAI**: Uses text-embedding-3-small API. Requires API key and internet.
+
+**Key files:**
+- `src-tauri/src/ai/embeddings.rs` — `BundledEmbedder`, `EmbeddingProvider` trait
+- `src-tauri/src/ai/chunking.rs` — Text chunking (500 tokens, 50 overlap)
+- `src-tauri/src/ai/search.rs` — Hybrid search with RRF fusion
+- `src-tauri/src/daemon/` — Background worker for embedding jobs
+- `src-tauri/resources/models/all-MiniLM-L6-v2/` — Bundled ONNX model
+
+**Hybrid Search (RRF):**
+Combines semantic (Qdrant vectors) and keyword (FTS5) search using Reciprocal Rank Fusion with k=60. Results tagged with match type: "semantic", "keyword", or "both".
+
+**Embedding Worker:**
+- In-process background worker polls `daemon_jobs` table for `embed_document` jobs
+- Started via `start_embedding_worker` command, runs in separate thread with its own tokio runtime
+- Jobs queued automatically on document upload with priority (10=high, 5=normal, 1=migration)
+- `IndexingBanner` component shows progress and allows starting worker manually
+
+**Document Parsing:**
+- `src-tauri/src/documents/parsers/xlsx.rs` — XLSX via calamine
+- `src-tauri/src/documents/parsers/pdf.rs` — PDF via pdf-extract
+
+### 10. Pattern Learning
+
+The system learns from user behavior to provide smarter suggestions. Patterns are stored locally and never leave the device.
+
+**Observation Types:**
+- `task_completion` — Recorded when task status changes to "done"
+- `priority_set` — Recorded when task priority is changed
+- `assignee_set` — Recorded when task assignee is changed
+- `draft_edit` — Recorded when user edits an AI-generated draft
+- `suggestion_dismissed` — Recorded when user dismisses a workflow suggestion
+
+**Pattern Types:**
+- `workflow_sequence` — Learns "after task A, user usually does B" sequences
+- `smart_defaults` — Learns keyword → priority and keyword → assignee mappings
+- `communication_style` — Learns length preference, formality, common phrases
+
+**Key files:**
+- `src-tauri/src/patterns/models.rs` — Pattern observation and model structs
+- `src-tauri/src/patterns/repository.rs` — Pattern CRUD operations
+- `src-tauri/src/commands/patterns.rs` — Tauri commands for pattern queries
+- `src-tauri/src/daemon/jobs.rs` — `aggregate_patterns` job handler
+- `src/components/patterns/` — Frontend components for suggestions and settings
+
+**Aggregation:**
+- Runs every 15 minutes as daemon job (`aggregate_patterns`)
+- Processes unprocessed observations from `pattern_observations` table
+- Updates `pattern_models` with confidence scores
+- Applies 10% decay to patterns inactive for 30+ days
+- Prunes processed observations older than 90 days
+
+**Confidence Thresholds:**
+- Workflow suggestions: >= 0.5
+- Smart defaults: >= 0.5
+- Communication style: >= 0.6
+
+### 11. Proactive Agent
+
+The proactive agent surfaces actionable suggestions based on task/meeting state and user patterns.
+
+**Suggestion Types:**
+- `overdue_task` — Tasks past due date by 24+ hours
+- `stale_task` — In-progress tasks with no updates for 7+ days
+- `meeting_followup` — Meetings 24+ hours old with no linked tasks
+- `workflow_sequence` — Next-step suggestions based on learned patterns
+
+**Key files:**
+- `src-tauri/src/suggestions/` — Suggestion models and repository
+- `src-tauri/src/drafts/` — Draft message models and repository
+- `src-tauri/src/sensitive/mod.rs` — Sensitive content detection (PII, credentials, financial)
+- `src-tauri/src/daemon/jobs.rs` — `generate_suggestions` job handler
+- `src/components/suggestions/` — SuggestionCard, SuggestionsList UI
+
+**Suggestion Limits:**
+- Default: 10 suggestions per day
+- Job runs every 30 minutes
+- Suggestions ordered by severity (critical > warning > info)
+
+**Draft Generation:**
+- Uses LiteLLM/OpenAI for draft text
+- Adapts to learned communication style (length, formality, phrases)
+- Includes "Drafted by Meridian" signature (toggleable)
+
+**Sensitive Content Detection:**
+- PII: SSN, phone numbers, email addresses
+- Credentials: API keys, passwords, tokens
+- Financial: Credit card numbers, bank accounts
+- Non-blocking warnings displayed above draft editor
+
+### 12. Skills & Automation
+
+Skills are user-defined automations that run on schedule, event, or manual trigger.
+
+**Skill Types:**
+- `schedule`: Cron-based execution (e.g., "every Monday at 9am")
+- `event`: Triggered by task_created, task_completed, meeting_imported, etc.
+- `manual`: User-initiated via UI button
+
+**Key Files:**
+- `src-tauri/src/skills/models.rs` — Skill, SkillRun, TriggerConfig, ActionConfig structs
+- `src-tauri/src/skills/repository.rs` — CRUD operations for skills and runs
+- `src-tauri/src/skills/cron.rs` — Cron parsing with timezone support
+- `src-tauri/src/skills/events.rs` — Event types and filter matching
+- `src-tauri/src/skills/executor.rs` — Context building and action execution
+- `src-tauri/src/skills/approval.rs` — Approval workflow (approve/reject/expire)
+- `src-tauri/src/skills/builtin.rs` — Built-in template loading (include_str! from templates.json)
+- `src-tauri/resources/builtin-skills/templates.json` — 5 skill templates (Weekly Summary, Meeting Follow-up, Overdue Alert, Sprint Prep, End of Day Digest)
+- `src-tauri/src/commands/skills.rs` — Tauri commands (29 endpoints incl. initialize/reset builtin + folder picker/export)
+- `src/components/skills/` — SkillsPage, SkillCard, SkillEditorModal, SkillHistoryPanel, ChatToSkillPreview, SkillFoldersPanel
+- `src/hooks/useSkills.ts` — React Query hooks for skills
+- `tests/e2e/skills.spec.ts` — 24 Playwright E2E tests
+
+**Built-in Skills:**
+Templates are embedded at compile time via `include_str!()` and auto-loaded on first app launch (gated by `app_settings.builtin_skills_initialized = "true"`). The "Reset defaults" button in SkillsPage calls `reset_builtin_skills` which clears the flag and re-seeds.
+
+**Chat-to-Skill (AI Extraction):**
+The `extract_skill_from_chat` command uses LiteLLM to parse natural language into a skill definition. In AIChatPanel, the Wand2 icon on assistant messages opens `ChatToSkillPreview`, which shows an editable preview. On confirm, it sets `uiStore.skillEditorData` and navigates to the Skills view where the editor auto-opens pre-filled.
+
+**Skill Selection in AI Chat (`/skill` command):**
+- Type `/skill` in the chat input to open the SkillPicker popup
+- Popup shows enabled skills in a scrollable list (5 visible at a time)
+- Search bar at bottom filters skills by name/description
+- Clicking a skill adds it as a badge above the input
+- The skill's context (name + description) is prepended to the AI message
+- User can send with just the skill selected (no additional text required)
+- Key files: `src/components/ai/SkillPicker.tsx`, `AIChatPanel.tsx`
+
+**Dynamic Skill Invocation (LLM-driven):**
+- Both DB skills AND folder packages are merged into `UnifiedSkill` with `originalSkill`/`originalFolder` references
+- Compact context format sent to LLM: `📦 **name** - description` (not verbose YAML)
+- LLM receives clear instructions: when to invoke (explicit request, direct match) vs when not to (simple questions, conversation)
+- When skill matches intent, LLM outputs `**[SKILL_INVOKE: skill_name]**` at response start
+- Frontend parses marker and executes via `executeSkill()` which handles both types
+- Subtle UI: only shows small green checkmark + skill name after completion (no running/failed states shown)
+- Both manual (`/skill` picker) and automatic (LLM-detected) invocation supported
+- SkillPicker shows both DB skills (⚡) and folder packages (📦) in unified list
+
+**Progressive Skill Loading:**
+- Phase 1: LLM gets lightweight context (name + description only)
+- Phase 2: When skill invoked, `loadSkillContent()` fetches full skill.md content
+- Phase 3: For folder packages, find and execute main script (main.py, run.sh, index.js)
+- Content cached in `loadedSkillContent` ref per conversation
+- Clear cache on `clearMessages()` for new conversations
+
+**Skill Execution Deduplication:**
+- `invokedSkills` Set tracks invoked skills per conversation
+- `processedMsgIndices` ref prevents race condition re-executions
+- Only last assistant message processed (not full array iteration)
+- One skill per response enforced in LLM prompt
+- Key files: `src/hooks/useAI.ts` (UnifiedSkill, executeSkill, loadSkillContent), `src-tauri/src/commands/ai.rs` (skillContext), `AIChatPanel.tsx` (execution with dedup), `SkillPicker.tsx` (unified picker)
+
+**Editor Enhancements:**
+- System prompt textarea with `{{variable}}` insertion helper (6 variables: tasks, meetings, project_name, date, overdue_count, completed_today)
+- Test Run button (visible when editing existing skill) — previews context without executing
+- History panel with status filter dropdown and paginated run list (10 per page)
+
+**Approval Modes:**
+- `auto`: Execute immediately, no notification
+- `notify`: Execute and notify user of results
+- `approve_first`: Require approval for actions with side effects
+- `approve_always`: Always require approval before execution
+
+**Action Types:**
+- `summarize`: Generate summary of tasks/meetings
+- `draft_message`: Create email/Slack draft
+- `create_tasks`: Suggest tasks to create (requires approval)
+- `analyze`: Provide insights on project data
+- `custom`: User-defined prompt
+
+**Context Configuration:**
+- `scope`: "project" (current project only) or "global" (all projects)
+- `include_documents`: Include project documents in skill context (checkbox in Basic mode)
+- `document_filter`: Regex pattern to filter documents by filename (shown when include_documents is on)
+- `max_documents`: Maximum documents to include, 1-50 (shown when include_documents is on, default: 10)
+- `max_tokens`: Token budget for context (default: 8000, truncates by priority)
+- `priority_order`: Truncation priority (default: tasks > meetings > documents)
+
+**Sharing [PARKED]:**
+- `shared`: Boolean flag stored but non-functional (local-first app has no sharing mechanism)
+- Shared skills show "Shared" badge on card (cosmetic only)
+- Clone works but `cloned_from_id` not tracked
+- `owner_id` column exists but never set
+
+**Skill Run Lifecycle:**
+1. Trigger fires (cron/event/manual)
+2. Create skill_run record with status=pending
+3. Build context (tasks, meetings, documents)
+4. Execute action
+5. If needs_approval: set status=approval_pending, create notification
+6. On approve: apply pending changes, set status=completed
+7. On reject: set status=cancelled with reason
+
+### 13. Skill Format (YAML+MD)
+
+Skills use the Anthropic standard format: YAML frontmatter + Markdown body with `# Section` headings. JSON is kept internally in SQLite; YAML+MD is the user-facing authoring/exchange format.
+
+**User-facing format (skill.md):**
+```yaml
+---
+name: Weekly Progress Report
+description: Generate weekly summary every Monday
+trigger:
+  type: schedule
+  cron: "0 9 * * 1"
+action:
+  type: summarize
+settings:
+  approval_mode: notify
+  category: reporting
+---
+
+# Instructions
+
+Summarize the week's progress using {{tasks}} and {{meetings}}.
+Group completed tasks by assignee. List overdue items.
+
+# Context
+
+{{tasks}} {{meetings}} {{project_name}} {{date}}
+
+# Output Format
+
+## Weekly Report — {{project_name}}
+### Completed | In Progress | Overdue
+```
+
+**Sections in body:**
+| Section | Required | Description |
+|---------|----------|-------------|
+| `Instructions` | Yes | Step-by-step what to do |
+| `Context` | No | Data/variables to inject |
+| `Output Format` | No | Expected output structure |
+| `Examples` | No | Input/output examples |
+
+**Key files:**
+- `src/lib/skill-format.ts` — Parse/serialize YAML+MD, convert DB↔skill.md, variable list
+- `src/lib/skill-prompt.ts` — Legacy XML parser (still used by v2 JSON export/import)
+- `src/components/skills/SkillEditorModal.tsx` — Single textarea showing YAML+MD content
+- `src/components/skills/PromptSectionEditor.tsx` — Legacy component (unused by editor, kept for reference)
+
+**Editor:**
+Single monospace textarea showing the raw YAML+MD content. Users edit frontmatter (name, trigger, action, settings) and markdown body (# Instructions, etc.) directly. Variable insertion helper available via toolbar button.
+
+**Import/Export:**
+- **Export**: Saves as `.md` file (YAML+MD format) via Tauri native save dialog
+- **Import**: Accepts `.md`, `.yaml`, `.yml` (YAML+MD), `.json` (v1), `.skill.json` (v2)
+- Detection: `isSkillMdFormat()` checks for `---` prefix; falls back to JSON parsing
+
+**Backward compatibility:**
+- Old XML-tagged `system_prompt` strings are parsed into markdown sections on edit
+- Old freeform strings land in the `# Instructions` section
+- Legacy v1/v2 JSON imports still work
+
+### 14. Skill Types & Permissions
+
+Three distinct skill types with different permission models:
+
+| Type | Editable | Deletable | Source |
+|------|----------|-----------|--------|
+| Built-in | Yes | No (reset only) | `resources/builtin-skills/templates.json`, loaded on first launch |
+| User-created | Yes | Yes | Created via editor or imported |
+| Folder packages | No (read-only) | Yes | Uploaded from `~/.meridian/skills/` |
+
+**Built-in flag (`is_builtin`):**
+- Migration v013 adds `is_builtin INTEGER NOT NULL DEFAULT 0` to skills table
+- `load_builtin_skills()` sets `is_builtin: true` when creating templates
+- `delete_skill()` rejects deletion if `is_builtin = true`
+- `reset_builtin_skills()` deletes only `WHERE is_builtin = 1` then re-creates
+- UI: "Built-in" badge on card, no Delete option in menu
+
+**Folder packages (`~/.meridian/skills/`):**
+- Each subfolder is a skill package with scripts, configs, README
+- File tree viewer with progressive disclosure (expand/collapse)
+- Read-only in UI — view file contents but no inline editing
+- Deletable (removes entire folder from disk)
+- Executable scripts require human-in-the-loop confirmation dialog
+
+**Key files:**
+- `src-tauri/src/skills/folders.rs` — Filesystem operations (list, install, validate, delete, read, execute)
+- `src-tauri/src/commands/skills.rs` — Tauri commands (20 endpoints incl. folder ops, picker, export-to-dir)
+- `src/components/skills/SkillFoldersPanel.tsx` — File tree UI, upload, execute dialog
+- `src/components/skills/SkillsList.tsx` — "Upload Skill" button (folder picker replaces old Import)
+- `src/components/skills/SkillsPage.tsx` — Auto-shows folders panel when packages exist
+
+**Folder upload & validation:**
+- "Upload Skill" button uses `pick_folder_dialog` command for native folder picker
+- macOS: Uses `osascript -e "choose folder"` (AppleScript) — NSOpenPanel via Tauri/rfd has sheet attachment issues
+- Windows/Linux: Uses `rfd::FileDialog::new().pick_folder()`
+- Validation: `skill.md` must exist with YAML frontmatter containing `name:` and `description:`
+
+**Skill export (directory-based):**
+- `export_skill_to_directory` command: folder picker → creates `{slug}/skill.md`
+- Serializes skill to YAML+MD format via `skillToSkillFile()` in `src/lib/skill-format.ts`
+- Exported packages can be directly re-uploaded as folder packages
+
+**Script execution:**
+- Supported: `.py`, `.js`, `.ts`, `.sh`, `.bash`, `.zsh`, `.rb`, `.pl` (cross-platform)
+- Platform-specific: `.ps1`, `.bat`, `.cmd` (Windows only)
+- Runs with user permissions in skill folder as working directory
+- Path traversal protection: validates path stays within `~/.meridian/skills/<folder>/`
+
+### 15. Skills: Known Gaps / Future Work
+
+> **For agents:** These have schema/UI scaffolding but need implementation. See `openspec/changes/phase-4-skills-automation/tasks.md` Section 30 for full details.
+
+| Item | Status | What's Missing |
+|------|--------|----------------|
+| **Skill Sharing** | PARKED | No multi-user sync (local-first app) |
+| **Owner Tracking** | PARKED | `owner_id` column never set |
+| **Clone Source** | PARKED | `cloned_from_id` not set in `clone_skill()` |
+| **Skills → Suggestions** | NOT IMPL | Skills don't create suggestions |
+| **Suggestion → Skill Trigger** | NOT IMPL | Accepting suggestion doesn't trigger skill |
+| **Retry Logic** | NOT IMPL | Failed skills stay failed |
+| **Timeout Handling** | NOT IMPL | No timeout for long-running skills |
 
 ---
 
@@ -346,3 +669,4 @@ Update the following before marking work complete:
 | Encrypted DB auto-init | New installs auto-initialize device-mode encryption. Existing unencrypted DBs continue working (backward compatible). |
 | Qdrant not embedded | Qdrant runs as external service (localhost:6334). Check `is_available()` before operations. |
 | Audit log performance | Always query with filters and pagination. Unfiltered queries on large logs are slow. |
+| macOS folder picker | `@tauri-apps/plugin-dialog` `open({ directory: true })` and `rfd::FileDialog::pick_folder()` don't work reliably on macOS (NSOpenPanel sheet issue). Use `osascript -e "choose folder"` via `pick_folder_dialog` command instead. |

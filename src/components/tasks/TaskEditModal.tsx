@@ -14,6 +14,8 @@ import { useTasks } from "@/hooks/useTasks";
 import { useMeetings } from "@/hooks/useMeetings";
 import { useProjects } from "@/hooks/useProjects";
 import { TAG_COLORS } from "@/lib/constants";
+import { PlanSection } from "@/components/plans/PlanSection";
+import { DraftsTab } from "@/components/drafts/DraftsTab";
 
 interface Props {
   task: Task;
@@ -265,6 +267,12 @@ export default function TaskEditModal({ task }: Props) {
               className={fieldCls + " resize-none leading-relaxed placeholder:text-zinc-400"}
             />
           </div>
+
+          {/* AI Plan Section */}
+          <PlanSection taskId={task.id} taskTitle={task.title} />
+
+          {/* Drafts Section */}
+          <DraftsTab taskId={task.id} taskTitle={task.title} />
         </div>
 
         {/* Footer actions */}

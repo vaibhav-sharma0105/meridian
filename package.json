@@ -3,9 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "tauri dev",
-    "build": "tauri build",
-    "build:debug": "tauri build --debug",
+    "dev": "npm run build:daemon && tauri dev",
+    "build": "npm run build:daemon:release && tauri build",
+    "build:debug": "npm run build:daemon && tauri build --debug",
+    "build:daemon": "cd src-tauri && cargo build -p meridian-daemon && cd .. && node scripts/copy-sidecar.mjs",
+    "build:daemon:release": "cd src-tauri && cargo build --release -p meridian-daemon && cd .. && node scripts/copy-sidecar.mjs --release",
     "build:mcp": "cd src-tauri && cargo build --release -p meridian-mcp",
     "test": "vitest",
     "test:e2e": "playwright test",
@@ -39,6 +41,7 @@
     "react-markdown": "^9.0.1",
     "react-router-dom": "^6.22.0",
     "recharts": "^2.10.4",
+    "yaml": "^2.9.0",
     "zod": "^3.22.4",
     "zustand": "^4.5.0"
   },

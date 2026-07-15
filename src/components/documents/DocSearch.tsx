@@ -1,11 +1,58 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Search, Loader } from "lucide-react";
-import { searchDocuments } from "@/lib/tauri";
+import { Search, Loader, Brain, FileText, Sparkles } from "lucide-react";
+import { hybridSearchDocuments } from "@/lib/tauri";
 import type { SearchResult } from "@/lib/tauri";
 
 interface Props {
   projectId: string;
+}
+
+function MatchTypeBadge({ type }: { type: string }) {
+  switch (type) {
+    case "semantic":
+      return (
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 rounded">
+          <Brain className="w-2.5 h-2.5" />
+          Semantic
+        </span>
+      );
+    case "keyword":
+      return (
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded">
+          <FileText className="w-2.5 h-2.5" />
+          Keyword
+        </span>
+      );
+    case "both":
+      return (
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400 rounded">
+          <Sparkles className="w-2.5 h-2.5" />
+          Both
+        </span>
+      );
+    default:
+      return null;
+  }
+}
+
+function highlightKeywords(text: string, query: string): React.ReactNode {
+  if (!query.trim()) return text;
+  const keywords = query.toLowerCase().split(/\s+/).filter(k => k.length > 2);
+  if (keywords.length === 0) return text;
+
+  const pattern = new RegExp(`(${keywords.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "gi");
+  const parts = text.split(pattern);
+
+  return parts.map((part, i) =>
+    keywords.some(k => part.toLowerCase() === k) ? (
+      <mark key={i} className="bg-yellow-200 dark:bg-yellow-800/50 text-inherit rounded px-0.5">
+        {part}
+      </mark>
+    ) : (
+      part
+    )
+  );
 }
 
 export default function DocSearch({ projectId }: Props) {
@@ -18,7 +65,7 @@ export default function DocSearch({ projectId }: Props) {
     if (!query.trim()) return;
     setSearching(true);
     try {
-      const r = await searchDocuments({ projectId, query: query.trim(), limit: 10 });
+      const r = await hybridSearchDocuments({ projectId, query: query.trim(), limit: 10 });
       setResults(r);
     } finally {
       setSearching(false);
@@ -53,13 +100,20 @@ export default function DocSearch({ projectId }: Props) {
         <div className="space-y-2">
           {results.map((result, i) => (
             <div key={i} className="p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-semibold text-zinc-500">{result.document_title}</span>
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-zinc-500">{result.document_title}</span>
+                  <MatchTypeBadge type={result.search_type} />
+                </div>
                 <span className="text-xs text-zinc-400">
                   {Math.round(result.score * 100)}% match
                 </span>
               </div>
-              <p className="text-sm text-zinc-700 dark:text-zinc-300 line-clamp-3">{result.content}</p>
+              <p className="text-sm text-zinc-700 dark:text-zinc-300 line-clamp-3">
+                {result.search_type === "keyword" || result.search_type === "both"
+                  ? highlightKeywords(result.content, query)
+                  : result.content}
+              </p>
             </div>
           ))}
         </div>

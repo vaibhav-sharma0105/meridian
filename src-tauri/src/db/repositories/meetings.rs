@@ -196,3 +196,25 @@ pub fn unarchive_meeting(conn: &Connection, id: &str) -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     Ok(())
 }
+
+pub fn get_meetings_without_tasks(conn: &Connection, hours_old: i64) -> Result<Vec<Meeting>, String> {
+    let sql = format!(
+        "SELECT {} FROM meetings m
+         WHERE m.archived_at IS NULL
+           AND datetime(m.ingested_at) < datetime('now', '-{} hours')
+           AND NOT EXISTS (
+               SELECT 1 FROM tasks t WHERE t.meeting_id = m.id
+           )
+         ORDER BY m.ingested_at DESC
+         LIMIT 50",
+        MEETING_COLS, hours_old
+    );
+
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    let meetings = stmt
+        .query_map([], row_to_meeting_v2)
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(meetings)
+}
