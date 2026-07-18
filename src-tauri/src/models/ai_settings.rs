@@ -57,6 +57,10 @@ pub struct AppNotification {
     pub body: String,
     pub task_id: Option<String>,
     pub project_id: Option<String>,
+    pub skill_run_id: Option<String>,
+    pub integration_id: Option<String>,
+    pub severity: String,
+    pub desktop: bool,
     pub is_read: bool,
     pub created_at: String,
 }

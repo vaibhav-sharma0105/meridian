@@ -189,6 +189,10 @@ export interface AppNotification {
   body: string;
   task_id: string | null;
   project_id: string | null;
+  skill_run_id: string | null;
+  integration_id: string | null;
+  severity: "info" | "warning" | "critical";
+  desktop: boolean;
   is_read: boolean;
   created_at: string;
 }
@@ -1290,3 +1294,239 @@ export const toggleFolderSkillEnabled = (folderName: string, enabled: boolean) =
 
 export const executeSkillScript = (folderName: string, scriptPath: string) =>
   invoke<string>("execute_skill_script", { folderName, scriptPath });
+
+// ─── Integrations ─────────────────────────────────────────────────────────────
+
+export interface IntegrationConfig {
+  access_token?: string;
+  refresh_token?: string;
+  expires_at?: string;
+  client_id?: string;
+  client_secret?: string;
+  api_token?: string;
+  base_url?: string;
+  scopes?: string[];
+  repositories?: string[];
+  projects?: string[];
+  channels?: ChannelConfig[];
+  bot_token?: string;
+  user_token?: string;
+  app_token?: string;
+  socket_mode_enabled?: boolean;
+}
+
+export interface ChannelConfig {
+  id: string;
+  name: string;
+  autonomy_mode: string;
+  is_external: boolean;
+}
+
+export interface IntegrationPermissions {
+  read: boolean;
+  write: boolean;
+  delete: boolean;
+  admin: boolean;
+}
+
+export interface Integration {
+  id: string;
+  type: string;
+  name: string;
+  config: IntegrationConfig;
+  permissions?: IntegrationPermissions;
+  autonomy_mode: string;
+  status: string;
+  last_sync?: string;
+  sync_interval_minutes: number;
+  webhook_token?: string;
+  error_message?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IntegrationCache {
+  id: string;
+  integration_id: string;
+  external_type: string;
+  external_id: string;
+  external_url?: string;
+  data: unknown;
+  synced_at: string;
+}
+
+export interface IntegrationLink {
+  id: string;
+  integration_id: string;
+  local_type: string;
+  local_id: string;
+  external_type: string;
+  external_id: string;
+  external_url?: string;
+  sync_enabled: boolean;
+  created_at: string;
+}
+
+export interface SyncState {
+  integration_id: string;
+  status: string;
+  last_sync?: string;
+  items_synced: number;
+  items_new: number;
+  items_updated: number;
+  errors: string[];
+}
+
+export interface CreateIntegrationInput {
+  integration_type: string;
+  name: string;
+  config: IntegrationConfig;
+  permissions?: IntegrationPermissions;
+  autonomy_mode?: string;
+  sync_interval_minutes?: number;
+}
+
+export interface UpdateIntegrationInput {
+  id: string;
+  name?: string;
+  config?: IntegrationConfig;
+  permissions?: IntegrationPermissions;
+  autonomy_mode?: string;
+  status?: string;
+  sync_interval_minutes?: number;
+  error_message?: string;
+}
+
+export interface CreateLinkInput {
+  integration_id: string;
+  local_type: string;
+  local_id: string;
+  external_type: string;
+  external_id: string;
+  external_url?: string;
+  sync_enabled?: boolean;
+}
+
+export interface AvailableIntegration {
+  type: string;
+  name: string;
+  description: string;
+  icon: string;
+  capabilities: string[];
+}
+
+export const listIntegrations = () =>
+  invoke<Integration[]>("list_integrations");
+
+export const getIntegration = (id: string) =>
+  invoke<Integration | null>("get_integration", { id });
+
+export const getAvailableIntegrations = () =>
+  invoke<AvailableIntegration[]>("get_available_integrations");
+
+export const createIntegration = (input: CreateIntegrationInput) =>
+  invoke<Integration>("create_integration", { input });
+
+export const updateIntegration = (input: UpdateIntegrationInput) =>
+  invoke<Integration>("update_integration", { input });
+
+export const deleteIntegration = (id: string) =>
+  invoke<void>("delete_integration", { id });
+
+export const startOAuthFlow = (integrationType: string, redirectUri: string) =>
+  invoke<string>("start_oauth_flow", { integrationType, redirectUri });
+
+export const handleOAuthCallback = (oauthState: string, code: string) =>
+  invoke<Integration>("handle_oauth_callback", { oauthState, code });
+
+export const refreshIntegrationToken = (id: string) =>
+  invoke<Integration>("refresh_integration_token", { id });
+
+export const syncIntegration = (id: string) =>
+  invoke<SyncState>("sync_integration", { id });
+
+export const getSyncStatus = (id: string) =>
+  invoke<SyncState | null>("get_sync_status", { id });
+
+export const clearIntegrationCache = (id: string) =>
+  invoke<void>("clear_integration_cache", { id });
+
+export const getCachedItems = (integrationId: string, externalType?: string) =>
+  invoke<IntegrationCache[]>("get_cached_items", { integrationId, externalType });
+
+export const createIntegrationLink = (input: CreateLinkInput) =>
+  invoke<IntegrationLink>("create_integration_link", { input });
+
+export const getLinksForTask = (taskId: string) =>
+  invoke<IntegrationLink[]>("get_links_for_task", { taskId });
+
+export const getLinksForMeeting = (meetingId: string) =>
+  invoke<IntegrationLink[]>("get_links_for_meeting", { meetingId });
+
+export const unlinkIntegrationItem = (linkId: string) =>
+  invoke<void>("unlink_integration_item", { linkId });
+
+// Slack Socket Mode
+export interface SocketModeStatus {
+  connected: boolean;
+  app_token_configured: boolean;
+  last_event_at: string | null;
+  reconnect_count: number;
+}
+
+export const getSlackSocketStatus = () =>
+  invoke<SocketModeStatus>("get_slack_socket_status");
+
+export const detectSlackActionItems = (text: string, botUserId?: string) =>
+  invoke<string[]>("detect_slack_action_items", { text, botUserId });
+
+// Notification enhancements
+export const createNotificationWithOptions = (
+  notificationType: string,
+  title: string,
+  body: string,
+  options?: {
+    taskId?: string;
+    projectId?: string;
+    skillRunId?: string;
+    integrationId?: string;
+    severity?: "info" | "warning" | "critical";
+    desktop?: boolean;
+  }
+) =>
+  invoke<AppNotification>("create_notification_with_options", {
+    notificationType,
+    title,
+    body,
+    taskId: options?.taskId,
+    projectId: options?.projectId,
+    skillRunId: options?.skillRunId,
+    integrationId: options?.integrationId,
+    severity: options?.severity ?? "info",
+    desktop: options?.desktop ?? false,
+  });
+
+export const checkNotificationPermission = () =>
+  invoke<boolean>("check_notification_permission");
+
+export const requestNotificationPermission = () =>
+  invoke<boolean>("request_notification_permission");
+
+// MCP Permissions
+export interface McpPermissions {
+  read_tasks: boolean;
+  read_meetings: boolean;
+  read_projects: boolean;
+  create_task: boolean;
+  update_task: boolean;
+  delete_task: boolean;
+  create_meeting_note: boolean;
+  run_skill: boolean;
+  rate_limit_per_minute: number;
+}
+
+export const getMcpPermissions = () =>
+  invoke<McpPermissions>("get_mcp_permissions");
+
+export const setMcpPermissions = (permissions: McpPermissions) =>
+  invoke<void>("set_mcp_permissions", { permissions });

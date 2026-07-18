@@ -5,6 +5,7 @@ pub mod daemon;
 pub mod drafts;
 pub mod embedding_worker;
 pub mod encryption;
+pub mod integrations;
 pub mod migration;
 pub mod patterns;
 pub mod plans;

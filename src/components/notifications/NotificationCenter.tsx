@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { X, Bell, CheckCheck, AlertTriangle } from "lucide-react";
+import { X, Bell, CheckCheck, AlertTriangle, Info, AlertCircle, Github, Plug } from "lucide-react";
 import { useNotificationStore } from "@/stores/notificationStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { usePendingImports } from "@/hooks/usePendingImports";
@@ -9,11 +9,48 @@ import { SuggestionsList } from "@/components/suggestions/SuggestionsList";
 import { SkillApprovalModal } from "@/components/skills/SkillApprovalModal";
 import { format } from "date-fns";
 import { getSkillRun } from "@/lib/tauri";
-import type { SkillRun } from "@/lib/tauri";
+import type { SkillRun, AppNotification } from "@/lib/tauri";
 
 interface Props {
   open: boolean;
   onClose: () => void;
+}
+
+function SeverityBadge({ severity }: { severity?: string }) {
+  if (!severity || severity === "info") {
+    return (
+      <span className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded">
+        <Info className="w-2.5 h-2.5" />
+        Info
+      </span>
+    );
+  }
+  if (severity === "warning") {
+    return (
+      <span className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded">
+        <AlertTriangle className="w-2.5 h-2.5" />
+        Warning
+      </span>
+    );
+  }
+  if (severity === "critical") {
+    return (
+      <span className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded">
+        <AlertCircle className="w-2.5 h-2.5" />
+        Critical
+      </span>
+    );
+  }
+  return null;
+}
+
+function IntegrationIcon({ integrationId }: { integrationId?: string | null }) {
+  if (!integrationId) return null;
+
+  // Show a generic integration icon - in a full implementation we'd fetch the integration type
+  return (
+    <Plug className="w-3 h-3 text-purple-500" />
+  );
 }
 
 export default function NotificationCenter({ open, onClose }: Props) {
@@ -113,19 +150,37 @@ export default function NotificationCenter({ open, onClose }: Props) {
                       !notif.is_read ? "bg-indigo-50/50 dark:bg-indigo-900/10" : ""
                     } ${isApproval ? "cursor-pointer" : ""}`}
                   >
-                    {isApproval && (
+                    {isApproval ? (
                       <div className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mt-0.5">
                         <AlertTriangle className="w-3 h-3 text-amber-600 dark:text-amber-400" />
                       </div>
-                    )}
+                    ) : (notif as AppNotification).severity === "critical" ? (
+                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mt-0.5">
+                        <AlertCircle className="w-3 h-3 text-red-600 dark:text-red-400" />
+                      </div>
+                    ) : (notif as AppNotification).severity === "warning" ? (
+                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mt-0.5">
+                        <AlertTriangle className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                      </div>
+                    ) : null}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">{notif.title}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">{notif.title}</p>
+                        {(notif as AppNotification).integration_id && (
+                          <IntegrationIcon integrationId={(notif as AppNotification).integration_id} />
+                        )}
+                      </div>
                       {notif.body && (
                         <p className="text-xs text-zinc-500 mt-0.5 line-clamp-2">{notif.body}</p>
                       )}
-                      <p className="text-xs text-zinc-400 mt-1">
-                        {format(new Date(notif.created_at), "MMM d, h:mm a")}
-                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <p className="text-xs text-zinc-400">
+                          {format(new Date(notif.created_at), "MMM d, h:mm a")}
+                        </p>
+                        {(notif as AppNotification).severity && (notif as AppNotification).severity !== "info" && (
+                          <SeverityBadge severity={(notif as AppNotification).severity} />
+                        )}
+                      </div>
                       {isApproval && (
                         <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
                           Click to review

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { X, Save, Archive, ArchiveRestore, Trash2, Calendar, User, Tag, FolderInput } from "lucide-react";
+import { X, Save, Archive, ArchiveRestore, Trash2, Calendar, User, Tag, FolderInput, Link2, ExternalLink, Github, Unlink } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 import TaskConfidenceBadge from "./TaskConfidenceBadge";
 import AssigneeChipInput, { parseAssignees } from "./AssigneeChipInput";
@@ -16,6 +16,7 @@ import { useProjects } from "@/hooks/useProjects";
 import { TAG_COLORS } from "@/lib/constants";
 import { PlanSection } from "@/components/plans/PlanSection";
 import { DraftsTab } from "@/components/drafts/DraftsTab";
+import { useLinksForTask, useUnlink } from "@/hooks/useIntegrationLinks";
 
 interface Props {
   task: Task;
@@ -47,7 +48,9 @@ export default function TaskEditModal({ task }: Props) {
   const { t } = useTranslation();
   const { tasks: allProjectTasks, updateTask, archiveTask, unarchiveTask, deleteTask } = useTasks(task.project_id, {});
   const { meetings } = useMeetings(task.project_id);
-  const { setSelectedTask } = useUIStore();
+  const { setSelectedTask, setLinkPickerTaskId } = useUIStore();
+  const { data: integrationLinks = [] } = useLinksForTask(task.id);
+  const unlinkMutation = useUnlink();
   const backdropRef = useRef<HTMLDivElement>(null);
 
   const { projects } = useProjects();
@@ -266,6 +269,68 @@ export default function TaskEditModal({ task }: Props) {
               placeholder="Add details, context, or notes…"
               className={fieldCls + " resize-none leading-relaxed placeholder:text-zinc-400"}
             />
+          </div>
+
+          {/* Linked External Items */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className={labelCls}>
+                <Link2 className="inline w-3 h-3 mr-1 -mt-px" />External Links
+              </label>
+              <button
+                onClick={() => setLinkPickerTaskId(task.id)}
+                className="text-[11px] text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300"
+              >
+                + Add Link
+              </button>
+            </div>
+            {integrationLinks.length === 0 ? (
+              <div className="text-[12px] text-zinc-400 dark:text-zinc-500 py-2">
+                No external items linked. Click "Add Link" to connect GitHub issues, Jira tickets, etc.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {integrationLinks.map((link) => (
+                  <div
+                    key={link.id}
+                    className="flex items-center justify-between p-2.5 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg border border-zinc-200 dark:border-zinc-700"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      {link.external_type === "issue" || link.external_type === "pr" ? (
+                        <Github className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+                      ) : link.external_type === "jira_issue" ? (
+                        <span className="text-sm flex-shrink-0">🔷</span>
+                      ) : (
+                        <Link2 className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+                      )}
+                      <div className="min-w-0">
+                        <div className="text-[12px] font-medium text-zinc-700 dark:text-zinc-300 truncate">
+                          {link.external_type === "issue" ? "Issue" : link.external_type === "pr" ? "PR" : link.external_type === "jira_issue" ? "Jira Issue" : link.external_type}
+                          {" "}#{link.external_id.slice(-6)}
+                        </div>
+                        {link.external_url && (
+                          <a
+                            href={link.external_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[11px] text-indigo-500 hover:text-indigo-600 flex items-center gap-0.5"
+                          >
+                            Open <ExternalLink className="w-3 h-3" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => unlinkMutation.mutate({ linkId: link.id, localType: "task", localId: task.id })}
+                      className="p-1 text-zinc-400 hover:text-red-500 rounded"
+                      title="Remove link"
+                    >
+                      <Unlink className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* AI Plan Section */}

@@ -7,9 +7,43 @@ use crate::protocol::{
     ServerCapabilities, ServerInfo, ToolDefinition, ToolsCapability, ResourcesCapability,
 };
 use meridian_lib::db::{connection, repositories};
-use meridian_lib::models::task::TaskFilters;
+use meridian_lib::models::task::{CreateTaskInput, TaskFilters, UpdateTaskInput};
 use serde_json::{json, Value};
+use std::collections::HashMap;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
+
+lazy_static::lazy_static! {
+    static ref RATE_LIMITER: Mutex<RateLimiter> = Mutex::new(RateLimiter::new(100, Duration::from_secs(60)));
+}
+
+struct RateLimiter {
+    max_requests: usize,
+    window: Duration,
+    requests: Vec<Instant>,
+}
+
+impl RateLimiter {
+    fn new(max_requests: usize, window: Duration) -> Self {
+        Self {
+            max_requests,
+            window,
+            requests: Vec::new(),
+        }
+    }
+
+    fn check(&mut self) -> bool {
+        let now = Instant::now();
+        self.requests.retain(|t| now.duration_since(*t) < self.window);
+        if self.requests.len() < self.max_requests {
+            self.requests.push(now);
+            true
+        } else {
+            false
+        }
+    }
+}
 
 /// Handle an incoming MCP request
 pub fn handle_request(req: Request) -> Option<Response> {
@@ -189,6 +223,120 @@ fn handle_tools_list() -> Result<Value, RpcError> {
                 "required": ["task_id"]
             }),
         },
+        // Write tools (require permissions)
+        ToolDefinition {
+            name: "create_task".to_string(),
+            description: "Create a new task in Meridian. Requires MCP write permission.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "project_id": {
+                        "type": "string",
+                        "description": "The project ID to create the task in"
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Task title"
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Task description"
+                    },
+                    "priority": {
+                        "type": "string",
+                        "enum": ["low", "medium", "high", "critical"],
+                        "description": "Task priority"
+                    },
+                    "assignee": {
+                        "type": "string",
+                        "description": "Person assigned to the task"
+                    },
+                    "due_date": {
+                        "type": "string",
+                        "format": "date",
+                        "description": "Due date (YYYY-MM-DD)"
+                    }
+                },
+                "required": ["project_id", "title"]
+            }),
+        },
+        ToolDefinition {
+            name: "update_task".to_string(),
+            description: "Update an existing task. Requires MCP write permission.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "task_id": {
+                        "type": "string",
+                        "description": "The task ID to update"
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "New task title"
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "New task description"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": ["open", "in_progress", "done", "cancelled"],
+                        "description": "New task status"
+                    },
+                    "priority": {
+                        "type": "string",
+                        "enum": ["low", "medium", "high", "critical"],
+                        "description": "New task priority"
+                    },
+                    "assignee": {
+                        "type": "string",
+                        "description": "New assignee"
+                    },
+                    "due_date": {
+                        "type": "string",
+                        "format": "date",
+                        "description": "New due date (YYYY-MM-DD)"
+                    }
+                },
+                "required": ["task_id"]
+            }),
+        },
+        ToolDefinition {
+            name: "create_meeting_note".to_string(),
+            description: "Create a meeting note/transcript entry. Requires MCP write permission.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "project_id": {
+                        "type": "string",
+                        "description": "The project ID"
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Meeting title"
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "Meeting notes or transcript"
+                    }
+                },
+                "required": ["project_id", "title", "content"]
+            }),
+        },
+        ToolDefinition {
+            name: "run_skill".to_string(),
+            description: "Queue a skill for execution. Requires MCP write permission.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "skill_id": {
+                        "type": "string",
+                        "description": "The skill ID to run"
+                    }
+                },
+                "required": ["skill_id"]
+            }),
+        },
     ];
 
     Ok(json!({ "tools": tools }))
@@ -213,6 +361,11 @@ fn handle_tools_call(params: Option<Value>) -> Result<Value, RpcError> {
         "list_meetings" => tool_list_meetings(args),
         "get_meeting" => tool_get_meeting(args),
         "get_task_context" => tool_get_task_context(args),
+        // Write tools with permission checks
+        "create_task" => tool_create_task(args),
+        "update_task" => tool_update_task(args),
+        "create_meeting_note" => tool_create_meeting_note(args),
+        "run_skill" => tool_run_skill(args),
         _ => Err(RpcError::invalid_params(&format!("unknown tool: {}", name))),
     }?;
 
@@ -538,6 +691,235 @@ fn extract_relevant_excerpt(
     } else {
         Some(transcript.clone())
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Write Tools (MCP permission required)
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn check_rate_limit() -> Result<(), RpcError> {
+    let mut limiter = RATE_LIMITER.lock().map_err(|_| RpcError::internal_error("rate limiter lock failed"))?;
+    if !limiter.check() {
+        return Err(RpcError {
+            code: 429,
+            message: "Rate limit exceeded (100 ops/minute)".to_string(),
+            data: None,
+        });
+    }
+    Ok(())
+}
+
+fn check_permission(conn: &rusqlite::Connection, permission: &str) -> Result<(), RpcError> {
+    let permissions_json: Option<String> = conn
+        .query_row(
+            "SELECT value FROM app_settings WHERE key = 'mcp_permissions'",
+            [],
+            |row| row.get(0),
+        )
+        .ok();
+
+    if let Some(json_str) = permissions_json {
+        if let Ok(perms) = serde_json::from_str::<HashMap<String, bool>>(&json_str) {
+            if perms.get(permission).copied().unwrap_or(false) {
+                return Ok(());
+            }
+        }
+    }
+
+    Err(RpcError {
+        code: 403,
+        message: format!("MCP permission '{}' not granted. Enable in Settings > MCP.", permission),
+        data: None,
+    })
+}
+
+fn log_mcp_action(conn: &rusqlite::Connection, action: &str, entity_type: &str, entity_id: &str, details: &str) {
+    let _ = conn.execute(
+        "INSERT INTO audit_log (id, action_type, entity_type, entity_id, details, agent_initiated, risk_level, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, 1, 'medium', datetime('now'))",
+        rusqlite::params![
+            uuid::Uuid::new_v4().to_string(),
+            action,
+            entity_type,
+            entity_id,
+            details
+        ],
+    );
+}
+
+fn tool_create_task(args: Value) -> Result<Value, RpcError> {
+    check_rate_limit()?;
+    let conn = get_connection()?;
+    check_permission(&conn, "create_task")?;
+
+    let project_id = args
+        .get("project_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| RpcError::invalid_params("missing project_id"))?;
+
+    let title = args
+        .get("title")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| RpcError::invalid_params("missing title"))?;
+
+    let input = CreateTaskInput {
+        project_id: project_id.to_string(),
+        meeting_id: None,
+        parent_task_id: None,
+        title: title.to_string(),
+        description: args.get("description").and_then(|v| v.as_str()).map(String::from),
+        assignee: args.get("assignee").and_then(|v| v.as_str()).map(String::from),
+        assignee_confidence: None,
+        assignee_source_quote: None,
+        due_date: args.get("due_date").and_then(|v| v.as_str()).map(String::from),
+        due_confidence: None,
+        due_source_quote: None,
+        priority: args.get("priority").and_then(|v| v.as_str()).map(String::from),
+        confidence_score: None,
+        tags: None,
+        kanban_column: None,
+        notes: None,
+        is_duplicate: None,
+        duplicate_of_id: None,
+    };
+
+    let task = repositories::tasks::create_task(&conn, &input)
+        .map_err(|e| RpcError::internal_error(&e))?;
+
+    log_mcp_action(&conn, "mcp_create_task", "task", &task.id, &format!("Created task: {}", title));
+
+    Ok(json!({
+        "success": true,
+        "task": task
+    }))
+}
+
+fn tool_update_task(args: Value) -> Result<Value, RpcError> {
+    check_rate_limit()?;
+    let conn = get_connection()?;
+    check_permission(&conn, "update_task")?;
+
+    let task_id = args
+        .get("task_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| RpcError::invalid_params("missing task_id"))?;
+
+    let input = UpdateTaskInput {
+        id: task_id.to_string(),
+        title: args.get("title").and_then(|v| v.as_str()).map(String::from),
+        description: args.get("description").and_then(|v| v.as_str()).map(String::from),
+        assignee: args.get("assignee").and_then(|v| v.as_str()).map(String::from),
+        assignee_confidence: None,
+        due_date: args.get("due_date").and_then(|v| v.as_str()).map(String::from),
+        due_confidence: None,
+        status: args.get("status").and_then(|v| v.as_str()).map(String::from),
+        priority: args.get("priority").and_then(|v| v.as_str()).map(String::from),
+        tags: None,
+        kanban_column: None,
+        kanban_order: None,
+        notes: None,
+        meeting_id: None,
+    };
+
+    let task = repositories::tasks::update_task(&conn, &input)
+        .map_err(|e| RpcError::internal_error(&e))?;
+
+    log_mcp_action(&conn, "mcp_update_task", "task", &task.id, "Updated task via MCP");
+
+    Ok(json!({
+        "success": true,
+        "task": task
+    }))
+}
+
+fn tool_create_meeting_note(args: Value) -> Result<Value, RpcError> {
+    check_rate_limit()?;
+    let conn = get_connection()?;
+    check_permission(&conn, "create_meeting_note")?;
+
+    let project_id = args
+        .get("project_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| RpcError::invalid_params("missing project_id"))?;
+
+    let title = args
+        .get("title")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| RpcError::invalid_params("missing title"))?;
+
+    let content = args
+        .get("content")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| RpcError::invalid_params("missing content"))?;
+
+    let id = uuid::Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO meetings (id, project_id, title, platform, raw_transcript, ingested_at)
+         VALUES (?1, ?2, ?3, 'mcp', ?4, datetime('now'))",
+        rusqlite::params![id, project_id, title, content],
+    )
+    .map_err(|e| RpcError::internal_error(&e.to_string()))?;
+
+    let meeting = repositories::meetings::get_meeting(&conn, &id)
+        .map_err(|e| RpcError::internal_error(&e))?;
+
+    log_mcp_action(&conn, "mcp_create_meeting", "meeting", &id, &format!("Created meeting note: {}", title));
+
+    Ok(json!({
+        "success": true,
+        "meeting": meeting
+    }))
+}
+
+fn tool_run_skill(args: Value) -> Result<Value, RpcError> {
+    check_rate_limit()?;
+    let conn = get_connection()?;
+    check_permission(&conn, "run_skill")?;
+
+    let skill_id = args
+        .get("skill_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| RpcError::invalid_params("missing skill_id"))?;
+
+    // Check skill exists
+    let skill_exists: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM skills WHERE id = ?1 AND enabled = 1)",
+            [skill_id],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
+
+    if !skill_exists {
+        return Err(RpcError::invalid_params("skill not found or disabled"));
+    }
+
+    // Create a skill run
+    let run_id = uuid::Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO skill_runs (id, skill_id, status, trigger_type, trigger_context, created_at)
+         VALUES (?1, ?2, 'pending', 'mcp', ?3, datetime('now'))",
+        rusqlite::params![run_id, skill_id, json!({"source": "mcp"}).to_string()],
+    )
+    .map_err(|e| RpcError::internal_error(&e.to_string()))?;
+
+    // Queue the job for daemon
+    let job_id = uuid::Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO daemon_jobs (id, job_type, payload, status, priority, created_at)
+         VALUES (?1, 'run_skill', ?2, 'pending', 5, datetime('now'))",
+        rusqlite::params![job_id, json!({"skill_id": skill_id, "run_id": run_id}).to_string()],
+    )
+    .map_err(|e| RpcError::internal_error(&e.to_string()))?;
+
+    log_mcp_action(&conn, "mcp_run_skill", "skill", skill_id, &format!("Queued skill run: {}", run_id));
+
+    Ok(json!({
+        "success": true,
+        "run_id": run_id,
+        "status": "pending",
+        "message": "Skill queued for execution"
+    }))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -69,7 +69,8 @@ meridian/
 │   ├── audit/                    # Audit logging (action tracking, risk classification)
 │   ├── vectors/                  # Qdrant vector storage client
 │   ├── documents/                # Document parsers (XLSX, PDF, etc.)
-│   └── ai/                       # litellm.rs, extractor.rs, embeddings.rs, chunking.rs, search.rs
+│   ├── ai/                       # litellm.rs, extractor.rs, embeddings.rs, chunking.rs, search.rs
+│   └── integrations/             # External integrations (GitHub, Jira, Slack)
 │
 ├── tests/e2e/                    # Playwright tests
 │   ├── fixtures.ts               # mockedPage fixture (injects Tauri mock)
@@ -510,6 +511,82 @@ Three distinct skill types with different permission models:
 | **Suggestion → Skill Trigger** | NOT IMPL | Accepting suggestion doesn't trigger skill |
 | **Retry Logic** | NOT IMPL | Failed skills stay failed |
 | **Timeout Handling** | NOT IMPL | No timeout for long-running skills |
+
+### 16. External Integrations
+
+Phase 5 adds a unified integration framework for connecting external services (GitHub, Jira, Slack).
+
+**Key files (Backend):**
+- `src-tauri/src/integrations/mod.rs` — `IntegrationProvider` trait, provider registry
+- `src-tauri/src/integrations/models.rs` — `Integration`, `IntegrationConfig`, `IntegrationLink` structs
+- `src-tauri/src/integrations/repository.rs` — CRUD for `integrations`, `integration_cache`, `integration_links` tables
+- `src-tauri/src/integrations/github.rs` — GitHub OAuth + sync (issues, PRs)
+- `src-tauri/src/integrations/jira.rs` — Jira OAuth + sync (issues)
+- `src-tauri/src/integrations/slack.rs` — Slack OAuth + channel sync
+- `src-tauri/src/integrations/webhook.rs` — Local HTTP server for callbacks
+- `src-tauri/src/commands/integrations.rs` — 18 Tauri commands for integration management
+
+**Key files (Frontend):**
+- `src/hooks/useIntegrations.ts` — React Query hooks for integrations
+- `src/hooks/useIntegrationLinks.ts` — Hooks for task ↔ external item links
+- `src/stores/integrationStore.ts` — Zustand store for OAuth state
+- `src/components/integrations/IntegrationsPage.tsx` — Unified settings page (Native vs MCP sections)
+- `src/components/integrations/SetupWizard.tsx` — Step-by-step OAuth setup with prerequisites
+- `src/components/integrations/GitHubSettings.tsx` — GitHub repo selection and sync config
+- `src/components/integrations/JiraSettings.tsx` — Jira project selection
+- `src/components/integrations/SlackSettings.tsx` — Channel autonomy config
+- `src/components/integrations/MCPSettings.tsx` — MCP Server permission config
+- `src/components/integrations/NotificationSettings.tsx` — Desktop notification preferences
+- `src/components/integrations/LinkPicker.tsx` — Search and link external items to tasks
+- `src/components/tasks/IntegrationLinkBadge.tsx` — Badge showing linked GitHub/Jira items
+
+**Database (v014 migration):**
+- `integrations` — Stores connected services with encrypted OAuth tokens in `config` JSON column
+- `integration_cache` — Stores fetched external data (issues, PRs, channels)
+- `integration_links` — Bidirectional links between Meridian tasks and external items
+- `notifications` extended with `severity`, `desktop`, `integration_id` columns
+
+**OAuth Flow:**
+1. `start_oauth_flow` generates auth URL and stores state in memory
+2. User authorizes in browser, redirected to callback URL
+3. `handle_oauth_callback` exchanges code for token, creates integration record
+4. Token refresh via `refresh_integration_token` when expired
+
+**MCP Write Operations:**
+MCP server (`meridian-mcp`) includes write tools with permission checks:
+- `create_task`, `update_task`, `create_meeting_note`, `run_skill`
+- Permissions stored in `app_settings.mcp_permissions` JSON
+- Rate limited to 100 ops/minute with sliding window
+- All operations logged to audit log with `agent_initiated: true`
+
+**Desktop Notifications:**
+- `tauri-plugin-notification` wired for OS-level notifications
+- Severity levels: `info` (badge only), `warning` (toast), `critical` (toast + sound)
+- User can disable via `desktop_notifications_enabled` setting
+- NotificationCenter shows severity badges and integration icons
+
+**Integration UI Flow:**
+1. User clicks Integrations (Link2 icon) in sidebar → Opens IntegrationsPage modal
+2. Page shows two collapsible sections: Native Integrations and MCP Servers
+3. Click "Connect" on any integration → Opens SetupWizard
+4. SetupWizard shows: Prerequisites, step-by-step instructions, OAuth flow
+5. After OAuth: Integration appears in "Connected" section with Settings button
+6. Settings modals: Configure sync interval, repo/project/channel selection, disconnect
+
+**MCP Permissions (expanded):**
+```typescript
+interface McpPermissions {
+  read_tasks: boolean;      // default: true
+  read_meetings: boolean;   // default: true
+  read_projects: boolean;   // default: true
+  create_task: boolean;     // default: false
+  update_task: boolean;     // default: false
+  delete_task: boolean;     // default: false
+  create_meeting_note: boolean; // default: false
+  run_skill: boolean;       // default: false
+  rate_limit_per_minute: number; // default: 100
+}
+```
 
 ---
 

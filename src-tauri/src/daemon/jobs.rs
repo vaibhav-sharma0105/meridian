@@ -31,6 +31,11 @@ pub struct ExecuteSkillPayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncIntegrationPayload {
+    pub integration_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobResult {
     pub success: bool,
     pub chunks_embedded: Option<usize>,

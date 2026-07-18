@@ -200,10 +200,10 @@ export default function Sidebar() {
           )}
         </button>
 
-        {/* Connections */}
+        {/* Integrations */}
         <button
-          onClick={() => setSettingsOpen(true, "connections")}
-          title="Connections"
+          onClick={() => setSettingsOpen(true, "integrations")}
+          title="Integrations"
           className="flex-1 flex items-center justify-center p-2 rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all duration-150"
         >
           <Link2 className="w-[17px] h-[17px]" />

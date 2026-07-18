@@ -279,6 +279,48 @@ export function buildTauriMockScript(overrides: Record<string, unknown> = {}) {
     read_skill_file: "file content",
     execute_skill_script: "script output",
     toggle_folder_skill_enabled: true,
+    // Integrations
+    list_integrations: [],
+    get_integration: null,
+    get_available_integrations: [
+      { type: "github", name: "GitHub", description: "Sync issues and PRs", icon: "github", capabilities: ["fetch_issues", "create_issue"] },
+      { type: "jira", name: "Jira", description: "Sync Jira issues", icon: "jira", capabilities: ["fetch_issues", "create_issue"] },
+      { type: "slack", name: "Slack", description: "Send messages", icon: "slack", capabilities: ["send_message"] },
+    ],
+    create_integration: { id: "int-1", type: "github", name: "GitHub", config: {}, permissions: null, autonomy_mode: "manual", status: "connected", last_sync: null, sync_interval_minutes: 15, webhook_token: null, error_message: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    update_integration: { id: "int-1", type: "github", name: "GitHub", config: {}, permissions: null, autonomy_mode: "manual", status: "connected", last_sync: null, sync_interval_minutes: 15, webhook_token: null, error_message: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    delete_integration: null,
+    start_oauth_flow: "https://example.com/oauth",
+    handle_oauth_callback: { id: "int-1", type: "github", name: "GitHub", config: { access_token: "test" }, permissions: null, autonomy_mode: "manual", status: "connected", last_sync: null, sync_interval_minutes: 15, webhook_token: null, error_message: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    refresh_integration_token: { id: "int-1", type: "github", name: "GitHub", config: { access_token: "refreshed" }, permissions: null, autonomy_mode: "manual", status: "connected", last_sync: null, sync_interval_minutes: 15, webhook_token: null, error_message: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    sync_integration: { integration_id: "int-1", status: "success", last_sync: new Date().toISOString(), items_synced: 5, items_new: 2, items_updated: 3, errors: [] },
+    get_sync_status: null,
+    clear_integration_cache: null,
+    get_cached_items: [],
+    create_integration_link: { id: "link-1", integration_id: "int-1", local_type: "task", local_id: "task-1", external_type: "issue", external_id: "123", external_url: "https://github.com/test/repo/issues/123", sync_enabled: true, created_at: new Date().toISOString() },
+    get_links_for_task: [],
+    get_links_for_meeting: [],
+    unlink_integration_item: null,
+    // Slack Socket Mode
+    get_slack_socket_status: { connected: false, app_token_configured: false, last_event_at: null, reconnect_count: 0 },
+    detect_slack_action_items: [],
+    // Notifications enhancements
+    create_notification_with_options: { id: "notif-1", type: "test", title: "Test", body: "Test body", task_id: null, project_id: null, skill_run_id: null, integration_id: null, severity: "info", desktop: false, is_read: false, created_at: new Date().toISOString() },
+    check_notification_permission: true,
+    request_notification_permission: true,
+    // MCP Permissions
+    get_mcp_permissions: {
+      read_tasks: true,
+      read_meetings: true,
+      read_projects: true,
+      create_task: false,
+      update_task: false,
+      delete_task: false,
+      create_meeting_note: false,
+      run_skill: false,
+      rate_limit_per_minute: 100,
+    },
+    set_mcp_permissions: null,
     ...overrides,
   };
 

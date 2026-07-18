@@ -1,6 +1,6 @@
-# Zoom & Gmail OAuth Credentials Setup
+# OAuth Credentials Setup
 
-This guide walks you through creating the OAuth credentials required to enable the Zoom and Gmail connectors in Meridian.
+This guide walks you through creating the OAuth credentials required to enable integrations in Meridian.
 
 ---
 
@@ -10,6 +10,12 @@ This guide walks you through creating the OAuth credentials required to enable t
 |---|---|
 | `ZOOM_CLIENT_ID` | Zoom Marketplace app |
 | `ZOOM_CLIENT_SECRET` | Zoom Marketplace app |
+| `GITHUB_CLIENT_ID` | GitHub OAuth App |
+| `GITHUB_CLIENT_SECRET` | GitHub OAuth App |
+| `JIRA_CLIENT_ID` | Atlassian Developer Console |
+| `JIRA_CLIENT_SECRET` | Atlassian Developer Console |
+| `SLACK_CLIENT_ID` | Slack App settings |
+| `SLACK_CLIENT_SECRET` | Slack App settings |
 | `GMAIL_CLIENT_ID` | Google Cloud Console *(Gmail connector — coming soon)* |
 | `GMAIL_CLIENT_SECRET` | Google Cloud Console *(Gmail connector — coming soon)* |
 
@@ -51,7 +57,106 @@ Click **Save** and ensure the app shows as **Active** under your app list.
 
 ---
 
-## Part 2: Gmail OAuth App *(coming soon)*
+## Part 2: GitHub OAuth App
+
+### Step 1 — Create a GitHub OAuth App
+
+1. Go to [https://github.com/settings/developers](https://github.com/settings/developers)
+2. Click **New OAuth App**
+3. Fill in the details:
+   - **Application name**: `Meridian`
+   - **Homepage URL**: `http://localhost:1420`
+   - **Authorization callback URL**: `http://127.0.0.1:19280/callback`
+4. Click **Register application**
+
+### Step 2 — Copy credentials
+
+1. Copy the **Client ID** (shown on app page)
+2. Click **Generate a new client secret**
+3. Copy the **Client Secret** (shown only once)
+
+### Step 3 — Required scopes
+
+During OAuth, Meridian requests these scopes:
+- `repo` — Read/write access to repositories, issues, and PRs
+- `read:user` — Read user profile information
+
+---
+
+## Part 3: Jira OAuth App
+
+### Step 1 — Create an Atlassian app
+
+1. Go to [https://developer.atlassian.com/console/myapps/](https://developer.atlassian.com/console/myapps/)
+2. Click **Create** → **OAuth 2.0 integration**
+3. Name it `Meridian` and click **Create**
+
+### Step 2 — Configure OAuth 2.0
+
+1. In the left sidebar, click **Authorization**
+2. Click **Add** next to **OAuth 2.0 (3LO)**
+3. Set the callback URL: `http://127.0.0.1:19281/callback`
+4. Click **Save changes**
+
+### Step 3 — Add scopes
+
+1. In the left sidebar, click **Permissions**
+2. Click **Add** next to **Jira API**
+3. Add these scopes:
+   - `read:jira-work` — Read project and issue data
+   - `write:jira-work` — Create and update issues
+   - `read:jira-user` — Read user information
+
+### Step 4 — Copy credentials
+
+1. In the left sidebar, click **Settings**
+2. Copy the **Client ID** and **Secret**
+
+---
+
+## Part 4: Slack App
+
+### Step 1 — Create a Slack app
+
+1. Go to [https://api.slack.com/apps](https://api.slack.com/apps)
+2. Click **Create New App** → **From scratch**
+3. Name it `Meridian` and select your workspace
+4. Click **Create App**
+
+### Step 2 — Configure OAuth
+
+1. In the left sidebar, click **OAuth & Permissions**
+2. Under **Redirect URLs**, add: `http://127.0.0.1:19282/callback`
+3. Click **Add** then **Save URLs**
+
+### Step 3 — Add scopes
+
+Under **Scopes** → **Bot Token Scopes**, add:
+- `channels:read` — View basic channel information
+- `chat:write` — Send messages as the bot
+- `app_mentions:read` — Receive mentions in channels
+
+Under **Scopes** → **User Token Scopes**, add:
+- `channels:read` — View channels on behalf of user
+
+### Step 4 — Enable Socket Mode (optional, for real-time events)
+
+> **Note**: Socket Mode requires an App-Level Token and is needed for real-time event handling. Skip if you only need channel posting.
+
+1. In the left sidebar, click **Socket Mode**
+2. Toggle **Enable Socket Mode** on
+3. Click **Generate Token**, name it `meridian-socket`, select scopes `connections:write`
+4. Copy the **App Token** (starts with `xapp-`)
+
+### Step 5 — Copy credentials
+
+1. In the left sidebar, click **Basic Information**
+2. Copy the **Client ID** and **Client Secret**
+3. Note the App Token if you enabled Socket Mode
+
+---
+
+## Part 5: Gmail OAuth App *(coming soon)*
 
 > The Gmail connector is not yet implemented. You can skip this section for now.
 
@@ -89,7 +194,7 @@ Click **Save** and ensure the app shows as **Active** under your app list.
 
 ---
 
-## Part 3: Setting the credentials
+## Part 6: Setting the credentials
 
 ### Option A — Shell environment (quick)
 
@@ -98,8 +203,12 @@ Export the variables before running `npm run tauri dev`:
 ```bash
 export ZOOM_CLIENT_ID="your_zoom_client_id_here"
 export ZOOM_CLIENT_SECRET="your_zoom_client_secret_here"
-export GMAIL_CLIENT_ID="your_gmail_client_id_here"
-export GMAIL_CLIENT_SECRET="your_gmail_client_secret_here"
+export GITHUB_CLIENT_ID="your_github_client_id_here"
+export GITHUB_CLIENT_SECRET="your_github_client_secret_here"
+export JIRA_CLIENT_ID="your_jira_client_id_here"
+export JIRA_CLIENT_SECRET="your_jira_client_secret_here"
+export SLACK_CLIENT_ID="your_slack_client_id_here"
+export SLACK_CLIENT_SECRET="your_slack_client_secret_here"
 
 npm run tauri dev
 ```
@@ -111,8 +220,12 @@ npm run tauri dev
 ```bash
 ZOOM_CLIENT_ID=your_zoom_client_id_here
 ZOOM_CLIENT_SECRET=your_zoom_client_secret_here
-GMAIL_CLIENT_ID=your_gmail_client_id_here
-GMAIL_CLIENT_SECRET=your_gmail_client_secret_here
+GITHUB_CLIENT_ID=your_github_client_id_here
+GITHUB_CLIENT_SECRET=your_github_client_secret_here
+JIRA_CLIENT_ID=your_jira_client_id_here
+JIRA_CLIENT_SECRET=your_jira_client_secret_here
+SLACK_CLIENT_ID=your_slack_client_id_here
+SLACK_CLIENT_SECRET=your_slack_client_secret_here
 ```
 
 2. Use `dotenv` to inject when running:
@@ -145,7 +258,7 @@ ZOOM_CLIENT_ID=... ZOOM_CLIENT_SECRET=... npm run tauri build
 
 ---
 
-## Part 4: Verifying the setup
+## Part 7: Verifying the setup
 
 1. Run `npm run tauri dev` with the env vars set
 2. In Meridian, click **Connections** in the left sidebar
@@ -178,3 +291,43 @@ The binary was compiled without the `ZOOM_CLIENT_ID` environment variable. Set i
 
 ### Scopes not approved
 If Zoom shows an error about insufficient scopes, verify all 3 scopes are added to your Zoom app and that the app is saved/activated.
+
+---
+
+## Integration-Specific Troubleshooting
+
+### GitHub
+
+**"Bad credentials" error**
+Your Client Secret may have been regenerated. Generate a new secret in GitHub settings and update your env vars.
+
+**"Not Found" when syncing repos**
+The `repo` scope may not have been granted. Disconnect and reconnect, ensuring you approve the repo scope.
+
+**Rate limiting (403)**
+GitHub limits API calls to 5,000/hour for authenticated apps. Wait an hour or reduce sync frequency.
+
+### Jira
+
+**"unauthorized_client" error**
+Your app may not have OAuth 2.0 (3LO) configured. Check Authorization settings in Atlassian Developer Console.
+
+**"Scope not found" error**
+Ensure you've added Jira API permissions in the Permissions tab, not just OAuth scopes.
+
+**Can't see Jira projects**
+Your Atlassian account may not have access to the Jira site. Verify you can access Jira in a browser.
+
+### Slack
+
+**"invalid_client_id" error**
+The Client ID is incorrect. Copy it again from Basic Information in your Slack app settings.
+
+**"missing_scope" error**
+Required scopes weren't added. Go to OAuth & Permissions and add the scopes listed above.
+
+**Messages not appearing**
+The bot may not be invited to the channel. In Slack, type `/invite @Meridian` in the channel.
+
+**Socket Mode not connecting**
+Verify the App Token starts with `xapp-` and that Socket Mode is enabled in your app settings.

@@ -54,6 +54,11 @@ regex = "1.13.0"
 cron = "0.12"
 chrono-tz = "0.8"
 rfd = "0.16"
+axum = "0.8"
+async-trait = "0.1"
+lazy_static = "1.4"
+tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
+futures-util = "0.3"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

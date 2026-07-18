@@ -11,6 +11,7 @@ pub mod v010_proactive_agent;
 pub mod v011_subtasks;
 pub mod v012_skills;
 pub mod v013_skill_builtin_flag;
+pub mod v014_integrations;
 
 pub struct Migration {
     pub version: i32,
@@ -70,6 +71,10 @@ pub fn get_all_migrations() -> Vec<Migration> {
         Migration {
             version: 13,
             sql: v013_skill_builtin_flag::SQL,
+        },
+        Migration {
+            version: 14,
+            sql: v014_integrations::SQL,
         },
     ]
 }

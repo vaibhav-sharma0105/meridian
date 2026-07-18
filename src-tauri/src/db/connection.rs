@@ -175,6 +175,18 @@ fn configure_db(conn: &Connection) -> Result<(), String> {
         .map_err(|e| format!("Failed to configure database pragmas: {}", e))
 }
 
+/// Create an in-memory test database with all migrations applied.
+#[cfg(test)]
+pub fn init_test_db() -> Result<Connection, String> {
+    let conn = Connection::open(":memory:")
+        .map_err(|e| format!("Failed to create in-memory database: {}", e))?;
+
+    configure_db(&conn)?;
+    crate::db::migrations::run_migrations(&conn)?;
+
+    Ok(conn)
+}
+
 /// Create a new encrypted database and migrate data from an unencrypted one.
 pub fn migrate_to_encrypted(password: Option<&str>) -> Result<(), String> {
     use crate::crypto::{initialize_encryption, KeyMode};

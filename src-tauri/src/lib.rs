@@ -7,6 +7,7 @@ pub mod daemon;
 pub mod db;
 pub mod documents;
 pub mod drafts;
+pub mod integrations;
 pub mod models;
 pub mod patterns;
 pub mod plans;
@@ -103,6 +104,8 @@ pub fn run() {
             commands::settings::set_app_setting,
             commands::settings::get_prompt_templates,
             commands::settings::save_prompt_template,
+            commands::settings::get_mcp_permissions,
+            commands::settings::set_mcp_permissions,
             // Export / Import
             commands::export::export_project,
             commands::export::export_all,
@@ -112,6 +115,9 @@ pub fn run() {
             commands::notifications::mark_notification_read,
             commands::notifications::mark_all_read,
             commands::notifications::create_notification,
+            commands::notifications::create_notification_with_options,
+            commands::notifications::check_notification_permission,
+            commands::notifications::request_notification_permission,
             // Updater
             commands::updater::check_for_updates,
             commands::updater::backup_database,
@@ -221,6 +227,26 @@ pub fn run() {
             commands::skills::read_skill_file,
             commands::skills::execute_skill_script,
             commands::skills::toggle_folder_skill_enabled,
+            // Integrations
+            commands::integrations::list_integrations,
+            commands::integrations::get_integration,
+            commands::integrations::get_available_integrations,
+            commands::integrations::create_integration,
+            commands::integrations::update_integration,
+            commands::integrations::delete_integration,
+            commands::integrations::start_oauth_flow,
+            commands::integrations::handle_oauth_callback,
+            commands::integrations::refresh_integration_token,
+            commands::integrations::sync_integration,
+            commands::integrations::get_sync_status,
+            commands::integrations::clear_integration_cache,
+            commands::integrations::get_cached_items,
+            commands::integrations::create_integration_link,
+            commands::integrations::get_links_for_task,
+            commands::integrations::get_links_for_meeting,
+            commands::integrations::unlink_integration_item,
+            commands::integrations::get_slack_socket_status,
+            commands::integrations::detect_slack_action_items,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

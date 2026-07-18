@@ -19,6 +19,7 @@ interface UIStore {
   settingsTab: string;
   ingestModalOpen: boolean;
   skillEditorData: Record<string, unknown> | null;
+  linkPickerTaskId: string | null;
   // Actions
   setTheme: (theme: Theme) => void;
   setLanguage: (lang: string) => void;
@@ -33,6 +34,7 @@ interface UIStore {
   setSettingsOpen: (open: boolean, tab?: string) => void;
   setIngestModalOpen: (open: boolean) => void;
   setSkillEditorData: (data: Record<string, unknown> | null) => void;
+  setLinkPickerTaskId: (taskId: string | null) => void;
 }
 
 export const useUIStore = create<UIStore>((set) => ({
@@ -50,6 +52,7 @@ export const useUIStore = create<UIStore>((set) => ({
   settingsTab: "ai",
   ingestModalOpen: false,
   skillEditorData: null,
+  linkPickerTaskId: null,
 
   setTheme: (theme) => set({ theme }),
   setLanguage: (language) => set({ language }),
@@ -71,4 +74,5 @@ export const useUIStore = create<UIStore>((set) => ({
     set({ settingsOpen, ...(tab ? { settingsTab: tab } : {}) }),
   setIngestModalOpen: (ingestModalOpen) => set({ ingestModalOpen }),
   setSkillEditorData: (skillEditorData) => set({ skillEditorData }),
+  setLinkPickerTaskId: (linkPickerTaskId) => set({ linkPickerTaskId }),
 }));

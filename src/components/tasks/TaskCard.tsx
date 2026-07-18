@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Calendar, User, Tag, Video, Check, Archive } from "lucide-react";
+import { Calendar, User, Tag, Video, Check, Archive, Link2, MoreHorizontal } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 import { useTaskStore } from "@/stores/taskStore";
 import TaskConfidenceBadge from "./TaskConfidenceBadge";
+import { IntegrationLinkBadge } from "./IntegrationLinkBadge";
 import { TAG_COLORS } from "@/lib/constants";
 import { parseTags } from "@/lib/validators";
 import { parseAssignees } from "./AssigneeChipInput";
@@ -24,15 +26,22 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 
 export default function TaskCard({ task, compact = false, isSubtask = false }: Props) {
-  const { setSelectedTask } = useUIStore();
+  const { setSelectedTask, setLinkPickerTaskId } = useUIStore();
   const { selectedTaskIds, toggleTaskSelection } = useTaskStore();
   const { meetings } = useMeetings(task.project_id);
+  const [showMenu, setShowMenu] = useState(false);
   const isSelected = selectedTaskIds.includes(task.id);
   const linkedMeeting = task.meeting_id ? meetings.find((m) => m.id === task.meeting_id) : null;
   const tags = parseTags(task.tags);
   const priorityBorder = task.priority ? (PRIORITY_COLORS[task.priority] ?? "border-l-zinc-300") : "border-l-zinc-300";
 
   const hasMetadata = task.assignee || task.due_date || linkedMeeting || tags.length > 0;
+
+  const handleLinkTo = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowMenu(false);
+    setLinkPickerTaskId(task.id);
+  };
 
   const metaItems: React.ReactNode[] = [];
   if (!compact) {
@@ -115,20 +124,48 @@ export default function TaskCard({ task, compact = false, isSubtask = false }: P
         <div className="flex-1 min-w-0">
           {/* Title row */}
           <div className="flex items-start justify-between gap-2 min-w-0">
-            <p className={`text-zinc-900 dark:text-zinc-100 leading-snug min-w-0 break-words tracking-[-0.012em] ${
-              isSubtask ? "text-[13px] font-medium" : compact ? "text-[13px] font-semibold line-clamp-2" : "text-[14.5px] font-semibold"
-            }`}>
-              {task.title}
-            </p>
-            {isArchived && (
-              <span className="flex items-center gap-0.5 text-[11px] text-zinc-400 dark:text-zinc-500 flex-shrink-0">
-                <Archive className="w-3 h-3" />
-                Archived
-              </span>
-            )}
-            {task.confidence_score !== undefined && task.confidence_score !== null && (
-              <TaskConfidenceBadge confidence={task.confidence_score} />
-            )}
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <p className={`text-zinc-900 dark:text-zinc-100 leading-snug min-w-0 break-words tracking-[-0.012em] ${
+                isSubtask ? "text-[13px] font-medium" : compact ? "text-[13px] font-semibold line-clamp-2" : "text-[14.5px] font-semibold"
+              }`}>
+                {task.title}
+              </p>
+              <IntegrationLinkBadge taskId={task.id} />
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {isArchived && (
+                <span className="flex items-center gap-0.5 text-[11px] text-zinc-400 dark:text-zinc-500">
+                  <Archive className="w-3 h-3" />
+                  Archived
+                </span>
+              )}
+              {task.confidence_score !== undefined && task.confidence_score !== null && (
+                <TaskConfidenceBadge confidence={task.confidence_score} />
+              )}
+              {/* Context menu button */}
+              <div className="relative">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
+                  className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 opacity-0 group-hover:opacity-100 transition-opacity rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </button>
+                {showMenu && (
+                  <div
+                    className="absolute right-0 top-full mt-1 w-40 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-xl z-20 py-1"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      onClick={handleLinkTo}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    >
+                      <Link2 className="w-4 h-4" />
+                      Link to...
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Description */}

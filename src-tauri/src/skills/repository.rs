@@ -620,6 +620,7 @@ mod tests {
                 approval_mode TEXT NOT NULL DEFAULT 'notify',
                 enabled INTEGER NOT NULL DEFAULT 1,
                 shared INTEGER NOT NULL DEFAULT 0,
+                is_builtin INTEGER NOT NULL DEFAULT 0,
                 owner_id TEXT,
                 category TEXT,
                 icon TEXT,
@@ -664,6 +665,8 @@ mod tests {
             category: Some("custom".to_string()),
             icon: Some("⚡".to_string()),
             tags: Some(vec!["test".to_string()]),
+            is_builtin: false,
+            shared: false,
         };
 
         let skill = create_skill(&conn, &input).unwrap();
@@ -690,6 +693,8 @@ mod tests {
             category: Some("productivity".to_string()),
             icon: None,
             tags: None,
+            is_builtin: false,
+            shared: false,
         }).unwrap();
 
         create_skill(&conn, &CreateSkillInput {
@@ -703,6 +708,8 @@ mod tests {
             category: Some("custom".to_string()),
             icon: None,
             tags: None,
+            is_builtin: false,
+            shared: false,
         }).unwrap();
 
         let all = list_skills(&conn, &SkillFilters::default()).unwrap();
@@ -731,6 +738,8 @@ mod tests {
             category: None,
             icon: None,
             tags: None,
+            is_builtin: false,
+            shared: false,
         }).unwrap();
 
         let run = create_skill_run(&conn, &CreateSkillRunInput {

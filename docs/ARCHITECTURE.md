@@ -542,6 +542,111 @@ UI: subtle green checkmark + skill name (only on completion)
 
 ---
 
+### External Integrations
+
+Phase 5 adds a unified framework for connecting GitHub, Jira, Slack and other external services.
+
+**Data Flow (OAuth Connection):**
+```
+User clicks "Connect" on integration card
+  │
+  ▼
+SetupWizard: shows prerequisites, step-by-step instructions
+  │
+  ▼
+start_oauth_flow command: generate auth URL, store state in memory HashMap
+  │
+  ▼
+Open browser → User authorizes → Redirect to localhost:8765/oauth/callback
+  │
+  ▼
+handle_oauth_callback: exchange code for tokens, create integration record
+  │
+  ▼
+Integration appears in "Connected" section
+```
+
+**Data Flow (Sync):**
+```
+User clicks "Sync" or sync_interval triggers
+  │
+  ▼
+sync_integration command: get IntegrationProvider for type
+  │
+  ▼
+provider.fetch_data(&integration): API calls to GitHub/Jira/Slack
+  │
+  ▼
+Returns FetchResult { items: Vec<FetchedItem>, errors: Vec<String> }
+  │
+  ▼
+Upsert items into integration_cache table
+  │
+  ▼
+Update integration.last_sync timestamp
+```
+
+**Data Flow (Task Linking):**
+```
+User opens LinkPicker for a task
+  │
+  ▼
+Fetch cached items from connected integrations
+  │
+  ▼
+User searches and selects external item (issue/PR/ticket)
+  │
+  ▼
+create_integration_link: creates bidirectional link record
+  │
+  ▼
+IntegrationLinkBadge shows on task card
+```
+
+**Tables:**
+- `integrations`: Connected services (type, name, config JSON with encrypted tokens, autonomy_mode, status, last_sync, error_message)
+- `integration_cache`: Fetched external data (integration_id, external_type, external_id, external_url, data JSON, synced_at)
+- `integration_links`: Task↔External mappings (local_type, local_id, external_type, external_id, sync_enabled)
+
+**IntegrationProvider Trait:**
+```rust
+#[async_trait]
+pub trait IntegrationProvider: Send + Sync {
+    fn integration_type(&self) -> &'static str;
+    fn auth_url(&self, state: &str, redirect_uri: &str) -> Result<(String, Option<String>), String>;
+    async fn exchange_token(&self, code: &str, redirect_uri: &str, code_verifier: Option<&str>) -> Result<OAuthTokenResponse, String>;
+    async fn refresh_token(&self, refresh_token: &str) -> Result<OAuthTokenResponse, String>;
+    async fn fetch_data(&self, integration: &Integration) -> Result<FetchResult, String>;
+    fn get_scopes(&self) -> Vec<&'static str>;
+    fn validate_config(&self, config: &IntegrationConfig) -> Result<(), String>;
+}
+```
+
+**MCP Server Permissions:**
+```rust
+struct McpPermissions {
+    read_tasks: bool,        // default true
+    read_meetings: bool,     // default true  
+    read_projects: bool,     // default true
+    create_task: bool,       // default false
+    update_task: bool,       // default false
+    delete_task: bool,       // default false
+    create_meeting_note: bool, // default false
+    run_skill: bool,         // default false
+    rate_limit_per_minute: u32, // default 100
+}
+```
+
+**Key Files:**
+- Backend: `src-tauri/src/integrations/` (mod, models, repository, github, jira, slack, webhook)
+- Commands: `src-tauri/src/commands/integrations.rs` (18 commands), `settings.rs` (MCP permissions)
+- MCP: `src-tauri/meridian-mcp/src/handlers.rs` (write tools with permission checks, rate limiting)
+- Frontend: `src/components/integrations/` (IntegrationsPage, SetupWizard, *Settings, LinkPicker)
+- Hooks: `src/hooks/useIntegrations.ts`, `src/hooks/useIntegrationLinks.ts`
+- Store: `src/stores/integrationStore.ts`
+
+---
+
 ## Component Patterns
 
 ### TaskCard

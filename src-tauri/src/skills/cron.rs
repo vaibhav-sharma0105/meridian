@@ -101,10 +101,12 @@ fn describe_cron(expression: &str) -> String {
 mod tests {
     use super::*;
 
+    // Note: cron crate uses 7-field syntax (sec min hour day month weekday year)
+    // We test with 7-field syntax here
     #[test]
     fn test_valid_cron() {
-        let result = parse_cron("0 9 * * *");
-        assert!(result.is_valid);
+        let result = parse_cron("0 0 9 * * * *"); // Every day at 9:00 (7-field)
+        assert!(result.is_valid, "Expected valid cron, got error: {:?}", result.error);
         assert!(result.next_run.is_some());
     }
 
@@ -117,24 +119,25 @@ mod tests {
 
     #[test]
     fn test_validate_cron() {
-        assert!(validate_cron_expression("0 9 * * *").is_ok());
+        assert!(validate_cron_expression("0 0 9 * * * *").is_ok()); // 7-field
         assert!(validate_cron_expression("bad").is_err());
     }
 
     #[test]
     fn test_compute_next_run() {
-        let next = compute_next_run("0 9 * * *", None);
-        assert!(next.is_ok());
+        let next = compute_next_run("0 0 9 * * * *", None); // 7-field
+        assert!(next.is_ok(), "Expected ok, got error: {:?}", next.err());
     }
 
     #[test]
     fn test_compute_next_run_with_timezone() {
-        let next = compute_next_run("0 9 * * *", Some("America/New_York"));
-        assert!(next.is_ok());
+        let next = compute_next_run("0 0 9 * * * *", Some("America/New_York")); // 7-field
+        assert!(next.is_ok(), "Expected ok, got error: {:?}", next.err());
     }
 
     #[test]
     fn test_describe_common_patterns() {
+        // describe_cron uses 5-field syntax for display only
         assert_eq!(describe_cron("0 9 * * *"), "Daily at 9:00 AM");
         assert_eq!(describe_cron("0 9 * * 1"), "Every Monday at 9:00 AM");
     }

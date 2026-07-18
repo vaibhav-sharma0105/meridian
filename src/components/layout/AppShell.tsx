@@ -13,13 +13,14 @@ import IndexingBanner from "@/components/shared/IndexingBanner";
 import NotificationCenter from "@/components/notifications/NotificationCenter";
 import AISettings from "@/components/ai/AISettings";
 import ConnectionsSettings from "@/components/connections/ConnectionsSettings";
+import { IntegrationsPage, LinkPicker } from "@/components/integrations";
 import MigrationWizard from "@/components/settings/MigrationWizard";
 import { getNotifications, getMigrationStatus, queueEmbeddingMigration } from "@/lib/tauri";
 import { useNotificationStore } from "@/stores/notificationStore";
 import { useSync } from "@/hooks/useSync";
 
 export default function AppShell() {
-  const { sidebarOpen, rightPanelOpen, activeView, notificationCenterOpen, settingsOpen, settingsTab, setNotificationCenterOpen, setSettingsOpen, selectedTaskId } = useUIStore();
+  const { sidebarOpen, rightPanelOpen, activeView, notificationCenterOpen, settingsOpen, settingsTab, setNotificationCenterOpen, setSettingsOpen, selectedTaskId, linkPickerTaskId, setLinkPickerTaskId } = useUIStore();
   const { fetchProjects, activeProjectId } = useProjectStore();
   const { setNotifications } = useNotificationStore();
   const { tasks } = useTasks(activeProjectId);
@@ -74,10 +75,31 @@ export default function AppShell() {
 
       <CommandPalette />
       <NotificationCenter open={notificationCenterOpen} onClose={() => setNotificationCenterOpen(false)} />
-      <AISettings open={settingsOpen && settingsTab !== "connections"} onClose={() => setSettingsOpen(false)} />
+      <AISettings open={settingsOpen && settingsTab === "ai"} onClose={() => setSettingsOpen(false)} />
       <ConnectionsSettings open={settingsOpen && settingsTab === "connections"} onClose={() => setSettingsOpen(false)} runSync={runSync} isSyncing={isSyncing} />
+      {settingsOpen && settingsTab === "integrations" && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 overflow-y-auto py-8" onClick={() => setSettingsOpen(false)}>
+          <div className="relative w-full max-w-4xl bg-white dark:bg-zinc-900 rounded-xl shadow-2xl border border-zinc-200 dark:border-zinc-800 mx-4" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setSettingsOpen(false)}
+              className="absolute top-4 right-4 p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 z-10"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <IntegrationsPage />
+          </div>
+        </div>
+      )}
       <MigrationWizard open={showMigration} onClose={() => setShowMigration(false)} onComplete={() => setShowMigration(false)} />
       {selectedTask && <TaskEditModal task={selectedTask} />}
+      {linkPickerTaskId && (
+        <LinkPicker
+          taskId={linkPickerTaskId}
+          onClose={() => setLinkPickerTaskId(null)}
+        />
+      )}
     </div>
   );
 }
