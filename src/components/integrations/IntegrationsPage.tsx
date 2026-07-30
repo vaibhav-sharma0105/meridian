@@ -5,6 +5,8 @@ import {
   Settings2,
   Plug,
   Server,
+  Users,
+  Database,
   ChevronDown,
   ChevronRight,
   ExternalLink,
@@ -19,8 +21,12 @@ import { SetupWizard } from "./SetupWizard";
 import { GitHubSettings } from "./GitHubSettings";
 import { JiraSettings } from "./JiraSettings";
 import { SlackSettings } from "./SlackSettings";
+import { GoogleSettings } from "./GoogleSettings";
 import { MCPSettings } from "./MCPSettings";
 import { BackgroundJobsPanel } from "./BackgroundJobsPanel";
+import { TeamSettings } from "@/components/team/TeamSettings";
+import { ExportDialog } from "@/components/sync/ExportDialog";
+import { ImportDialog } from "@/components/sync/ImportDialog";
 import type { Integration } from "@/lib/tauri";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -69,6 +75,13 @@ const AVAILABLE_INTEGRATIONS: IntegrationTypeInfo[] = [
     name: "Google Sheets Relay",
     icon: "📊",
     description: "Import meeting data from Google Sheets",
+    category: "native",
+  },
+  {
+    type: "google",
+    name: "Google Workspace",
+    icon: "🔵",
+    description: "Sync team roster from Google Workspace Directory",
     category: "native",
   },
 ];
@@ -301,9 +314,13 @@ export function IntegrationsPage() {
   // State
   const [nativeExpanded, setNativeExpanded] = useState(true);
   const [mcpExpanded, setMcpExpanded] = useState(true);
+  const [teamDataExpanded, setTeamDataExpanded] = useState(true);
   const [showSetupWizard, setShowSetupWizard] = useState(false);
   const [setupType, setSetupType] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState<string | null>(null);
+  const [showTeamSettings, setShowTeamSettings] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
 
   // Data hooks
   const { data: integrations = [], isLoading } = useIntegrations();
@@ -461,6 +478,75 @@ export function IntegrationsPage() {
               onConnect={() => handleConnect("slack")}
               onSettings={() => handleSettings("slack")}
             />
+
+            {/* Google Workspace */}
+            <IntegrationListItem
+              info={AVAILABLE_INTEGRATIONS.find((i) => i.type === "google")!}
+              integration={getIntegration("google")}
+              isConnected={isIntegrationConnected("google")}
+              onConnect={() => handleConnect("google")}
+              onSettings={() => handleSettings("google")}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Team & Data Section */}
+      <div className="space-y-3">
+        <CategoryHeader
+          title="Team & Data"
+          description="Team roster and backup/restore your Meridian data"
+          icon={<Users className="w-5 h-5 text-emerald-500" />}
+          count={0}
+          expanded={teamDataExpanded}
+          onToggle={() => setTeamDataExpanded(!teamDataExpanded)}
+        />
+
+        {teamDataExpanded && (
+          <div className="space-y-2 ml-4 pl-4 border-l-2 border-zinc-200 dark:border-zinc-700">
+            <div className="flex items-center justify-between p-4 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900">
+              <div className="flex items-center gap-3">
+                <Users className="w-5 h-5 text-zinc-400" />
+                <div>
+                  <div className="font-medium text-zinc-900 dark:text-zinc-100">Team Roster</div>
+                  <div className="text-xs text-zinc-500 mt-0.5">
+                    Manage team members, sync from Slack/Google, assignee suggestions
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowTeamSettings(true)}
+                className="px-3 py-1.5 text-sm text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
+              >
+                Manage
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between p-4 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900">
+              <div className="flex items-center gap-3">
+                <Database className="w-5 h-5 text-zinc-400" />
+                <div>
+                  <div className="font-medium text-zinc-900 dark:text-zinc-100">Backup & Data</div>
+                  <div className="text-xs text-zinc-500 mt-0.5">
+                    Export an encrypted backup, or import/restore from one
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowExportDialog(true)}
+                  className="px-3 py-1.5 text-sm text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
+                >
+                  Export
+                </button>
+                <button
+                  onClick={() => setShowImportDialog(true)}
+                  className="px-3 py-1.5 text-sm text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
+                >
+                  Import
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -553,8 +639,36 @@ export function IntegrationsPage() {
           onClose={() => setShowSettings(null)}
         />
       )}
+      {showSettings === "google" && (
+        <GoogleSettings
+          integration={getIntegration("google")}
+          onClose={() => setShowSettings(null)}
+        />
+      )}
       {showSettings === "mcp" && (
         <MCPSettings onClose={() => setShowSettings(null)} />
+      )}
+
+      {showTeamSettings && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setShowTeamSettings(false)}
+        >
+          <div
+            className="w-full max-w-5xl h-[85vh] bg-white dark:bg-zinc-900 rounded-xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <TeamSettings onClose={() => setShowTeamSettings(false)} />
+          </div>
+        </div>
+      )}
+
+      {showExportDialog && <ExportDialog onClose={() => setShowExportDialog(false)} />}
+      {showImportDialog && (
+        <ImportDialog
+          onClose={() => setShowImportDialog(false)}
+          onSuccess={() => setShowImportDialog(false)}
+        />
       )}
     </div>
   );

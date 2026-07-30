@@ -82,6 +82,7 @@ const CHECKSUM_ORDER: &[&str] = &[
     "data/tasks.json",
     "data/meetings.json",
     "data/team_members.json",
+    "data/pattern_contributions.json",
     "manifest.json",
 ];
 
@@ -316,13 +317,63 @@ pub fn preview_import(
     })
 }
 
-pub fn import_data(
+const IMPORT_TOTAL_STEPS: u32 = 8;
+
+fn read_vector_snapshots(
+    archive: &mut ZipArchive<Cursor<Vec<u8>>>,
+    included: bool,
+) -> Result<Vec<(String, Vec<u8>)>, String> {
+    if !included {
+        return Ok(Vec::new());
+    }
+
+    let names: Vec<String> = archive
+        .file_names()
+        .filter(|n| n.starts_with("vectors/qdrant_snapshot/") && n.ends_with(".snapshot"))
+        .map(|s| s.to_string())
+        .collect();
+
+    let mut result = Vec::new();
+    for name in names {
+        let collection = name
+            .trim_start_matches("vectors/qdrant_snapshot/")
+            .trim_end_matches(".snapshot")
+            .to_string();
+        let mut bytes = Vec::new();
+        archive
+            .by_name(&name)
+            .map_err(|e| e.to_string())?
+            .read_to_end(&mut bytes)
+            .map_err(|e| e.to_string())?;
+        result.push((collection, bytes));
+    }
+    Ok(result)
+}
+
+/// Applies everything that touches `conn`: parses the archive, runs the SQL
+/// transaction, and pulls out any vector snapshot bytes (without recovering
+/// them into Qdrant yet — that's async and `conn` can't cross an `.await` in
+/// a `#[tauri::command]`'s future, same reasoning as
+/// `sync::export::build_local_entries`'s doc comment). Call sites inside a
+/// Tauri command should call this directly (inside the DB lock scope), then
+/// drop the lock and call `finish_import` for the Qdrant step.
+pub fn apply_local_import(
     conn: &Connection,
     archive_path: &Path,
     options: &ImportOptions,
     conflict_resolutions: &HashMap<String, ConflictResolution>,
-) -> Result<ImportResult, String> {
+    on_progress: Option<super::export::ProgressFn>,
+) -> Result<(ImportResult, Vec<(String, Vec<u8>)>), String> {
+    let mut step_count = 0u32;
+    let mut report = |label: &str| {
+        step_count += 1;
+        if let Some(cb) = on_progress {
+            cb(label, step_count, IMPORT_TOTAL_STEPS);
+        }
+    };
+
     let (mut archive, manifest) = open_archive(archive_path, options.password.as_deref())?;
+    report("Reading archive");
 
     // Read every payload up front — easier than holding archive borrows
     // across the transaction below.
@@ -336,6 +387,12 @@ pub fn import_data(
         "data/team_members.json",
         manifest.contents.team_members,
     )?;
+    let pattern_contributions = read_json_entry::<crate::patterns::models::PatternContribution>(
+        &mut archive,
+        "data/pattern_contributions.json",
+        manifest.contents.patterns,
+    )?;
+    let vector_snapshots = read_vector_snapshots(&mut archive, manifest.contents.vectors)?;
 
     let mut result = ImportResult {
         success: true,
@@ -353,6 +410,7 @@ pub fn import_data(
             Err(e) => return Err(format!("Failed to create pre-import backup: {}", e)),
         }
     }
+    report("Backing up current data");
 
     let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
 
@@ -390,6 +448,7 @@ pub fn import_data(
             }
         }
     }
+    report("Projects");
 
     if let Some(tasks) = &tasks {
         for task in tasks {
@@ -405,6 +464,7 @@ pub fn import_data(
             }
         }
     }
+    report("Tasks");
 
     if let Some(meetings) = &meetings {
         for meeting in meetings {
@@ -420,6 +480,7 @@ pub fn import_data(
             }
         }
     }
+    report("Meetings");
 
     if let Some(team_members) = &team_members {
         for member in team_members {
@@ -436,12 +497,21 @@ pub fn import_data(
         }
     }
 
+    report("Team Members");
+
+    if let Some(contributions) = &pattern_contributions {
+        match crate::patterns::repository::merge_team_contributions(&tx, contributions) {
+            Ok(merged) => result.imported_count += merged,
+            Err(e) => result.errors.push(format!("Failed to merge team patterns: {}", e)),
+        }
+    }
+
     result.conflict_count = result.conflicts.len() as i32;
     result.success = result.errors.is_empty();
 
     if result.success {
         tx.commit().map_err(|e| e.to_string())?;
-        Ok(result)
+        Ok((result, vector_snapshots))
     } else {
         // Dropping `tx` without committing triggers an automatic ROLLBACK.
         let backup_note = match &result.backup_path {
@@ -457,6 +527,56 @@ pub fn import_data(
     }
 }
 
+/// Recovers Qdrant collections from the snapshot bytes `apply_local_import`
+/// pulled out of the archive — async, and deliberately takes no `conn`
+/// (SQL data is already committed by this point; vector recovery runs
+/// after, on a best-effort basis).
+pub async fn finish_import(
+    mut result: ImportResult,
+    vector_snapshots: Vec<(String, Vec<u8>)>,
+    on_progress: Option<super::export::ProgressFn<'_>>,
+) -> ImportResult {
+    if !vector_snapshots.is_empty() {
+        let qdrant = crate::vectors::qdrant::QdrantClient::new(None);
+        if qdrant.is_available().await {
+            for (collection, bytes) in &vector_snapshots {
+                if let Err(e) = qdrant.import_snapshot(collection, bytes).await {
+                    result
+                        .errors
+                        .push(format!("Failed to restore vectors for '{}': {}", collection, e));
+                }
+            }
+        } else {
+            result.errors.push(
+                "Vector snapshots were in the archive but Qdrant isn't running — skipped restoring them"
+                    .to_string(),
+            );
+        }
+    }
+    if let Some(cb) = on_progress {
+        cb("Vectors", 7, IMPORT_TOTAL_STEPS);
+    }
+    if let Some(cb) = on_progress {
+        cb("Done", 8, IMPORT_TOTAL_STEPS);
+    }
+    result
+}
+
+/// Convenience wrapper combining `apply_local_import` + `finish_import` for
+/// callers that don't need the `Send`/`conn` split (tests, or anything not
+/// called through a `#[tauri::command]`).
+pub async fn import_data(
+    conn: &Connection,
+    archive_path: &Path,
+    options: &ImportOptions,
+    conflict_resolutions: &HashMap<String, ConflictResolution>,
+    on_progress: Option<super::export::ProgressFn<'_>>,
+) -> Result<ImportResult, String> {
+    let (result, vector_snapshots) =
+        apply_local_import(conn, archive_path, options, conflict_resolutions, on_progress)?;
+    Ok(finish_import(result, vector_snapshots, on_progress).await)
+}
+
 fn import_project(
     conn: &Connection,
     project: &Project,
@@ -466,7 +586,13 @@ fn import_project(
 
     if let Ok(Some(_)) = projects_repo::get_project(conn, &project.id) {
         match resolution {
-            ConflictResolution::Skip | ConflictResolution::Ask => return Ok(false),
+            ConflictResolution::Skip => return Ok(false),
+            ConflictResolution::Ask => {
+                return Err(format!(
+                    "Project {} conflicts with an existing project and was never resolved to skip/overwrite",
+                    project.id
+                ))
+            }
             ConflictResolution::Overwrite => {
                 let input = UpdateProjectInput {
                     id: project.id.clone(),
@@ -498,7 +624,13 @@ fn import_project(
 fn import_task(conn: &Connection, task: &Task, resolution: ConflictResolution) -> Result<bool, String> {
     if task_exists(conn, &task.id)? {
         match resolution {
-            ConflictResolution::Skip | ConflictResolution::Ask => return Ok(false),
+            ConflictResolution::Skip => return Ok(false),
+            ConflictResolution::Ask => {
+                return Err(format!(
+                    "Task {} conflicts with an existing task and was never resolved to skip/overwrite",
+                    task.id
+                ))
+            }
             ConflictResolution::Overwrite => {
                 conn.execute(
                     "UPDATE tasks SET title = ?1, description = ?2, status = ?3, priority = ?4,
@@ -550,7 +682,13 @@ fn import_meeting(
 ) -> Result<bool, String> {
     if meeting_exists(conn, &meeting.id)? {
         match resolution {
-            ConflictResolution::Skip | ConflictResolution::Ask => return Ok(false),
+            ConflictResolution::Skip => return Ok(false),
+            ConflictResolution::Ask => {
+                return Err(format!(
+                    "Meeting {} conflicts with an existing meeting and was never resolved to skip/overwrite",
+                    meeting.id
+                ))
+            }
             ConflictResolution::Overwrite => {
                 conn.execute(
                     "UPDATE meetings SET project_id = ?1, title = ?2, platform = ?3, raw_transcript = ?4,
@@ -611,7 +749,13 @@ fn import_team_member(
 ) -> Result<bool, String> {
     if let Ok(Some(_)) = team_repo::get_team_member(conn, &member.id) {
         match resolution {
-            ConflictResolution::Skip | ConflictResolution::Ask => return Ok(false),
+            ConflictResolution::Skip => return Ok(false),
+            ConflictResolution::Ask => {
+                return Err(format!(
+                    "Team member {} conflicts with an existing team member and was never resolved to skip/overwrite",
+                    member.id
+                ))
+            }
             ConflictResolution::Overwrite => {
                 let input = crate::team::models::UpdateTeamMemberInput {
                     id: member.id.clone(),
@@ -639,18 +783,6 @@ fn import_team_member(
         team_repo::create_team_member(conn, &input)?;
     }
     Ok(true)
-}
-
-pub fn import_skill_standalone(_conn: &Connection, file_path: &Path) -> Result<crate::skills::models::Skill, String> {
-    let content = std::fs::read_to_string(file_path).map_err(|e| e.to_string())?;
-
-    // Try JSON format
-    if let Ok(skill) = serde_json::from_str::<crate::skills::models::Skill>(&content) {
-        // For now, return the parsed skill - actual import would need to create it
-        return Ok(skill);
-    }
-
-    Err("Invalid skill file format".to_string())
 }
 
 #[cfg(test)]
@@ -730,6 +862,25 @@ mod tests {
                 last_synced_at TEXT,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(source, source_id)
+            );
+            CREATE TABLE pattern_models (
+                id TEXT PRIMARY KEY,
+                pattern_type TEXT NOT NULL,
+                project_id TEXT,
+                model_data TEXT NOT NULL,
+                confidence REAL NOT NULL DEFAULT 0.0,
+                observation_count INTEGER NOT NULL DEFAULT 0,
+                last_updated TEXT NOT NULL DEFAULT (datetime('now')),
+                scope TEXT DEFAULT 'personal',
+                contributor_count INTEGER DEFAULT 1,
+                UNIQUE(pattern_type, project_id)
+            );
+            CREATE TABLE pattern_contributions (
+                id TEXT PRIMARY KEY,
+                pattern_type TEXT NOT NULL,
+                observation_hash TEXT NOT NULL,
+                contributed_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(pattern_type, observation_hash)
             );"
         ).unwrap();
     }
@@ -769,8 +920,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_encrypted_round_trip_imports_all_entity_types() {
+    #[tokio::test]
+    async fn test_encrypted_round_trip_imports_all_entity_types() {
         let source = seed_source_db();
         let tmp = tempfile::NamedTempFile::new().unwrap();
 
@@ -778,7 +929,7 @@ mod tests {
             password: Some("s3cret-pass".to_string()),
             ..Default::default()
         };
-        export_data(&source, tmp.path(), &export_options).unwrap();
+        export_data(&source, tmp.path(), &export_options, None).await.unwrap();
 
         let dest = Connection::open_in_memory().unwrap();
         setup_schema(&dest);
@@ -788,7 +939,8 @@ mod tests {
             tmp.path(),
             &default_import_options(Some("s3cret-pass")),
             &HashMap::new(),
-        ).unwrap();
+            None,
+        ).await.unwrap();
 
         assert!(result.success, "errors: {:?}", result.errors);
         assert_eq!(result.imported_count, 4); // project + task + meeting + team member
@@ -808,8 +960,8 @@ mod tests {
         assert_eq!(title, "Kickoff");
     }
 
-    #[test]
-    fn test_wrong_password_is_rejected() {
+    #[tokio::test]
+    async fn test_wrong_password_is_rejected() {
         let source = seed_source_db();
         let tmp = tempfile::NamedTempFile::new().unwrap();
 
@@ -817,7 +969,7 @@ mod tests {
             password: Some("correct-password".to_string()),
             ..Default::default()
         };
-        export_data(&source, tmp.path(), &export_options).unwrap();
+        export_data(&source, tmp.path(), &export_options, None).await.unwrap();
 
         let dest = Connection::open_in_memory().unwrap();
         setup_schema(&dest);
@@ -827,30 +979,31 @@ mod tests {
             tmp.path(),
             &default_import_options(Some("wrong-password")),
             &HashMap::new(),
-        );
+            None,
+        ).await;
         assert!(result.is_err());
     }
 
-    #[test]
-    fn test_unencrypted_export_still_imports() {
+    #[tokio::test]
+    async fn test_unencrypted_export_still_imports() {
         let source = seed_source_db();
         let tmp = tempfile::NamedTempFile::new().unwrap();
 
-        export_data(&source, tmp.path(), &ExportOptions::default()).unwrap();
+        export_data(&source, tmp.path(), &ExportOptions::default(), None).await.unwrap();
 
         let dest = Connection::open_in_memory().unwrap();
         setup_schema(&dest);
 
-        let result = import_data(&dest, tmp.path(), &default_import_options(None), &HashMap::new()).unwrap();
+        let result = import_data(&dest, tmp.path(), &default_import_options(None), &HashMap::new(), None).await.unwrap();
         assert!(result.success);
         assert_eq!(result.imported_count, 4);
     }
 
-    #[test]
-    fn test_replace_mode_wipes_existing_local_data_first() {
+    #[tokio::test]
+    async fn test_replace_mode_wipes_existing_local_data_first() {
         let source = seed_source_db();
         let tmp = tempfile::NamedTempFile::new().unwrap();
-        export_data(&source, tmp.path(), &ExportOptions::default()).unwrap();
+        export_data(&source, tmp.path(), &ExportOptions::default(), None).await.unwrap();
 
         let dest = Connection::open_in_memory().unwrap();
         setup_schema(&dest);
@@ -863,7 +1016,7 @@ mod tests {
         let mut options = default_import_options(None);
         options.mode = ImportMode::Replace;
 
-        let result = import_data(&dest, tmp.path(), &options, &HashMap::new()).unwrap();
+        let result = import_data(&dest, tmp.path(), &options, &HashMap::new(), None).await.unwrap();
         assert!(result.success, "errors: {:?}", result.errors);
 
         let local_still_present: i32 = dest
@@ -881,11 +1034,11 @@ mod tests {
         assert_eq!(imported_present, 1);
     }
 
-    #[test]
-    fn test_merge_mode_keeps_existing_unrelated_local_data() {
+    #[tokio::test]
+    async fn test_merge_mode_keeps_existing_unrelated_local_data() {
         let source = seed_source_db();
         let tmp = tempfile::NamedTempFile::new().unwrap();
-        export_data(&source, tmp.path(), &ExportOptions::default()).unwrap();
+        export_data(&source, tmp.path(), &ExportOptions::default(), None).await.unwrap();
 
         let dest = Connection::open_in_memory().unwrap();
         setup_schema(&dest);
@@ -894,7 +1047,7 @@ mod tests {
             [],
         ).unwrap();
 
-        let result = import_data(&dest, tmp.path(), &default_import_options(None), &HashMap::new()).unwrap();
+        let result = import_data(&dest, tmp.path(), &default_import_options(None), &HashMap::new(), None).await.unwrap();
         assert!(result.success);
 
         let local_still_present: i32 = dest
@@ -907,11 +1060,11 @@ mod tests {
         assert_eq!(local_still_present, 1, "Merge mode must not touch unrelated local data");
     }
 
-    #[test]
-    fn test_preview_import_detects_conflicts() {
+    #[tokio::test]
+    async fn test_preview_import_detects_conflicts() {
         let source = seed_source_db();
         let tmp = tempfile::NamedTempFile::new().unwrap();
-        export_data(&source, tmp.path(), &ExportOptions::default()).unwrap();
+        export_data(&source, tmp.path(), &ExportOptions::default(), None).await.unwrap();
 
         // Destination already has the same project id -> should be reported as a conflict.
         let dest = Connection::open_in_memory().unwrap();
@@ -925,11 +1078,11 @@ mod tests {
         assert!(preview.conflicts.iter().any(|c| c.entity_type == "project" && c.entity_id == "p1"));
     }
 
-    #[test]
-    fn test_corrupted_archive_fails_checksum_verification() {
+    #[tokio::test]
+    async fn test_corrupted_archive_fails_checksum_verification() {
         let source = seed_source_db();
         let tmp = tempfile::NamedTempFile::new().unwrap();
-        export_data(&source, tmp.path(), &ExportOptions::default()).unwrap();
+        export_data(&source, tmp.path(), &ExportOptions::default(), None).await.unwrap();
 
         // Flip a byte inside the zip's local file data (well past the zip
         // header) to corrupt content without breaking the zip container
@@ -942,7 +1095,64 @@ mod tests {
         let dest = Connection::open_in_memory().unwrap();
         setup_schema(&dest);
 
-        let result = import_data(&dest, tmp.path(), &default_import_options(None), &HashMap::new());
+        let result = import_data(&dest, tmp.path(), &default_import_options(None), &HashMap::new(), None).await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_import_reports_progress_including_backup_and_commit() {
+        let source = seed_source_db();
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        export_data(&source, tmp.path(), &ExportOptions::default(), None).await.unwrap();
+
+        let dest = Connection::open_in_memory().unwrap();
+        setup_schema(&dest);
+
+        let steps: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+        let callback = |label: &str, _current: u32, _total: u32| {
+            steps.lock().unwrap().push(label.to_string());
+        };
+
+        import_data(
+            &dest,
+            tmp.path(),
+            &default_import_options(None),
+            &HashMap::new(),
+            Some(&callback),
+        ).await.unwrap();
+
+        let recorded = steps.into_inner().unwrap();
+        assert_eq!(
+            recorded,
+            vec!["Reading archive", "Backing up current data", "Projects", "Tasks", "Meetings", "Team Members", "Vectors", "Done"]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_shared_patterns_round_trip_through_export_and_import() {
+        let source = seed_source_db();
+        source.execute(
+            "INSERT INTO pattern_contributions (id, pattern_type, observation_hash) VALUES
+             ('pc1', 'smart_defaults', 'hash-a'), ('pc2', 'smart_defaults', 'hash-b')",
+            [],
+        ).unwrap();
+
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let export_options = ExportOptions { include_patterns: true, ..ExportOptions::default() };
+        let export_result = export_data(&source, tmp.path(), &export_options, None).await.unwrap();
+        assert!(export_result.manifest.contents.patterns);
+        assert_eq!(export_result.manifest.contents.pattern_count, 2);
+
+        let dest = Connection::open_in_memory().unwrap();
+        setup_schema(&dest);
+
+        let result = import_data(&dest, tmp.path(), &default_import_options(None), &HashMap::new(), None)
+            .await
+            .unwrap();
+        assert!(result.success, "errors: {:?}", result.errors);
+
+        let team_model = crate::patterns::repository::get_team_pattern_model_by_type(&dest, "smart_defaults").unwrap();
+        assert_eq!(team_model.scope, "team");
+        assert_eq!(team_model.contributor_count, 2);
     }
 }

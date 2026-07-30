@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { X, Save, Archive, ArchiveRestore, Trash2, Calendar, User, Tag, FolderInput, Link2, ExternalLink, Github, Unlink } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 import TaskConfidenceBadge from "./TaskConfidenceBadge";
-import AssigneeChipInput, { parseAssignees } from "./AssigneeChipInput";
+import { AssigneePicker } from "./AssigneePicker";
 import { KANBAN_COLUMNS } from "@/lib/constants";
 import { parseTags } from "@/lib/validators";
 import type { Task } from "@/lib/tauri";
@@ -46,7 +46,7 @@ const labelCls =
 
 export default function TaskEditModal({ task }: Props) {
   const { t } = useTranslation();
-  const { tasks: allProjectTasks, updateTask, archiveTask, unarchiveTask, deleteTask } = useTasks(task.project_id, {});
+  const { updateTask, archiveTask, unarchiveTask, deleteTask } = useTasks(task.project_id, {});
   const { meetings } = useMeetings(task.project_id);
   const { setSelectedTask, setLinkPickerTaskId } = useUIStore();
   const { data: integrationLinks = [] } = useLinksForTask(task.id);
@@ -55,10 +55,6 @@ export default function TaskEditModal({ task }: Props) {
 
   const { projects } = useProjects();
   const otherProjects = projects.filter((p) => p.id !== task.project_id && !p.archived_at);
-
-  const assigneeSuggestions = Array.from(
-    new Set(allProjectTasks.flatMap((t) => parseAssignees(t.assignee ?? "")).filter(Boolean))
-  );
 
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description ?? "");
@@ -198,10 +194,12 @@ export default function TaskEditModal({ task }: Props) {
             <label className={labelCls}>
               <User className="inline w-3 h-3 mr-1 -mt-px" />{t("tasks.assignee")}
             </label>
-            <AssigneeChipInput
+            <AssigneePicker
               value={assignee}
-              onChange={setAssignee}
-              suggestions={assigneeSuggestions}
+              onChange={(value) => setAssignee(value)}
+              taskTitle={title}
+              taskDescription={description}
+              projectId={task.project_id}
             />
           </div>
 

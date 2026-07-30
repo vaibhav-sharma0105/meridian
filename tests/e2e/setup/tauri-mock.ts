@@ -222,7 +222,7 @@ export function buildTauriMockScript(overrides: Record<string, unknown> = {}) {
     process_pending_embeddings: { worker_running: false, jobs_processed: 0, pending_jobs: 0, running_jobs: 0 },
     // Pattern Learning
     get_pattern_summaries: [],
-    get_pattern_model: { id: "pm-1", pattern_type: "workflow_sequence", project_id: null, model_data: "{}", confidence: 0.5, observation_count: 10, last_updated: new Date().toISOString() },
+    get_pattern_model: { id: "pm-1", pattern_type: "workflow_sequence", project_id: null, model_data: "{}", confidence: 0.5, observation_count: 10, last_updated: new Date().toISOString(), scope: "personal", contributor_count: 1 },
     get_workflow_suggestions: [],
     dismiss_workflow_suggestion: null,
     get_smart_defaults: { suggested_priority: null, priority_confidence: 0, suggested_assignee: null, assignee_confidence: 0, source: "none" },
@@ -232,6 +232,11 @@ export function buildTauriMockScript(overrides: Record<string, unknown> = {}) {
     import_learning_data: 0,
     reset_pattern_category: true,
     reset_all_learning: 0,
+    get_pattern_contribution_enabled: false,
+    set_pattern_contribution_enabled: null,
+    get_use_team_patterns_enabled: true,
+    set_use_team_patterns_enabled: null,
+    get_team_pattern_summaries: [],
     // Suggestions
     get_pending_suggestions: [],
     accept_suggestion: null,
@@ -358,12 +363,15 @@ export function buildTauriMockScript(overrides: Record<string, unknown> = {}) {
       { member: { id: "tm-1", name: "Alice Smith", email: "alice@example.com", avatar_url: null, source: "manual", source_id: null, role: "member", expertise: ["frontend"], workload_score: 0.3, metadata: null, last_synced_at: null, created_at: new Date().toISOString() }, score: 0.8, confidence: "high", reason: "Matches task expertise", factors: { pattern_score: 0.7, workload_score: 0.7, expertise_score: 0.9, recency_score: 0.6 } },
     ],
     sync_team_from_slack: { added: 2, updated: 0, total: 2 },
+    sync_team_from_google: { added: 1, updated: 0, total: 1 },
+    record_assignee_selection: null,
     // Sync (Export/Import)
+    pick_export_save_path: "/tmp/meridian-export-2026-01-01.zip",
+    pick_import_file_path: "/tmp/meridian-export-2026-01-01.zip",
+    restore_from_backup: null,
     export_all_data: { file_path: "/tmp/export.zip", file_size: 12345, manifest: { format_version: "1.0.0", app_version: "0.1.0", created_at: new Date().toISOString(), contents: { projects: true, tasks: true, meetings: true, skills: true, patterns: true, documents: false, team_members: true, settings: false, vectors: false, project_count: 2, task_count: 5, meeting_count: 1, skill_count: 3, pattern_count: 1, document_count: 0, team_member_count: 2 } } },
-    export_single_skill: "/tmp/skill.json",
     preview_import_data: { manifest: { format_version: "1.0.0", app_version: "0.1.0", created_at: new Date().toISOString(), contents: { projects: true, tasks: true, meetings: true, skills: false, patterns: false, documents: false, team_members: false, settings: false, vectors: false, project_count: 1, task_count: 3, meeting_count: 0, skill_count: 0, pattern_count: 0, document_count: 0, team_member_count: 0 } }, conflicts: [], new_items: { projects: 1, tasks: 3 } },
     import_all_data: { success: true, imported_count: 4, skipped_count: 0, conflict_count: 0, errors: [], conflicts: [] },
-    import_single_skill: { id: "skill-imported", name: "Imported Skill", description: null, trigger_type: "manual", trigger_config: null, context_config: null, action_config: null, approval_mode: "notify", enabled: false, shared: false, owner_id: null, category: null, icon: null, tags: null, next_run_at: null, cloned_from_id: null, is_builtin: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
     ...overrides,
   };
 

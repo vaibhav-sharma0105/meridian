@@ -242,7 +242,7 @@ fn determine_primary_reason(factors: &AssigneeFactors) -> String {
     max_factor.map(|(_, reason)| reason.to_string()).unwrap_or_else(|| "Suggested".to_string())
 }
 
-fn extract_keywords(title: &str, description: Option<&str>) -> Vec<String> {
+pub(crate) fn extract_keywords(title: &str, description: Option<&str>) -> Vec<String> {
     let mut text = title.to_lowercase();
     if let Some(desc) = description {
         text.push(' ');

@@ -14,6 +14,9 @@ pub struct PatternSummary {
     pub confidence: f64,
     pub observation_count: i64,
     pub last_updated: String,
+    /// Only populated for team-scope summaries (via get_team_pattern_summaries).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contributor_count: Option<i64>,
 }
 
 #[tauri::command]
@@ -31,6 +34,7 @@ pub async fn get_pattern_summaries(
             confidence: m.confidence,
             observation_count: m.observation_count,
             last_updated: m.last_updated,
+            contributor_count: None,
         })
         .collect())
 }
@@ -330,4 +334,47 @@ pub async fn reset_all_learning(state: State<'_, AppState>) -> Result<usize, Str
     let models_deleted = repo::delete_all_pattern_models(&conn)?;
     let _ = repo::delete_all_observations(&conn)?;
     Ok(models_deleted)
+}
+
+// ─── Shared Patterns ────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn get_pattern_contribution_enabled(state: State<'_, AppState>) -> Result<bool, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    Ok(repo::get_contribution_enabled(&conn))
+}
+
+#[tauri::command]
+pub async fn set_pattern_contribution_enabled(enabled: bool, state: State<'_, AppState>) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    repo::set_contribution_enabled(&conn, enabled)
+}
+
+#[tauri::command]
+pub async fn get_use_team_patterns_enabled(state: State<'_, AppState>) -> Result<bool, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    Ok(repo::get_use_team_patterns_enabled(&conn))
+}
+
+#[tauri::command]
+pub async fn set_use_team_patterns_enabled(enabled: bool, state: State<'_, AppState>) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    repo::set_use_team_patterns_enabled(&conn, enabled)
+}
+
+#[tauri::command]
+pub async fn get_team_pattern_summaries(state: State<'_, AppState>) -> Result<Vec<PatternSummary>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let models = repo::get_team_pattern_models(&conn)?;
+
+    Ok(models
+        .into_iter()
+        .map(|m| PatternSummary {
+            pattern_type: m.pattern_type,
+            confidence: m.confidence,
+            observation_count: m.observation_count,
+            last_updated: m.last_updated,
+            contributor_count: Some(m.contributor_count),
+        })
+        .collect())
 }

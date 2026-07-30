@@ -30,6 +30,19 @@ pub struct PatternModel {
     pub confidence: f64,
     pub observation_count: i64,
     pub last_updated: String,
+    /// 'personal' (default) or 'team' — team-scope models are built from
+    /// anonymized `pattern_contributions` merged in on import, never from
+    /// this device's own observations directly.
+    pub scope: String,
+    /// Only meaningful for team-scope models: how many distinct import
+    /// events have contributed matching anonymized observations.
+    pub contributor_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PatternContribution {
+    pub pattern_type: String,
+    pub observation_hash: String,
 }
 
 #[derive(Debug, Deserialize)]

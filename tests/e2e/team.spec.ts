@@ -61,3 +61,63 @@ test.describe("Export/Import", () => {
     }
   });
 });
+
+test.describe("Team Roster and Backup reachability (via Integrations panel)", () => {
+  test("Team Roster, Export, and Import are all reachable from the Integrations panel", async ({ mockedPage: page }) => {
+    // These lived only in unmounted components before — this test exists
+    // specifically to prevent that regressing silently again.
+    await page.locator('button[title="Integrations"]').click();
+    await expect(page.getByText("Integrations & Connections")).toBeVisible({ timeout: 3000 });
+
+    await expect(page.getByText("Team & Data")).toBeVisible();
+
+    await page.getByRole("button", { name: "Manage" }).click();
+    await expect(page.getByRole("heading", { name: "Team Roster" })).toBeVisible({ timeout: 3000 });
+    await page.locator('button:has(svg.lucide-x)').first().click();
+
+    await page.getByRole("button", { name: "Export", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Export Data" })).toBeVisible({ timeout: 3000 });
+    await page.getByRole("button", { name: "Cancel" }).click();
+
+    await page.getByRole("button", { name: "Import", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Import Data" })).toBeVisible({ timeout: 3000 });
+    await expect(page.getByRole("button", { name: "Restore Backup" })).toBeVisible();
+  });
+});
+
+test.describe("Assignee picker (multi-assignee)", () => {
+  test("shows existing assignee as a chip and can add a second one", async ({ mockedPage: page }) => {
+    // Open the task edit modal (task-1's assignee is "Alice" per the mock).
+    // Scope assertions to the picker itself since a TaskCard behind the
+    // modal also renders "Alice" as plain text.
+    await page.getByText("Fix the login bug").click();
+    const assigneeField = page.getByLabel("Add assignee").locator("..");
+    await expect(assigneeField.getByText("Alice", { exact: true })).toBeVisible({ timeout: 3000 });
+
+    // Open the assignee dropdown and add a second person
+    await page.getByLabel("Add assignee").click();
+    await expect(page.getByText("Bob Jones")).toBeVisible({ timeout: 3000 });
+    await page.getByText("Bob Jones").click();
+
+    // Both assignees should now show as chips
+    await expect(assigneeField.getByText("Alice", { exact: true })).toBeVisible();
+    await expect(assigneeField.getByText("Bob Jones")).toBeVisible();
+  });
+
+  test("removing a chip does not remove the other assignee", async ({ mockedPage: page }) => {
+    await page.getByText("Fix the login bug").click();
+    const assigneeField = page.getByLabel("Add assignee").locator("..");
+    await expect(assigneeField.getByText("Alice", { exact: true })).toBeVisible({ timeout: 3000 });
+
+    await page.getByLabel("Add assignee").click();
+    await page.getByText("Bob Jones").click();
+    await expect(assigneeField.getByText("Bob Jones")).toBeVisible();
+
+    // Remove "Alice" via her chip's X button (the chip sits in the trigger
+    // bar above the dropdown, so it's clickable regardless of dropdown state)
+    await assigneeField.locator("span", { hasText: "Alice" }).first().locator("button").click();
+
+    await expect(assigneeField.getByText("Alice", { exact: true })).not.toBeVisible();
+    await expect(assigneeField.getByText("Bob Jones")).toBeVisible();
+  });
+});

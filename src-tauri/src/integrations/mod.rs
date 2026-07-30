@@ -1,5 +1,6 @@
 pub mod framework;
 pub mod github;
+pub mod google;
 pub mod jira;
 pub mod models;
 pub mod repository;
@@ -51,6 +52,7 @@ pub fn get_provider(integration_type: &str) -> Option<Box<dyn IntegrationProvide
         "github" => Some(Box::new(github::GitHubProvider::new())),
         "jira" => Some(Box::new(jira::JiraProvider::new())),
         "slack" => Some(Box::new(slack::SlackProvider::new())),
+        "google" => Some(Box::new(google::GoogleProvider::new())),
         _ => None,
     }
 }

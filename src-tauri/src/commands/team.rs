@@ -5,7 +5,7 @@ use crate::team::{
     repository,
     assignee,
 };
-use crate::integrations::slack;
+use crate::integrations::{google, slack};
 
 #[tauri::command]
 pub async fn get_team_members(state: State<'_, AppState>) -> Result<Vec<TeamMember>, String> {
@@ -129,5 +129,58 @@ pub async fn sync_team_from_slack(state: State<'_, AppState>) -> Result<TeamSync
         added,
         updated,
         total: slack_members.len() as i32,
+    })
+}
+
+#[tauri::command]
+pub async fn sync_team_from_google(state: State<'_, AppState>) -> Result<TeamSyncResult, String> {
+    let (integration_id, access_token) = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        let google_integration = crate::integrations::repository::get_integration_by_type(&conn, "google")?
+            .ok_or("No Google integration connected")?;
+
+        let token = google_integration.config.access_token.clone()
+            .ok_or("No access token in Google integration")?;
+        (google_integration.id.clone(), token)
+    };
+
+    let google_members = google::fetch_workspace_members(&access_token).await?;
+
+    let mut added = 0;
+    let mut updated = 0;
+
+    {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+
+        for member in &google_members {
+            let input = CreateTeamMemberInput {
+                name: member.name.clone(),
+                email: member.email.clone(),
+                avatar_url: member.avatar_url.clone(),
+                source: "google".to_string(),
+                source_id: Some(member.id.clone()),
+                role: None,
+                expertise: None,
+                metadata: None,
+            };
+
+            let existing = repository::get_team_member_by_source(&conn, "google", &member.id)?;
+
+            if existing.is_some() {
+                updated += 1;
+            } else {
+                added += 1;
+            }
+
+            repository::upsert_team_member(&conn, &input)?;
+        }
+
+        let _ = crate::integrations::repository::update_integration_last_sync(&conn, &integration_id);
+    }
+
+    Ok(TeamSyncResult {
+        added,
+        updated,
+        total: google_members.len() as i32,
     })
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   X,
   Download,
@@ -35,11 +35,11 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
     include_projects: true,
     include_tasks: true,
     include_meetings: true,
-    include_skills: true,
+    include_skills: false, // not implemented yet — see disabled checkbox below
     include_patterns: true,
     include_team: true,
-    include_documents: false,
-    include_vectors: false,
+    include_documents: false, // not implemented yet — see disabled checkbox below
+    include_vectors: false, // off by default: requires Qdrant to be running
   });
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -47,17 +47,27 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
   const [outputPath, setOutputPath] = useState("");
   const [result, setResult] = useState<api.ExportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<api.SyncProgress | null>(null);
+
+  useEffect(() => {
+    if (step !== "exporting") return;
+    const unlisten = api.onExportProgress(setProgress);
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [step]);
 
   const handleSelectPath = async () => {
     try {
-      // Use a default filename with timestamp
       const timestamp = new Date().toISOString().slice(0, 10);
       const defaultName = `meridian-export-${timestamp}.zip`;
-      // For now, just set a default path - in real implementation would use file dialog
-      const homePath = "~/Downloads/" + defaultName;
-      setOutputPath(homePath);
+      const selected = await api.pickExportSavePath(defaultName);
+      if (selected) {
+        setOutputPath(selected);
+      }
     } catch (e) {
       console.error("Failed to select path:", e);
+      setError("Failed to open save dialog");
     }
   };
 
@@ -74,6 +84,7 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
 
     setStep("exporting");
     setError(null);
+    setProgress(null);
 
     try {
       const exportOptions: ExportOptions = {
@@ -136,10 +147,10 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
                     { key: "include_projects", label: "Projects" },
                     { key: "include_tasks", label: "Tasks" },
                     { key: "include_meetings", label: "Meetings" },
-                    { key: "include_skills", label: "Skills" },
-                    { key: "include_patterns", label: "Learning Patterns" },
                     { key: "include_team", label: "Team Members" },
-                  ].map(({ key, label }) => (
+                    { key: "include_patterns", label: "Learning Patterns", hint: "anonymized" },
+                    { key: "include_vectors", label: "Vector Embeddings", hint: "requires Qdrant running" },
+                  ].map(({ key, label, hint }) => (
                     <label
                       key={key}
                       className="flex items-center gap-2 p-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
@@ -150,7 +161,26 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
                         onChange={() => toggleOption(key as keyof ExportOptions)}
                         className="rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
                       />
-                      <span className="text-sm text-zinc-700 dark:text-zinc-300">{label}</span>
+                      <span className="text-sm text-zinc-700 dark:text-zinc-300">
+                        {label}
+                        {hint && <span className="text-zinc-400"> ({hint})</span>}
+                      </span>
+                    </label>
+                  ))}
+                  {[
+                    { key: "include_skills", label: "Skills" },
+                    { key: "include_documents", label: "Document metadata" },
+                    { key: "include_audit", label: "Audit log" },
+                  ].map(({ key, label }) => (
+                    <label
+                      key={key}
+                      title="Not implemented yet — this content is never included in the export"
+                      className="flex items-center gap-2 p-2 rounded-lg opacity-50 cursor-not-allowed"
+                    >
+                      <input type="checkbox" checked={false} disabled className="rounded border-zinc-300" />
+                      <span className="text-sm text-zinc-500">
+                        {label} <span className="text-zinc-400">(coming soon)</span>
+                      </span>
                     </label>
                   ))}
                 </div>
@@ -240,7 +270,22 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
           {step === "exporting" && (
             <div className="flex flex-col items-center justify-center py-8">
               <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mb-4" />
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">Exporting data...</p>
+              <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-3">
+                {progress ? progress.step : "Exporting data..."}
+              </p>
+              <div className="w-full max-w-xs h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-indigo-600 transition-all duration-300"
+                  style={{
+                    width: progress ? `${Math.round((progress.current / progress.total) * 100)}%` : "5%",
+                  }}
+                />
+              </div>
+              {progress && (
+                <p className="text-xs text-zinc-400 mt-2">
+                  Step {progress.current} of {progress.total}
+                </p>
+              )}
             </div>
           )}
 
@@ -262,7 +307,10 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
               <div className="text-xs text-zinc-400">
                 Includes: {result.manifest.contents.project_count} projects,{" "}
                 {result.manifest.contents.task_count} tasks,{" "}
-                {result.manifest.contents.meeting_count} meetings
+                {result.manifest.contents.meeting_count} meetings,{" "}
+                {result.manifest.contents.team_member_count} team members
+                {result.manifest.contents.patterns && `, ${result.manifest.contents.pattern_count} pattern contributions`}
+                {result.manifest.contents.vectors && ", vector embeddings"}
               </div>
             </div>
           )}

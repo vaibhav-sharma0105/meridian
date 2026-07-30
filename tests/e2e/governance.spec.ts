@@ -130,8 +130,13 @@ test.describe("Autonomy Settings", () => {
     await page.click('[data-testid="sidebar-governance"]');
     await page.click('text=Settings');
 
+    // Manual/Autonomous are only rendered once the mode dropdown is open —
+    // Supervised (the default) is the only one visible in the closed state.
+    const trigger = page.getByRole('button', { name: /Supervised/i });
+    await expect(trigger).toBeVisible();
+    await trigger.click();
+
     await expect(page.locator('text=Manual')).toBeVisible();
-    await expect(page.locator('text=Supervised')).toBeVisible();
     await expect(page.locator('text=Autonomous')).toBeVisible();
   });
 });
@@ -150,8 +155,9 @@ test.describe("Approval Queue", () => {
   test("shows pending approvals list", async ({ page }) => {
     await page.click('[data-testid="sidebar-governance"]');
 
-    await expect(page.locator('text=create_task')).toBeVisible();
-    await expect(page.locator('text=skill:draft_message')).toBeVisible();
+    // ApprovalQueue renders action_type with underscores replaced by spaces.
+    await expect(page.locator('text=create task')).toBeVisible();
+    await expect(page.locator('text=skill:draft message')).toBeVisible();
   });
 
   test("shows risk level badges", async ({ page }) => {
@@ -164,8 +170,9 @@ test.describe("Approval Queue", () => {
   test("has approve and reject buttons", async ({ page }) => {
     await page.click('[data-testid="sidebar-governance"]');
 
-    const approveButtons = page.locator('button:has-text("Approve")');
-    const rejectButtons = page.locator('button:has-text("Reject")');
+    // These are icon-only buttons — labeled via `title`, not visible text.
+    const approveButtons = page.locator('button[title="Approve"]');
+    const rejectButtons = page.locator('button[title="Reject"]');
 
     await expect(approveButtons.first()).toBeVisible();
     await expect(rejectButtons.first()).toBeVisible();
@@ -183,7 +190,9 @@ test.describe("Undo Bar", () => {
     const mockOverrides = {
       get_pending_approvals: [],
       get_pending_approval_count: 0,
-      get_undoable_actions: [{
+      // ActionHistoryPanel (rendered by the "History" tab) fetches via
+      // get_action_history — there's no get_undoable_actions command.
+      get_action_history: [{
         id: "history-1",
         action_type: "update",
         entity_type: "task",
@@ -204,7 +213,7 @@ test.describe("Undo Bar", () => {
     await page.click('text=History');
 
     await expect(page.locator('text=update')).toBeVisible();
-    await expect(page.locator('text=task')).toBeVisible();
+    await expect(page.locator('text=task').first()).toBeVisible();
   });
 });
 

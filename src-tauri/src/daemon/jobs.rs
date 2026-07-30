@@ -1377,6 +1377,14 @@ pub fn process_poll_integration_syncs_job(conn: &Connection, job_id: &str) -> Jo
             continue;
         }
 
+        // Google has no generic fetch_data content (no issues/PRs equivalent
+        // for a directory of people) — its roster sync runs on its own daily
+        // schedule via poll_team_syncs. Running it here too would just call
+        // a no-op and stamp a fake "last synced" time with nothing behind it.
+        if integration.integration_type == "google" {
+            continue;
+        }
+
         // Check if sync is due based on sync_interval_minutes
         let should_sync = match &integration.last_sync {
             Some(last_sync_str) => {
@@ -1915,7 +1923,7 @@ pub fn init_governance_jobs(conn: &Connection) {
 // ─── Team Sync Jobs ─────────────────────────────────────────────────────────
 
 use crate::team::repository as team_repo;
-use crate::integrations::slack;
+use crate::integrations::{google, slack};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncTeamRosterPayload {
@@ -1938,14 +1946,7 @@ pub async fn process_sync_team_roster_job(
 
     match payload.source.as_str() {
         "slack" => sync_team_from_slack_internal(conn).await,
-        "google" => {
-            // Google Workspace sync - placeholder for future implementation
-            JobResult {
-                success: true,
-                chunks_embedded: Some(0),
-                error: Some("Google Workspace sync not yet implemented".to_string()),
-            }
-        }
+        "google" => sync_team_from_google_internal(conn).await,
         _ => JobResult {
             success: false,
             chunks_embedded: None,
@@ -2039,6 +2040,91 @@ async fn sync_team_from_slack_internal(conn: &Connection) -> JobResult {
     }
 }
 
+async fn sync_team_from_google_internal(conn: &Connection) -> JobResult {
+    let (integration_id, access_token) = match integration_repo::get_integration_by_type(conn, "google") {
+        Ok(Some(integration)) => match integration.config.access_token.clone() {
+            Some(token) => (integration.id.clone(), token),
+            None => {
+                return JobResult {
+                    success: false,
+                    chunks_embedded: None,
+                    error: Some("No access token in Google integration".to_string()),
+                };
+            }
+        },
+        Ok(None) => {
+            return JobResult {
+                success: true,
+                chunks_embedded: Some(0),
+                error: None, // No Google integration connected, skip silently
+            };
+        }
+        Err(e) => {
+            return JobResult {
+                success: false,
+                chunks_embedded: None,
+                error: Some(format!("Failed to get Google integration: {}", e)),
+            };
+        }
+    };
+
+    let google_members = match google::fetch_workspace_members(&access_token).await {
+        Ok(members) => members,
+        Err(e) => {
+            return JobResult {
+                success: false,
+                chunks_embedded: None,
+                error: Some(format!("Failed to fetch Google Workspace members: {}", e)),
+            };
+        }
+    };
+
+    let mut synced = 0;
+
+    for member in &google_members {
+        let input = crate::team::models::CreateTeamMemberInput {
+            name: member.name.clone(),
+            email: member.email.clone(),
+            avatar_url: member.avatar_url.clone(),
+            source: "google".to_string(),
+            source_id: Some(member.id.clone()),
+            role: None,
+            expertise: None,
+            metadata: None,
+        };
+
+        if team_repo::upsert_team_member(conn, &input).is_ok() {
+            synced += 1;
+        }
+    }
+
+    // This is the ONLY thing that should stamp last_sync for Google — the
+    // generic poll_integration_syncs job deliberately skips it (see
+    // process_poll_integration_syncs_job) since it has no other content to sync.
+    let _ = integration_repo::update_integration_last_sync(conn, &integration_id);
+
+    if synced > 0 {
+        let _ = notif_repo::create_notification_full(
+            conn,
+            "team_sync",
+            "Team roster synced",
+            &format!("Synced {} team members from Google Workspace", synced),
+            None,
+            None,
+            None,
+            None,
+            "info",
+            false,
+        );
+    }
+
+    JobResult {
+        success: true,
+        chunks_embedded: Some(synced),
+        error: None,
+    }
+}
+
 pub fn process_poll_team_syncs_job(conn: &Connection, job_id: &str) -> JobResult {
     if let Err(e) = jobs_repo::update_job_status(conn, job_id, "running", None, None) {
         return JobResult {
@@ -2067,8 +2153,22 @@ pub fn process_poll_team_syncs_job(conn: &Connection, job_id: &str) -> JobResult
         }
     }
 
-    // Check for Google integration (future)
-    // if let Ok(Some(_)) = integration_repo::get_integration_by_type(conn, "google") { ... }
+    // Check for Google integration
+    if let Ok(Some(_)) = integration_repo::get_integration_by_type(conn, "google") {
+        let payload = SyncTeamRosterPayload {
+            source: "google".to_string(),
+            integration_id: None,
+        };
+
+        if jobs_repo::create_job(
+            conn,
+            "sync_team_roster",
+            Some(&serde_json::to_string(&payload).unwrap_or_default()),
+            3,
+        ).is_ok() {
+            queued += 1;
+        }
+    }
 
     // Recompute workload scores for the whole roster alongside the daily sync.
     let _ = team_repo::compute_all_workload_scores(conn);

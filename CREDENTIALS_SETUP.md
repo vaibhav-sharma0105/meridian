@@ -18,6 +18,8 @@ This guide walks you through creating the OAuth credentials required to enable i
 | `SLACK_CLIENT_SECRET` | Slack App settings |
 | `GMAIL_CLIENT_ID` | Google Cloud Console *(Gmail connector — coming soon)* |
 | `GMAIL_CLIENT_SECRET` | Google Cloud Console *(Gmail connector — coming soon)* |
+| `GOOGLE_CLIENT_ID` | Google Cloud Console *(Google Workspace Directory — team roster sync)* |
+| `GOOGLE_CLIENT_SECRET` | Google Cloud Console *(Google Workspace Directory — team roster sync)* |
 
 These are **app-level credentials** (they identify the Meridian app, not your personal account). OAuth tokens for your account are stored securely in the macOS Keychain at runtime — they never touch disk or logs.
 
@@ -191,6 +193,41 @@ Under **Scopes** → **User Token Scopes**, add:
 4. Under **Scopes**, add:
    - `https://www.googleapis.com/auth/gmail.readonly`
 5. Under **Test users**, add your Gmail address
+
+---
+
+## Part 5b: Google Workspace Directory (team roster sync)
+
+> Unlike everything else in this guide, this one needs a **Google Workspace domain** — a personal `@gmail.com` account cannot grant the scope below, no matter what you configure. If you don't manage a Workspace domain, skip this section; team roster sync still works fine with manual entry and Slack.
+
+### Step 1 — Create (or reuse) a Google Cloud project
+
+Same as Part 5, Step 1. You can reuse the same project as Gmail if you've already created one.
+
+### Step 2 — Enable the Admin SDK API
+
+1. Go to **APIs & Services → Enable APIs and Services**
+2. Search for `Admin SDK API` → click **Enable**
+
+### Step 3 — Create OAuth credentials
+
+1. Go to **APIs & Services → Credentials**
+2. Click **Create Credentials → OAuth client ID**
+3. Application type: **Web application**
+4. Name: `Meridian`
+5. Add this Authorized redirect URI:
+   ```
+   http://localhost:8765/oauth/callback
+   ```
+6. Click **Create** — copy your **Client ID** and **Client Secret**
+
+### Step 4 — Get domain admin approval for the Directory scope
+
+`admin.directory.user.readonly` is a restricted scope — only a Workspace domain admin can approve it, either by:
+- Adding it under **OAuth consent screen → Scopes** if you *are* the admin, or
+- Asking your admin to pre-authorize the OAuth client's scope via **Admin Console → Security → API Controls → App Access Control**
+
+Without this approval, connecting will fail with a permission error even though the OAuth flow itself succeeds — that's Google's consent server rejecting the scope, not a bug in Meridian.
 
 ---
 

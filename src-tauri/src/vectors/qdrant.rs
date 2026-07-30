@@ -121,6 +121,74 @@ impl QdrantClient {
         Ok(collections.collections.into_iter().map(|c| c.name).collect())
     }
 
+    /// REST port is always gRPC port - 1 by Qdrant convention (6334 -> 6333),
+    /// used only for snapshot download/upload since the gRPC client doesn't
+    /// expose those endpoints (upload isn't wrapped by the client at all;
+    /// download requires an extra crate feature we don't otherwise need).
+    fn rest_url(&self) -> String {
+        if let Some(idx) = self.url.rfind(':') {
+            let (host, port_str) = self.url.split_at(idx);
+            if let Ok(port) = port_str[1..].parse::<u32>() {
+                let rest_port = if port == 6334 { 6333 } else { port };
+                return format!("{}:{}", host, rest_port);
+            }
+        }
+        self.url.clone()
+    }
+
+    /// Creates a snapshot of `collection` and downloads it as bytes, for
+    /// embedding in a Meridian data export. Snapshots are node-local — this
+    /// assumes a single local Qdrant instance, which is the only supported
+    /// deployment for this app.
+    pub async fn export_snapshot(&self, collection: &str) -> Result<Vec<u8>, String> {
+        let client = self.get_client().await?;
+
+        let response = client
+            .create_snapshot(collection)
+            .await
+            .map_err(|e| format!("Failed to create snapshot for '{}': {}", collection, e))?;
+
+        let snapshot_name = response
+            .snapshot_description
+            .ok_or_else(|| format!("Qdrant returned no snapshot description for '{}'", collection))?
+            .name;
+
+        let url = format!("{}/collections/{}/snapshots/{}", self.rest_url(), collection, snapshot_name);
+        let bytes = reqwest::get(&url)
+            .await
+            .map_err(|e| format!("Failed to download snapshot for '{}': {}", collection, e))?
+            .error_for_status()
+            .map_err(|e| format!("Snapshot download failed for '{}': {}", collection, e))?
+            .bytes()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        Ok(bytes.to_vec())
+    }
+
+    /// Recovers `collection` from a snapshot's raw bytes (as produced by
+    /// `export_snapshot`), creating or replacing the collection entirely.
+    pub async fn import_snapshot(&self, collection: &str, snapshot_bytes: &[u8]) -> Result<(), String> {
+        let url = format!("{}/collections/{}/snapshots/upload", self.rest_url(), collection);
+        let part = reqwest::multipart::Part::bytes(snapshot_bytes.to_vec())
+            .file_name("snapshot")
+            .mime_str("application/octet-stream")
+            .map_err(|e| e.to_string())?;
+        let form = reqwest::multipart::Form::new().part("snapshot", part);
+
+        let client = reqwest::Client::new();
+        client
+            .post(&url)
+            .multipart(form)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to upload snapshot for '{}': {}", collection, e))?
+            .error_for_status()
+            .map_err(|e| format!("Snapshot recovery failed for '{}': {}", collection, e))?;
+
+        Ok(())
+    }
+
     pub async fn insert_vectors(
         &self,
         collection: &str,

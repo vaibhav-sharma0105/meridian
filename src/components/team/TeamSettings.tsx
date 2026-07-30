@@ -9,8 +9,9 @@ import {
   Edit2,
   Trash2,
   AlertCircle,
+  X,
 } from "lucide-react";
-import { useTeamMembers, useSyncTeamFromSlack, useComputeTeamWorkloads, useDeleteTeamMember } from "@/hooks/useTeam";
+import { useTeamMembers, useSyncTeamFromSlack, useSyncTeamFromGoogle, useComputeTeamWorkloads, useDeleteTeamMember } from "@/hooks/useTeam";
 import { TeamMemberForm } from "./TeamMemberForm";
 import { TeamMemberCard } from "./TeamMemberCard";
 import type { TeamMember } from "@/lib/tauri";
@@ -25,9 +26,14 @@ const SOURCE_BADGES: Record<string, { bg: string; text: string; label: string }>
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function TeamSettings() {
+interface TeamSettingsProps {
+  onClose?: () => void;
+}
+
+export function TeamSettings({ onClose }: TeamSettingsProps = {}) {
   const { data: members = [], isLoading } = useTeamMembers();
   const syncSlack = useSyncTeamFromSlack();
+  const syncGoogle = useSyncTeamFromGoogle();
   const computeWorkloads = useComputeTeamWorkloads();
   const deleteMember = useDeleteTeamMember();
 
@@ -53,6 +59,10 @@ export function TeamSettings() {
 
   const handleSyncSlack = () => {
     syncSlack.mutate();
+  };
+
+  const handleSyncGoogle = () => {
+    syncGoogle.mutate();
   };
 
   const handleRecomputeWorkloads = () => {
@@ -94,6 +104,16 @@ export function TeamSettings() {
               Sync Slack
             </button>
             <button
+              onClick={handleSyncGoogle}
+              disabled={syncGoogle.isPending}
+              title="Requires a connected Google Workspace integration (Directory API access approved by a domain admin)"
+              className="flex items-center gap-2 px-3 py-1.5 text-sm text-zinc-600 dark:text-zinc-400
+                       hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+            >
+              <RefreshCw className={`w-4 h-4 ${syncGoogle.isPending ? "animate-spin" : ""}`} />
+              Sync Google
+            </button>
+            <button
               onClick={handleRecomputeWorkloads}
               disabled={computeWorkloads.isPending || members.length === 0}
               title="Recompute workload from each member's open task count"
@@ -112,6 +132,14 @@ export function TeamSettings() {
               <UserPlus className="w-4 h-4" />
               Add Member
             </button>
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -212,6 +240,23 @@ export function TeamSettings() {
           <div className="flex items-center gap-2 text-sm text-red-700 dark:text-red-400">
             <AlertCircle className="w-4 h-4" />
             <p>Failed to sync: {(syncSlack.error as Error)?.message || "Unknown error"}</p>
+          </div>
+        </div>
+      )}
+
+      {syncGoogle.isSuccess && (
+        <div className="flex-shrink-0 px-6 py-3 bg-green-50 dark:bg-green-900/20 border-t border-green-200 dark:border-green-800">
+          <p className="text-sm text-green-700 dark:text-green-400">
+            Synced {syncGoogle.data?.added || 0} new members, updated {syncGoogle.data?.updated || 0}
+          </p>
+        </div>
+      )}
+
+      {syncGoogle.isError && (
+        <div className="flex-shrink-0 px-6 py-3 bg-red-50 dark:bg-red-900/20 border-t border-red-200 dark:border-red-800">
+          <div className="flex items-center gap-2 text-sm text-red-700 dark:text-red-400">
+            <AlertCircle className="w-4 h-4" />
+            <p>Failed to sync: {(syncGoogle.error as Error)?.message || "Unknown error"}</p>
           </div>
         </div>
       )}

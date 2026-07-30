@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   X,
   Upload,
@@ -11,6 +11,8 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronRight,
+  History,
+  RotateCcw,
 } from "lucide-react";
 import * as api from "@/lib/tauri";
 
@@ -21,6 +23,7 @@ interface ImportDialogProps {
 
 export function ImportDialog({ onClose, onSuccess }: ImportDialogProps) {
   const [step, setStep] = useState<"select" | "preview" | "conflicts" | "importing" | "complete" | "error">("select");
+  const [activeTab, setActiveTab] = useState<"import" | "restore">("import");
   const [archivePath, setArchivePath] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"Merge" | "Replace">("Merge");
@@ -29,10 +32,58 @@ export function ImportDialog({ onClose, onSuccess }: ImportDialogProps) {
   const [expandedTypes, setExpandedTypes] = useState<Record<string, boolean>>({});
   const [result, setResult] = useState<api.ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<api.SyncProgress | null>(null);
+
+  useEffect(() => {
+    if (step !== "importing") return;
+    const unlisten = api.onImportProgress(setProgress);
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [step]);
+
+  // Restore-from-backup state
+  const [backups, setBackups] = useState<api.BackupInfo[]>([]);
+  const [loadingBackups, setLoadingBackups] = useState(false);
+  const [confirmRestorePath, setConfirmRestorePath] = useState<string | null>(null);
+  const [restoringPath, setRestoringPath] = useState<string | null>(null);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [restoredOk, setRestoredOk] = useState(false);
+
+  useEffect(() => {
+    if (activeTab !== "restore" || restoredOk) return;
+    setLoadingBackups(true);
+    api
+      .listBackups()
+      .then(setBackups)
+      .catch((e) => setRestoreError(String(e)))
+      .finally(() => setLoadingBackups(false));
+  }, [activeTab, restoredOk]);
+
+  const handleRestore = async (path: string) => {
+    setRestoringPath(path);
+    setRestoreError(null);
+    try {
+      await api.restoreFromBackup(path);
+      setRestoredOk(true);
+    } catch (e) {
+      setRestoreError(String(e));
+    } finally {
+      setRestoringPath(null);
+      setConfirmRestorePath(null);
+    }
+  };
 
   const handleSelectFile = async () => {
-    // In real implementation, would use file dialog
-    // For now, just allow manual path entry
+    try {
+      const selected = await api.pickImportFilePath();
+      if (selected) {
+        setArchivePath(selected);
+      }
+    } catch (e) {
+      console.error("Failed to select file:", e);
+      setError("Failed to open file dialog");
+    }
   };
 
   const handlePreview = async () => {
@@ -65,6 +116,7 @@ export function ImportDialog({ onClose, onSuccess }: ImportDialogProps) {
   const handleImport = async () => {
     setStep("importing");
     setError(null);
+    setProgress(null);
 
     try {
       const importResult = await api.importAllData(archivePath, {
@@ -133,9 +185,130 @@ export function ImportDialog({ onClose, onSuccess }: ImportDialogProps) {
           </button>
         </div>
 
+        {/* Tabs */}
+        {step === "select" && (
+          <div className="flex-shrink-0 flex border-b border-zinc-200 dark:border-zinc-800 px-6">
+            <button
+              onClick={() => setActiveTab("import")}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === "import"
+                  ? "border-indigo-500 text-indigo-600 dark:text-indigo-400"
+                  : "border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+              }`}
+            >
+              <Upload className="w-3.5 h-3.5" />
+              Import Archive
+            </button>
+            <button
+              onClick={() => setActiveTab("restore")}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === "restore"
+                  ? "border-indigo-500 text-indigo-600 dark:text-indigo-400"
+                  : "border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+              }`}
+            >
+              <History className="w-3.5 h-3.5" />
+              Restore Backup
+            </button>
+          </div>
+        )}
+
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
-          {step === "select" && (
+          {step === "select" && activeTab === "restore" && (
+            <div className="space-y-4">
+              {restoredOk ? (
+                <div className="text-center py-4">
+                  <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Check className="w-6 h-6 text-green-600 dark:text-green-400" />
+                  </div>
+                  <h3 className="text-lg font-medium text-zinc-900 dark:text-zinc-100 mb-2">
+                    Backup Restored
+                  </h3>
+                  <p className="text-sm text-zinc-500">
+                    Restart Meridian for the restored data to take effect.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-xs text-zinc-500">
+                    Backups are created automatically before every import. Restoring replaces your
+                    current database entirely — this can't be undone from within the app.
+                  </p>
+
+                  {loadingBackups && (
+                    <div className="flex items-center justify-center py-8 text-sm text-zinc-500">
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      Loading backups...
+                    </div>
+                  )}
+
+                  {!loadingBackups && backups.length === 0 && (
+                    <div className="text-center py-8 text-sm text-zinc-500">
+                      No backups yet — one will be created automatically the next time you import.
+                    </div>
+                  )}
+
+                  {!loadingBackups && backups.length > 0 && (
+                    <div className="space-y-2">
+                      {backups.map((backup) => (
+                        <div
+                          key={backup.path}
+                          className="flex items-center justify-between p-3 rounded-lg border border-zinc-200 dark:border-zinc-700"
+                        >
+                          <div className="min-w-0">
+                            <div className="text-sm text-zinc-900 dark:text-zinc-100 truncate">
+                              {new Date(backup.created_at).toLocaleString()}
+                            </div>
+                            <div className="text-xs text-zinc-500">
+                              {backup.size_mb.toFixed(1)} MB · {backup.age_days === 0 ? "today" : `${backup.age_days}d ago`}
+                            </div>
+                          </div>
+                          {confirmRestorePath === backup.path ? (
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <span className="text-xs text-red-600">Overwrite current data?</span>
+                              <button
+                                onClick={() => handleRestore(backup.path)}
+                                disabled={restoringPath === backup.path}
+                                className="px-2.5 py-1 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded disabled:opacity-50"
+                              >
+                                {restoringPath === backup.path ? "Restoring..." : "Confirm"}
+                              </button>
+                              <button
+                                onClick={() => setConfirmRestorePath(null)}
+                                className="px-2.5 py-1 text-xs text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmRestorePath(backup.path)}
+                              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-zinc-600 dark:text-zinc-400
+                                       border border-zinc-200 dark:border-zinc-700 rounded-lg
+                                       hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors flex-shrink-0"
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                              Restore
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {restoreError && (
+                    <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
+                      <AlertCircle className="w-4 h-4" />
+                      {restoreError}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {step === "select" && activeTab === "import" && (
             <div className="space-y-6">
               {/* File Selection */}
               <div>
@@ -319,6 +492,17 @@ export function ImportDialog({ onClose, onSuccess }: ImportDialogProps) {
                               <div className="text-xs text-zinc-500">
                                 Local: {conflict.local_name}
                               </div>
+                              {(conflict.local_updated || conflict.import_updated) && (
+                                <div className="text-xs text-zinc-400 truncate">
+                                  {conflict.local_updated && (
+                                    <>Local updated {new Date(conflict.local_updated).toLocaleString()}</>
+                                  )}
+                                  {conflict.local_updated && conflict.import_updated && " · "}
+                                  {conflict.import_updated && (
+                                    <>Import updated {new Date(conflict.import_updated).toLocaleString()}</>
+                                  )}
+                                </div>
+                              )}
                             </div>
                             <div className="flex gap-1">
                               <button
@@ -355,7 +539,22 @@ export function ImportDialog({ onClose, onSuccess }: ImportDialogProps) {
           {step === "importing" && (
             <div className="flex flex-col items-center justify-center py-8">
               <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mb-4" />
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">Importing data...</p>
+              <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-3">
+                {progress ? progress.step : "Importing data..."}
+              </p>
+              <div className="w-full max-w-xs h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-indigo-600 transition-all duration-300"
+                  style={{
+                    width: progress ? `${Math.round((progress.current / progress.total) * 100)}%` : "5%",
+                  }}
+                />
+              </div>
+              {progress && (
+                <p className="text-xs text-zinc-400 mt-2">
+                  Step {progress.current} of {progress.total}
+                </p>
+              )}
             </div>
           )}
 
@@ -405,7 +604,7 @@ export function ImportDialog({ onClose, onSuccess }: ImportDialogProps) {
             {step === "complete" || step === "error" ? "Close" : "Cancel"}
           </button>
 
-          {step === "select" && (
+          {step === "select" && activeTab === "import" && (
             <button
               onClick={handlePreview}
               disabled={!archivePath}

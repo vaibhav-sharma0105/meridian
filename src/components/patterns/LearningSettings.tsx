@@ -11,6 +11,7 @@ import {
   Tag,
   User,
   AlertTriangle,
+  Users,
 } from "lucide-react";
 import * as api from "../../lib/tauri";
 
@@ -24,6 +25,30 @@ export function LearningSettings() {
     queryKey: ["pattern-summaries"],
     queryFn: () => api.getPatternSummaries(),
   });
+
+  const { data: contributionEnabled = false } = useQuery({
+    queryKey: ["pattern-contribution-enabled"],
+    queryFn: () => api.getPatternContributionEnabled(),
+  });
+  const { data: useTeamPatterns = true } = useQuery({
+    queryKey: ["use-team-patterns-enabled"],
+    queryFn: () => api.getUseTeamPatternsEnabled(),
+  });
+  const { data: teamSummaries = [] } = useQuery({
+    queryKey: ["team-pattern-summaries"],
+    queryFn: () => api.getTeamPatternSummaries(),
+    enabled: useTeamPatterns,
+  });
+
+  const toggleContribution = async () => {
+    await api.setPatternContributionEnabled(!contributionEnabled);
+    queryClient.invalidateQueries({ queryKey: ["pattern-contribution-enabled"] });
+  };
+
+  const toggleUseTeamPatterns = async () => {
+    await api.setUseTeamPatternsEnabled(!useTeamPatterns);
+    queryClient.invalidateQueries({ queryKey: ["use-team-patterns-enabled"] });
+  };
 
   const handleExport = async () => {
     try {
@@ -163,6 +188,77 @@ export function LearningSettings() {
           })}
         </div>
       )}
+
+      <div className="border-t border-zinc-200 dark:border-zinc-700 pt-4 space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-1.5 text-sm font-medium text-zinc-900 dark:text-zinc-100">
+              <Users className="w-4 h-4 text-zinc-400" />
+              Contribute to team patterns
+            </div>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 max-w-sm">
+              Shares anonymized pattern signals (keywords, priority/status categories) when you export your data —
+              never task titles, names, or entity IDs. Content flagged as sensitive is never contributed.
+            </p>
+          </div>
+          <button
+            onClick={toggleContribution}
+            role="switch"
+            aria-checked={contributionEnabled}
+            className={`relative flex-shrink-0 w-9 h-5 rounded-full transition-colors ${
+              contributionEnabled ? "bg-indigo-600" : "bg-zinc-300 dark:bg-zinc-700"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
+                contributionEnabled ? "translate-x-4" : ""
+              }`}
+            />
+          </button>
+        </div>
+
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Use team patterns</div>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 max-w-sm">
+              Show patterns your team has contributed (imported via data import) below, alongside your own.
+            </p>
+          </div>
+          <button
+            onClick={toggleUseTeamPatterns}
+            role="switch"
+            aria-checked={useTeamPatterns}
+            className={`relative flex-shrink-0 w-9 h-5 rounded-full transition-colors ${
+              useTeamPatterns ? "bg-indigo-600" : "bg-zinc-300 dark:bg-zinc-700"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
+                useTeamPatterns ? "translate-x-4" : ""
+              }`}
+            />
+          </button>
+        </div>
+
+        {useTeamPatterns && teamSummaries.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
+              Team Patterns
+            </div>
+            {teamSummaries.map((summary) => (
+              <div
+                key={summary.pattern_type}
+                className="flex items-center justify-between p-2.5 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg text-sm"
+              >
+                <span className="text-zinc-700 dark:text-zinc-300">{getCategoryLabel(summary.pattern_type)}</span>
+                <span className="text-xs text-zinc-400">
+                  {summary.contributor_count ?? 0} contribution{summary.contributor_count === 1 ? "" : "s"}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="border-t border-zinc-200 dark:border-zinc-700 pt-4 space-y-3">
         <div className="flex gap-2">

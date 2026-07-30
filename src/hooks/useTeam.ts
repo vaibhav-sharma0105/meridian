@@ -88,6 +88,17 @@ export function useSyncTeamFromSlack() {
   });
 }
 
+export function useSyncTeamFromGoogle() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => api.syncTeamFromGoogle(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: teamKeys.members() });
+    },
+  });
+}
+
 // ─── Workloads ────────────────────────────────────────────────────────────────
 
 export function useComputeTeamWorkloads() {
@@ -114,5 +125,19 @@ export function useAssigneeSuggestions(
       api.getAssigneeSuggestions(taskTitle, taskDescription, projectId),
     enabled: taskTitle.length > 3,
     staleTime: 30000, // Cache for 30 seconds
+  });
+}
+
+export function useRecordAssigneeSelection() {
+  return useMutation({
+    mutationFn: ({
+      selectedName,
+      suggestions,
+      wasOverride,
+    }: {
+      selectedName: string;
+      suggestions: AssigneeSuggestion[];
+      wasOverride: boolean;
+    }) => api.recordAssigneeSelection(selectedName, suggestions, wasOverride),
   });
 }

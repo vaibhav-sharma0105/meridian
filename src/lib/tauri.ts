@@ -581,6 +581,20 @@ export const onEmbedProgress = (
   );
 };
 
+export interface SyncProgress {
+  step: string;
+  current: number;
+  total: number;
+}
+
+export const onExportProgress = (callback: (data: SyncProgress) => void) => {
+  return listen<SyncProgress>("export_progress", (event) => callback(event.payload));
+};
+
+export const onImportProgress = (callback: (data: SyncProgress) => void) => {
+  return listen<SyncProgress>("import_progress", (event) => callback(event.payload));
+};
+
 // ─── Connections ──────────────────────────────────────────────────────────────
 
 export interface Connection {
@@ -807,6 +821,8 @@ export interface PatternModel {
   confidence: number;
   observation_count: number;
   last_updated: string;
+  scope: string;
+  contributor_count: number;
 }
 
 export interface PatternSummary {
@@ -814,6 +830,7 @@ export interface PatternSummary {
   confidence: number;
   observation_count: number;
   last_updated: string;
+  contributor_count?: number;
 }
 
 export interface WorkflowSequence {
@@ -922,6 +939,23 @@ export const resetPatternCategory = (patternType: string, projectId?: string) =>
 
 export const resetAllLearning = () =>
   invoke<number>("reset_all_learning");
+
+// ─── Shared Patterns ────────────────────────────────────────────────────────
+
+export const getPatternContributionEnabled = () =>
+  invoke<boolean>("get_pattern_contribution_enabled");
+
+export const setPatternContributionEnabled = (enabled: boolean) =>
+  invoke<void>("set_pattern_contribution_enabled", { enabled });
+
+export const getUseTeamPatternsEnabled = () =>
+  invoke<boolean>("get_use_team_patterns_enabled");
+
+export const setUseTeamPatternsEnabled = (enabled: boolean) =>
+  invoke<void>("set_use_team_patterns_enabled", { enabled });
+
+export const getTeamPatternSummaries = () =>
+  invoke<PatternSummary[]>("get_team_pattern_summaries");
 
 // ─── Suggestions ──────────────────────────────────────────────────────────────
 
@@ -1821,6 +1855,9 @@ export const computeTeamWorkloads = () =>
 export const syncTeamFromSlack = () =>
   invoke<TeamSyncResult>("sync_team_from_slack");
 
+export const syncTeamFromGoogle = () =>
+  invoke<TeamSyncResult>("sync_team_from_google");
+
 export const getAssigneeSuggestions = (
   taskTitle: string,
   taskDescription?: string,
@@ -1928,9 +1965,6 @@ export interface ImportResult {
 export const exportAllData = (outputPath: string, options: ExportOptions) =>
   invoke<ExportResult>("export_all_data", { outputPath, options });
 
-export const exportSingleSkill = (skillId: string, outputPath: string) =>
-  invoke<string>("export_single_skill", { skillId, outputPath });
-
 export const previewImportData = (archivePath: string, options: ImportOptions) =>
   invoke<ImportPreview>("preview_import_data", { archivePath, options });
 
@@ -1941,5 +1975,8 @@ export const importAllData = (
 ) =>
   invoke<ImportResult>("import_all_data", { archivePath, options, conflictResolutions });
 
-export const importSingleSkill = (filePath: string) =>
-  invoke<Skill>("import_single_skill", { filePath });
+export const pickExportSavePath = (defaultName: string) =>
+  invoke<string | null>("pick_export_save_path", { defaultName });
+
+export const pickImportFilePath = () =>
+  invoke<string | null>("pick_import_file_path");

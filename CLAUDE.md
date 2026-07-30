@@ -500,7 +500,7 @@ Three distinct skill types with different permission models:
 
 ### 15. Skills: Known Gaps / Future Work
 
-> **For agents:** These have schema/UI scaffolding but need implementation. See `openspec/changes/phase-4-skills-automation/tasks.md` Section 30 for full details.
+> **For agents:** These have schema/UI scaffolding but need implementation. See `openspec/changes/archive/2026-07-15-phase-4-skills-automation/tasks.md` Section 30 for full details.
 
 | Item | Status | What's Missing |
 |------|--------|----------------|
@@ -524,6 +524,7 @@ Phase 5 adds a unified integration framework for connecting external services (G
 - `src-tauri/src/integrations/jira.rs` — Jira OAuth + sync (issues)
 - `src-tauri/src/integrations/slack.rs` — Slack OAuth + channel sync
 - `src-tauri/src/integrations/slack_socket.rs` — Slack Socket Mode WebSocket client with auto-reconnect and action item detection
+- `src-tauri/src/integrations/google.rs` — Google Workspace OAuth + Directory API member fetch (used for team roster sync only — no generic issues/PRs fetch_data content). Needs Workspace domain admin approval for the directory scope; see §18 Known Gaps and CREDENTIALS_SETUP.md Part 5b.
 - `src-tauri/src/integrations/webhook.rs` — Local HTTP server for OAuth callbacks
 - `src-tauri/src/commands/integrations.rs` — 18 Tauri commands for integration management
 - `src-tauri/src/daemon/jobs.rs` — `sync_integration` and `poll_integration_syncs` job handlers
@@ -696,36 +697,71 @@ Multi-factor scoring for task assignment suggestions:
 **Key files (Backend):**
 - `src-tauri/src/team/mod.rs` — Module root
 - `src-tauri/src/team/models.rs` — TeamMember, AssigneeSuggestion structs
-- `src-tauri/src/team/repository.rs` — CRUD, workload computation
+- `src-tauri/src/team/repository.rs` — CRUD, workload computation, `record_expertise_observation()` (expertise auto-learning)
 - `src-tauri/src/team/assignee.rs` — Multi-factor scoring algorithm
-- `src-tauri/src/commands/team.rs` — 8 Tauri commands
+- `src-tauri/src/commands/team.rs` — 10 Tauri commands (incl. `sync_team_from_google`, `record_assignee_selection`)
+- `src-tauri/src/integrations/google.rs` — Google Workspace OAuth provider + Directory API member fetch. Env-gated on `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` (see CREDENTIALS_SETUP.md Part 5b) — requires a Workspace domain and admin-approved `admin.directory.user.readonly` scope; personal Google accounts can't use this.
 
 **Key files (Frontend):**
 - `src/hooks/useTeam.ts` — React Query hooks
-- `src/components/team/TeamSettings.tsx` — Roster management UI
+- `src/components/team/TeamSettings.tsx` — Roster management UI (Sync Slack, Sync Google, Recompute Workloads)
 - `src/components/team/TeamMemberCard.tsx` — Member display with workload
-- `src/components/tasks/AssigneePicker.tsx` — AI-powered assignee suggestions
+- `src/components/tasks/AssigneePicker.tsx` — Multi-assignee picker with AI suggestions, mounted in `TaskEditModal` only (chips + dropdown, same `value`/`onChange` contract as `AssigneeChipInput` — comma-separated string). Selecting or overriding a suggestion calls `record_assignee_selection` internally for pattern learning. `wasOverride` is only true if the AI's #1 suggestion hasn't already been added and you picked someone else instead — adding a 4th/5th person after honoring the top pick doesn't count as an override.
+- `src/components/integrations/GoogleSettings.tsx` — Google Workspace connection settings + manual "Sync Team Roster Now"
+
+**Reachability:** `TeamSettings`, `ExportDialog`, and `ImportDialog` are mounted via a "Team & Data" section inside `IntegrationsPage.tsx` (Settings → Integrations → Team & Data), not as separate sidebar entries. This was a real bug, not just missing polish — all three components existed and were fully implemented but had zero JSX usage anywhere in the app until this was wired up; `TeamSettings` now takes an optional `onClose` prop for its modal wrapper.
+
+**Bulk task updates also feed learning:** `bulk_update_tasks` (commands/tasks.rs) now snapshots pre-update task state and fires the same `record_completion_observation`/`record_assignee_observation` calls as the single-task `update_task` path — previously, completing multiple tasks via a bulk action taught the system nothing (patterns *and* expertise), only completing them one at a time did.
+
+**Expertise auto-learning:**
+- `team::repository::record_expertise_observation()` bumps a per-keyword pending count (`team_members.expertise_pending`, v017 migration) each time an assignee completes a task whose title/description keywords don't already match an existing expertise tag.
+- A keyword is promoted into the member's visible `expertise` array only after `EXPERTISE_PROMOTION_THRESHOLD` (3) separate completions — a single task never mutates expertise on its own, matching the spec's "confidence increases with repetition."
+- `expertise_pending` is a separate column from `metadata` specifically so a Slack/Google roster resync (which overwrites `metadata` wholesale) doesn't wipe learning progress.
+- Hooked into the existing task-completion handler in `commands/tasks.rs` (same place that already recorded `task_completion` pattern observations), splitting `task.assignee` on commas to handle multi-assignee tasks.
 
 **Export/Import:**
-- `src-tauri/src/sync/export.rs` — ZIP archive built in memory (projects, tasks, meetings, team members), hashed for integrity, optionally encrypted as a whole
+- `src-tauri/src/sync/export.rs` — ZIP archive built in memory (projects, tasks, meetings, team members, pattern contributions, Qdrant vector snapshots), hashed for integrity, optionally encrypted as a whole
 - `src-tauri/src/sync/import.rs` — Archive parsing with conflict resolution, transactional apply
 - `src-tauri/src/sync/manifest.rs` — Version tracking, content inventory, `compute_checksum()` helper
 - `src-tauri/src/sync/crypto.rs` — Real AES-256-GCM encryption (PBKDF2-SHA256 key derivation, 100k iterations, same pattern as `crypto/key.rs`'s SQLCipher key derivation). Encrypts the *finished* zip as a byte stream (`MRX1` magic + salt + nonce + ciphertext) rather than per-entry, since the `zip` crate (0.6) has no write-side AES support. If no password is given the file is a plain, unencrypted zip — `crypto::is_encrypted()` detects which on import.
-- `src-tauri/src/commands/sync.rs` — 5 Tauri commands
-- `src/components/sync/ExportDialog.tsx` — Content selection, password protection
-- `src/components/sync/ImportDialog.tsx` — Conflict resolution UI
+- `src-tauri/src/commands/sync.rs` — 5 Tauri commands (incl. `pick_export_save_path`/`pick_import_file_path` native dialogs). `export_single_skill`/`import_single_skill` were removed (previously 7) — they had zero call sites anywhere in the UI and the import side never actually inserted the parsed skill into the DB; the skills UI already has a separate, working `export_skill_to_directory`/`import_skill` path (`commands/skills.rs`), so the dead pair was deleted rather than fixed.
+- `src/components/sync/ExportDialog.tsx` — Content selection (honest: skills/document-metadata checkboxes are disabled with "coming soon", since export.rs never touches those regardless of what's checked), native save dialog, real progress bar
+- `src/components/sync/ImportDialog.tsx` — Conflict resolution UI, native open dialog, real progress bar, "Restore Backup" tab
+
+**`conn`/`Send` split (important if touching export.rs or import.rs):** `export_data`/`import_data` need to do async work (Qdrant snapshot calls) partway through, but `rusqlite::Connection` isn't `Sync` — a `#[tauri::command]`'s future must be `Send`, and passing `conn`/a `MutexGuard<Connection>` into *anything* that returns a future spanning an `.await`, even one that only touches it before its own first await, makes the **caller's** future non-`Send` too (the borrow must stay valid for the callee future's whole lifetime as far as the borrow checker is concerned). Fix: `build_local_entries`/`apply_local_import` are plain sync functions that do all `conn` work and return owned data; `finish_export`/`finish_import` are async and take no `conn`. `commands/sync.rs` calls the sync half inside the `state.db.lock()` block, drops the lock, then awaits the async half. `export_data`/`import_data` remain as convenience wrappers combining both for tests, which aren't subject to this constraint. Progress callbacks (`ProgressFn`) also need an explicit `+ Sync` bound for the same reason.
 
 **Export/Import integrity & safety (previously non-functional, fixed):**
 - `checksum.sha256` is written into the archive (hash over the fixed-order data files + manifest) and verified on import when present; mismatch aborts the import with an error.
 - Meetings are now imported, not just exported — `import_meeting()` mirrors `import_project`/`import_task`. `import_task`'s existence check was also fixed (it previously called a `get_task()` that errors on "not found" instead of returning `Option`, which made importing brand-new tasks fail).
 - `ImportMode::Replace` is now actually applied: it wipes locally-present content types (in FK-safe order: tasks → meetings → projects, plus team_members) before inserting, instead of silently behaving like Merge.
-- The whole `import_data()` body runs inside `conn.unchecked_transaction()` — commits only if every item succeeds, otherwise rolls back automatically. Previously each row was written with no atomicity.
-- Pre-import backup reuses the existing `utils::backup::backup_database()` (the same mechanism used before schema migrations) rather than a new system — path returned in `ImportResult.backup_path` and shown in the Import dialog's completion screen. List/restore of any backup already exists via `commands::migration::{list_backups, restore_from_backup}`.
-- Test coverage: `sync/import.rs` has round-trip tests (encrypted, unencrypted, wrong password, Replace vs Merge, conflict detection, checksum-tamper detection); `sync/crypto.rs` has its own encrypt/decrypt/tamper tests.
+- The whole SQL portion of import runs inside `conn.unchecked_transaction()` — commits only if every item succeeds, otherwise rolls back automatically. Previously each row was written with no atomicity.
+- Pre-import backup reuses the existing `utils::backup::backup_database()` (the same mechanism used before schema migrations) rather than a new system — path returned in `ImportResult.backup_path` and shown in the Import dialog's completion screen. Restoring any backup is available directly from the Import dialog's "Restore Backup" tab (`commands::migration::{list_backups, restore_from_backup}`).
+- `pick_export_save_path`/`pick_import_file_path` (commands/sync.rs) are real native dialogs (osascript on macOS, `rfd` elsewhere) — the export path picker used to just hardcode `~/Downloads/...` and the import file picker did nothing at all.
+- Export/import progress is real: backend emits `export_progress`/`import_progress` events (`tauri::Emitter`) after each stage, frontend listens via `onExportProgress`/`onImportProgress` (`lib/tauri.ts`) and renders an actual percentage bar, not just a spinner.
+- Test coverage: `sync/import.rs` has round-trip tests (encrypted, unencrypted, wrong password, Replace vs Merge, conflict detection, checksum-tamper detection, Qdrant-unavailable graceful degradation, shared-patterns round-trip); `sync/crypto.rs` has its own encrypt/decrypt/tamper tests.
+- Conflict rows in `ImportDialog.tsx` show local-vs-import "updated at" timestamps (`ImportConflict.local_updated`/`import_updated`), not just names, matching the data-import spec's diff-preview requirement.
+- `ConflictResolution::Ask` reaching the data layer (`import_project`/`import_task`/`import_meeting`/`import_team_member` in `sync/import.rs`) now returns an explicit error instead of silently behaving like `Skip` — it's a latent-bug guard, not a real code path: the UI always resolves every conflict to `skip`/`overwrite` before calling `import_all_data`, so this should never actually trigger.
 
-**Database (v016 migration):**
-- `team_members` — id, name, email, avatar_url, source, source_id, role, expertise (JSON), workload_score
-- `pattern_contributions` — Placeholder for team pattern sharing (see Known Gaps — shared patterns are 0% implemented beyond this schema)
+**Vector embeddings in export/import:**
+- `vectors/qdrant.rs::export_snapshot()`/`import_snapshot()` use Qdrant's native snapshot API — `create_snapshot()` via the gRPC client, then download/upload via raw `reqwest` calls to Qdrant's REST port (gRPC port − 1, e.g. 6334 → 6333; the gRPC client's own `download_snapshot()` needs an extra crate feature we don't otherwise need, and has no upload/recover equivalent at all).
+- Export snapshots every existing Qdrant collection (not scoped by `project_ids`) into `vectors/qdrant_snapshot/{collection}.snapshot`. If Qdrant isn't running, export proceeds without vectors rather than failing — `contents.vectors` reflects what actually got included.
+- Snapshot files are binary blobs and are **not** part of the sha256 checksum — the zip format's own per-entry CRC32 covers them.
+
+**Shared Patterns (`pattern_contributions` table, previously schema-only):**
+- Opt-in via "Contribute to team patterns" toggle in `LearningSettings.tsx` (`app_settings.pattern_contribution_enabled`). When on, every `patterns::repository::insert_observation()` call also anonymizes and contributes: only `task_keywords`/`new_priority`/`old_priority`/`new_status` are ever kept (`SAFE_CONTEXT_KEYS`) — task titles, names, project IDs, and entity IDs are dropped entirely, never hashed-but-kept. Content that trips `sensitive::scan_content()` is never contributed. The anonymized JSON is SHA-256 hashed and stored (`pattern_contributions.observation_hash`) — dedup via `UNIQUE(pattern_type, observation_hash)`.
+- **The schema only stores hashes, not content** — by original design (see `design.md` Decision 5). This means team-scope `pattern_models` rows can't be reconstructed with real keyword/assignee content; `upsert_team_pattern_model()` stores only a `{"contribution_count": N}` summary. Team patterns are a validation/count signal ("N teammates share evidence of a pattern in this category"), not a content-transfer mechanism — don't build logic that assumes otherwise without changing the export schema first.
+- Export includes `pattern_contributions` when `include_patterns` is checked (`sync/export.rs`); import merges via `merge_team_contributions()`, incrementing `contributor_count` only for hashes not already known locally (re-importing the same export, or two teammates independently observing the same anonymized pattern, doesn't inflate the count).
+- **Regression risk if touching `pattern_models`:** the table's `UNIQUE(pattern_type, project_id)` constraint predates the `scope` column and doesn't include it. A team-scope row with `project_id = NULL` would collide with a personal global row of the same `pattern_type`. Team rows use the sentinel `project_id = "__team__"` (`TEAM_SCOPE_PROJECT_ID` in `patterns/repository.rs`) to stay distinct without a migration. Covered by `test_personal_and_team_scope_dont_collide_on_same_pattern_type`.
+- "Use team patterns" toggle (`app_settings.use_team_patterns`) currently only controls whether the Team Patterns section renders in `LearningSettings.tsx` — it does **not** filter team-scope rows out of any suggestion query, because (per the point above) team rows carry no exploitable content for today's consumers anyway. Wiring it into query-time filtering would be a no-op until team `model_data` carries more than a count.
+- Key files: `patterns/repository.rs` (`maybe_contribute`, `anonymize_context_data`, `merge_team_contributions`), `commands/patterns.rs` (5 new commands), `components/patterns/LearningSettings.tsx`.
+
+**Database:**
+- `team_members` (v016) — id, name, email, avatar_url, source, source_id, role, expertise (JSON), workload_score
+- `team_members.expertise_pending` (v017) — JSON keyword→count map for expertise auto-learning, kept separate from `metadata` so roster resyncs don't erase it
+- `pattern_contributions` (v016) — hash-only contribution log, see Shared Patterns above
+- `pattern_models.scope`/`contributor_count` (v016) — now actually read/written (previously dead columns; `PatternModel` didn't even expose them as Rust fields)
+
+**Spec location:** Phase 7's specs (`team-roster`, `assignee-intelligence`, `data-export`, `data-import`, `shared-patterns`) have been archived and merged into canonical `openspec/specs/` — the change proposal itself now lives at `openspec/changes/archive/2026-07-30-phase-7-team-sync/`. Check the canonical spec files for current requirements, not the archived change folder.
 
 **Team & Sync: Known Gaps / Future Work**
 
@@ -733,13 +769,11 @@ Multi-factor scoring for task assignment suggestions:
 
 | Item | Status | What's Missing |
 |------|--------|-----------------|
-| **AssigneePicker not mounted** | BLOCKED ON DECISION | Component exists (`src/components/tasks/AssigneePicker.tsx`) but is single-assignee, while the app's real assignee UI (`AssigneeChipInput`) is multi-assignee (comma-separated). Needs a decision on whether assignee stays multi-person (picker needs a rewrite) and which editing surface(s) get it. |
-| **Expertise auto-learning** | BLOCKED ON DECISION | Spec wants member expertise tags to update from completed-task keywords, with "confidence increases with repetition" — no threshold is specified anywhere, and adding one requires new counter storage. The hook point is easy (task-completion handler in `commands/tasks.rs` already extracts keywords), the threshold policy isn't. |
-| **Google Workspace roster sync** | TRUE BLOCKER | No Google integration exists in this codebase at all — no `google.rs`, no OAuth scaffolding, no connected-service record. This is full-integration-sized scope (comparable to the Slack/GitHub/Jira work), not a roster-sync fix. `poll_team_syncs_job` has the Google branch commented out as a placeholder. |
-| **Shared Patterns** | DEFERRED (by design) | Local-first app, no team sync mechanism. Only the `pattern_contributions` table and `pattern_models.scope`/`contributor_count` columns exist; no anonymization, no contribution opt-in, no dual-layer query, no UI. |
+| **Google Workspace domain admin approval** | EXTERNAL DEPENDENCY | The `google.rs` provider, OAuth wizard step, `sync_team_from_google` command, and `GoogleSettings.tsx` UI are all implemented — but `admin.directory.user.readonly` is a restricted scope only a Workspace domain admin can approve. Without real `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` credentials and that approval (see CREDENTIALS_SETUP.md Part 5b), connecting will fail at Google's consent step — that's expected, not a bug. Personal Gmail accounts can never use this (no Workspace domain to query). |
 | **Skill sharing team features** | SUPERSEDED | `proposal.md` for this phase lists `skill-sharing` as a modified capability (team visibility, clone tracking via `cloned_from_id`), but the current authoritative spec at `openspec/specs/skill-sharing/spec.md` has since explicitly REMOVED those requirements ("Meridian is a local-first single-user app... no multi-user sharing functionality exists"). Nothing to fix here — the proposal is stale, not the code. |
-| **Export progress events** | NOT IMPL | `export_all_data`/`import_all_data` are plain request/response commands with no incremental progress channel; the dialogs show an indeterminate spinner, not a real progress bar. |
-| **Qdrant snapshot export/restore** | NOT IMPL | Requires Qdrant API integration; explicitly deferred since Phase 7 proposal. |
+| **Skills/document-metadata/audit-log export** | NOT IMPL | `ExportOptions.include_skills`/`include_documents` exist but export.rs never reads them (there's no `include_audit` field at all — audit log export isn't in `ExportOptions` in any form). All three are disabled in `ExportDialog.tsx` with a "coming soon" label rather than silently doing nothing. |
+| **AssigneePicker in inline/filter editors** | NOT IMPL (by choice) | AssigneePicker is mounted in `TaskEditModal` only, per product decision — `TaskInlineEditor` and `TaskFilters` still use the plain `AssigneeChipInput`. Expand deliberately if those surfaces need suggestions too, not by default. |
+| **Expertise auto-learning threshold policy** | Implemented with a fixed default | `EXPERTISE_PROMOTION_THRESHOLD = 3` (`team/repository.rs`) — a keyword is promoted after 3 completions. If this needs to be configurable per-user, that's new scope, not a bug. |
 
 ---
 

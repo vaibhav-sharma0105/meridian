@@ -184,6 +184,11 @@ pub fn run() {
             commands::patterns::import_learning_data,
             commands::patterns::reset_pattern_category,
             commands::patterns::reset_all_learning,
+            commands::patterns::get_pattern_contribution_enabled,
+            commands::patterns::set_pattern_contribution_enabled,
+            commands::patterns::get_use_team_patterns_enabled,
+            commands::patterns::set_use_team_patterns_enabled,
+            commands::patterns::get_team_pattern_summaries,
             // Suggestions
             commands::suggestions::get_pending_suggestions,
             commands::suggestions::accept_suggestion,
@@ -284,12 +289,13 @@ pub fn run() {
             commands::team::get_assignee_suggestions,
             commands::team::record_assignee_selection,
             commands::team::sync_team_from_slack,
+            commands::team::sync_team_from_google,
             // Sync (Export/Import)
             commands::sync::export_all_data,
-            commands::sync::export_single_skill,
             commands::sync::preview_import_data,
             commands::sync::import_all_data,
-            commands::sync::import_single_skill,
+            commands::sync::pick_export_save_path,
+            commands::sync::pick_import_file_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

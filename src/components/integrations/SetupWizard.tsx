@@ -191,6 +191,53 @@ const INTEGRATION_SETUP: Record<
       redirectUri: "http://localhost:8765/oauth/callback",
     },
   },
+  google: {
+    name: "Google Workspace",
+    category: "native",
+    icon: "🔵",
+    description: "Sync your team roster from Google Workspace Directory",
+    prerequisites: [
+      "Google Workspace domain (not a personal Gmail account)",
+      "Domain admin approval for the Admin SDK directory.readonly scope",
+      "OAuth client created in Google Cloud Console",
+    ],
+    steps: [
+      {
+        id: "create_oauth_app",
+        title: "Create a Google Cloud OAuth Client",
+        description:
+          "In Google Cloud Console, create a project, enable the Admin SDK API, then create an OAuth client ID (type: Web application). Add callback URL: http://localhost:8765/oauth/callback",
+        icon: <Key className="w-4 h-4" />,
+        action: "manual",
+      },
+      {
+        id: "configure_permissions",
+        title: "Get Domain Admin Approval",
+        description:
+          "The admin.directory.user.readonly scope can only be granted by a Workspace domain admin — add it under OAuth consent screen → Scopes, or have an admin pre-authorize it via the Admin Console's API controls.",
+        icon: <Shield className="w-4 h-4" />,
+        action: "manual",
+      },
+      {
+        id: "configure_credentials",
+        title: "Enter Client Credentials",
+        description: "Enter your OAuth client's Client ID and Client Secret",
+        icon: <Key className="w-4 h-4" />,
+        action: "api_key",
+      },
+      {
+        id: "authorize",
+        title: "Authorize Meridian",
+        description: "Click to open Google and grant read-only access to your Workspace directory",
+        icon: <Globe className="w-4 h-4" />,
+        action: "oauth",
+      },
+    ],
+    oauthConfig: {
+      scopes: ["https://www.googleapis.com/auth/admin.directory.user.readonly"],
+      redirectUri: "http://localhost:8765/oauth/callback",
+    },
+  },
   zoom: {
     name: "Zoom",
     category: "native",
@@ -725,6 +772,27 @@ export function SetupWizard({ integrationType, isMcp, onClose, onComplete }: Set
                 className="mt-3 inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-700"
               >
                 Open Atlassian Developer Console
+                <ExternalLink className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {currentStepConfig.action === "manual" && integrationType === "google" && currentStep === 0 && (
+            <div className="mt-4 p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg">
+              <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-3">
+                Redirect URL to use in your Google Cloud OAuth client:
+              </p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 px-3 py-2 text-xs bg-zinc-100 dark:bg-zinc-900 rounded font-mono text-zinc-800 dark:text-zinc-200">
+                  http://localhost:8765/oauth/callback
+                </code>
+                <CopyButton text="http://localhost:8765/oauth/callback" />
+              </div>
+              <button
+                onClick={() => openUrl("https://console.cloud.google.com/apis/credentials")}
+                className="mt-3 inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-700"
+              >
+                Open Google Cloud Console
                 <ExternalLink className="w-3.5 h-3.5" />
               </button>
             </div>

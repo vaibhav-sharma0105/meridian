@@ -296,6 +296,82 @@ pub fn compute_all_workload_scores(conn: &Connection) -> Result<Vec<(String, f64
     Ok(results)
 }
 
+/// Number of distinct completed tasks whose keywords must match a member
+/// before that keyword is promoted from "pending" into their visible
+/// expertise tags. Matches the spec's "confidence increases with
+/// repetition" — a single completed task never mutates expertise on its own.
+pub const EXPERTISE_PROMOTION_THRESHOLD: i64 = 3;
+
+/// Records that `member_id` completed a task with these keywords, bumping
+/// each keyword's pending occurrence count. Once a keyword crosses
+/// EXPERTISE_PROMOTION_THRESHOLD it's promoted into `expertise` and its
+/// pending count is cleared. Pending counts live in a separate column from
+/// `metadata` so they survive Slack/Google roster resyncs (which overwrite
+/// `metadata` wholesale but never touch `expertise_pending`).
+pub fn record_expertise_observation(
+    conn: &Connection,
+    member_id: &str,
+    keywords: &[String],
+) -> Result<(), String> {
+    if keywords.is_empty() {
+        return Ok(());
+    }
+
+    let member = match get_team_member(conn, member_id)? {
+        Some(m) => m,
+        None => return Ok(()),
+    };
+
+    let pending_json: Option<String> = conn
+        .query_row(
+            "SELECT expertise_pending FROM team_members WHERE id = ?1",
+            [member_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?
+        .flatten();
+
+    let mut pending: std::collections::HashMap<String, i64> = pending_json
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+
+    let mut expertise = member.expertise.unwrap_or_default();
+    let mut expertise_changed = false;
+
+    for keyword in keywords {
+        let keyword = keyword.to_lowercase();
+        if keyword.is_empty() || expertise.iter().any(|e| e.to_lowercase() == keyword) {
+            continue; // already an established expertise tag, nothing to track
+        }
+        let count = pending.entry(keyword.clone()).or_insert(0);
+        *count += 1;
+        if *count >= EXPERTISE_PROMOTION_THRESHOLD {
+            expertise.push(keyword.clone());
+            expertise_changed = true;
+            pending.remove(&keyword);
+        }
+    }
+
+    let pending_json = serde_json::to_string(&pending).map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE team_members SET expertise_pending = ?1 WHERE id = ?2",
+        params![pending_json, member_id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    if expertise_changed {
+        let expertise_json = serde_json::to_string(&expertise).map_err(|e| e.to_string())?;
+        conn.execute(
+            "UPDATE team_members SET expertise = ?1 WHERE id = ?2",
+            params![expertise_json, member_id],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
 pub fn get_team_member_by_name(conn: &Connection, name: &str) -> Result<Option<TeamMember>, String> {
     let mut stmt = conn
         .prepare(
@@ -356,6 +432,7 @@ mod tests {
                 expertise TEXT,
                 workload_score REAL,
                 metadata TEXT,
+                expertise_pending TEXT,
                 last_synced_at TEXT,
                 created_at TEXT DEFAULT (datetime('now'))
             );
@@ -503,5 +580,84 @@ mod tests {
 
         delete_team_member(&conn, &member.id).unwrap();
         assert!(get_team_member(&conn, &member.id).unwrap().is_none());
+    }
+
+    fn make_member(conn: &Connection, name: &str) -> TeamMember {
+        create_team_member(
+            conn,
+            &CreateTeamMemberInput {
+                name: name.to_string(),
+                email: None,
+                avatar_url: None,
+                source: "manual".to_string(),
+                source_id: None,
+                role: None,
+                expertise: None,
+                metadata: None,
+            },
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn test_expertise_not_promoted_below_threshold() {
+        let conn = setup_test_db();
+        let member = make_member(&conn, "Priya");
+
+        for _ in 0..(EXPERTISE_PROMOTION_THRESHOLD - 1) {
+            record_expertise_observation(&conn, &member.id, &["billing".to_string()]).unwrap();
+        }
+
+        let updated = get_team_member(&conn, &member.id).unwrap().unwrap();
+        assert!(updated.expertise.unwrap_or_default().is_empty());
+    }
+
+    #[test]
+    fn test_expertise_promoted_at_threshold() {
+        let conn = setup_test_db();
+        let member = make_member(&conn, "Priya");
+
+        for _ in 0..EXPERTISE_PROMOTION_THRESHOLD {
+            record_expertise_observation(&conn, &member.id, &["billing".to_string()]).unwrap();
+        }
+
+        let updated = get_team_member(&conn, &member.id).unwrap().unwrap();
+        assert_eq!(updated.expertise, Some(vec!["billing".to_string()]));
+
+        // Pending count for a promoted keyword should be cleared, not just capped.
+        let pending: Option<String> = conn
+            .query_row(
+                "SELECT expertise_pending FROM team_members WHERE id = ?1",
+                [&member.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let pending_map: std::collections::HashMap<String, i64> =
+            serde_json::from_str(&pending.unwrap()).unwrap();
+        assert!(!pending_map.contains_key("billing"));
+    }
+
+    #[test]
+    fn test_expertise_already_tagged_keyword_is_not_recounted() {
+        let conn = setup_test_db();
+        let member = make_member(&conn, "Priya");
+        update_team_member(
+            &conn,
+            &UpdateTeamMemberInput {
+                id: member.id.clone(),
+                name: None,
+                email: None,
+                avatar_url: None,
+                role: None,
+                expertise: Some(vec!["billing".to_string()]),
+                metadata: None,
+            },
+        )
+        .unwrap();
+
+        record_expertise_observation(&conn, &member.id, &["billing".to_string()]).unwrap();
+
+        let updated = get_team_member(&conn, &member.id).unwrap().unwrap();
+        assert_eq!(updated.expertise, Some(vec!["billing".to_string()]));
     }
 }

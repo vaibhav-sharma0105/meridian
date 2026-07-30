@@ -623,6 +623,7 @@ mod tests {
                 context_config TEXT,
                 action_config TEXT,
                 approval_mode TEXT NOT NULL DEFAULT 'notify',
+                autonomy_mode TEXT,
                 enabled INTEGER NOT NULL DEFAULT 1,
                 shared INTEGER NOT NULL DEFAULT 0,
                 is_builtin INTEGER NOT NULL DEFAULT 0,
