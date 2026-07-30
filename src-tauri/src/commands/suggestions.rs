@@ -1,5 +1,10 @@
 use tauri::State;
 
+use crate::governance::{
+    approval as governance_approval,
+    autonomy::{AutonomyContext, AutonomyController},
+    risk::{self, ActionType, ContentRisk, DestinationType},
+};
 use crate::suggestions::models::{CreateSuggestionInput, Suggestion};
 use crate::suggestions::repository;
 use crate::patterns::models::CreateObservationInput;
@@ -15,13 +20,66 @@ pub async fn get_pending_suggestions(
     repository::get_pending_suggestions(&conn, project_id.as_deref())
 }
 
+#[derive(serde::Serialize)]
+pub struct AcceptSuggestionResult {
+    pub accepted: bool,
+    pub queued_for_approval: bool,
+    pub approval_id: Option<String>,
+}
+
 #[tauri::command]
 pub async fn accept_suggestion(
     state: State<'_, AppState>,
     id: String,
-) -> Result<(), String> {
+) -> Result<AcceptSuggestionResult, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    repository::update_suggestion_status(&conn, &id, "accepted")
+
+    let suggestion = repository::get_suggestion_by_id(&conn, &id)?;
+
+    let action_type = match suggestion.suggestion_type.as_str() {
+        "overdue_task" | "stale_task" => ActionType::Update,
+        "meeting_followup" => ActionType::Create,
+        "workflow_sequence" => ActionType::Update,
+        _ => ActionType::Read,
+    };
+
+    let risk_score = risk::calculate_risk(action_type, DestinationType::Internal, ContentRisk::Normal);
+
+    let autonomy_context = AutonomyContext {
+        integration_id: None,
+        skill_id: None,
+    };
+
+    let decision = AutonomyController::evaluate_action(&conn, &autonomy_context, risk_score.risk_level)?;
+
+    if decision.requires_approval {
+        let action_config = suggestion.action_config.as_deref().unwrap_or("{}");
+        let approval_id = governance_approval::queue_for_approval(
+            &conn,
+            &format!("suggestion:{}", suggestion.suggestion_type),
+            action_config,
+            Some("suggestion"),
+            Some(&id),
+            decision.risk_level,
+            decision.autonomy_mode,
+            Some(&decision.reason),
+            None,
+        )?;
+
+        return Ok(AcceptSuggestionResult {
+            accepted: false,
+            queued_for_approval: true,
+            approval_id: Some(approval_id),
+        });
+    }
+
+    repository::update_suggestion_status(&conn, &id, "accepted")?;
+
+    Ok(AcceptSuggestionResult {
+        accepted: true,
+        queued_for_approval: false,
+        approval_id: None,
+    })
 }
 
 #[tauri::command]

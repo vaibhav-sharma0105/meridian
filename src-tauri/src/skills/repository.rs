@@ -60,7 +60,7 @@ pub fn create_skill(conn: &Connection, input: &CreateSkillInput) -> Result<Skill
 pub fn get_skill(conn: &Connection, id: &str) -> Result<Skill, String> {
     conn.query_row(
         "SELECT id, name, description, trigger_type, trigger_config, context_config, action_config,
-         approval_mode, enabled, shared, owner_id, category, icon, tags, next_run_at, cloned_from_id,
+         approval_mode, autonomy_mode, enabled, shared, owner_id, category, icon, tags, next_run_at, cloned_from_id,
          is_builtin, created_at, updated_at
          FROM skills WHERE id = ?1",
         params![id],
@@ -74,17 +74,18 @@ pub fn get_skill(conn: &Connection, id: &str) -> Result<Skill, String> {
                 context_config: row.get(5)?,
                 action_config: row.get(6)?,
                 approval_mode: row.get(7)?,
-                enabled: row.get::<_, i32>(8)? != 0,
-                shared: row.get::<_, i32>(9)? != 0,
-                owner_id: row.get(10)?,
-                category: row.get(11)?,
-                icon: row.get(12)?,
-                tags: row.get(13)?,
-                next_run_at: row.get(14)?,
-                cloned_from_id: row.get(15)?,
-                is_builtin: row.get::<_, i32>(16)? != 0,
-                created_at: row.get(17)?,
-                updated_at: row.get(18)?,
+                autonomy_mode: row.get(8)?,
+                enabled: row.get::<_, i32>(9)? != 0,
+                shared: row.get::<_, i32>(10)? != 0,
+                owner_id: row.get(11)?,
+                category: row.get(12)?,
+                icon: row.get(13)?,
+                tags: row.get(14)?,
+                next_run_at: row.get(15)?,
+                cloned_from_id: row.get(16)?,
+                is_builtin: row.get::<_, i32>(17)? != 0,
+                created_at: row.get(18)?,
+                updated_at: row.get(19)?,
             })
         },
     )
@@ -94,7 +95,7 @@ pub fn get_skill(conn: &Connection, id: &str) -> Result<Skill, String> {
 pub fn list_skills(conn: &Connection, filters: &SkillFilters) -> Result<Vec<Skill>, String> {
     let mut sql = String::from(
         "SELECT id, name, description, trigger_type, trigger_config, context_config, action_config,
-         approval_mode, enabled, shared, owner_id, category, icon, tags, next_run_at, cloned_from_id,
+         approval_mode, autonomy_mode, enabled, shared, owner_id, category, icon, tags, next_run_at, cloned_from_id,
          is_builtin, created_at, updated_at FROM skills WHERE 1=1",
     );
     let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
@@ -142,17 +143,18 @@ pub fn list_skills(conn: &Connection, filters: &SkillFilters) -> Result<Vec<Skil
                 context_config: row.get(5)?,
                 action_config: row.get(6)?,
                 approval_mode: row.get(7)?,
-                enabled: row.get::<_, i32>(8)? != 0,
-                shared: row.get::<_, i32>(9)? != 0,
-                owner_id: row.get(10)?,
-                category: row.get(11)?,
-                icon: row.get(12)?,
-                tags: row.get(13)?,
-                next_run_at: row.get(14)?,
-                cloned_from_id: row.get(15)?,
-                is_builtin: row.get::<_, i32>(16)? != 0,
-                created_at: row.get(17)?,
-                updated_at: row.get(18)?,
+                autonomy_mode: row.get(8)?,
+                enabled: row.get::<_, i32>(9)? != 0,
+                shared: row.get::<_, i32>(10)? != 0,
+                owner_id: row.get(11)?,
+                category: row.get(12)?,
+                icon: row.get(13)?,
+                tags: row.get(14)?,
+                next_run_at: row.get(15)?,
+                cloned_from_id: row.get(16)?,
+                is_builtin: row.get::<_, i32>(17)? != 0,
+                created_at: row.get(18)?,
+                updated_at: row.get(19)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -182,6 +184,7 @@ pub fn update_skill(conn: &Connection, input: &UpdateSkillInput) -> Result<Skill
     add_field!("description", &input.description);
     add_field!("trigger_type", &input.trigger_type);
     add_field!("approval_mode", &input.approval_mode);
+    add_field!("autonomy_mode", &input.autonomy_mode);
     add_field!("category", &input.category);
     add_field!("icon", &input.icon);
 
@@ -258,7 +261,7 @@ pub fn get_due_scheduled_skills(conn: &Connection) -> Result<Vec<Skill>, String>
     let mut stmt = conn
         .prepare(
             "SELECT id, name, description, trigger_type, trigger_config, context_config, action_config,
-             approval_mode, enabled, shared, owner_id, category, icon, tags, next_run_at, cloned_from_id,
+             approval_mode, autonomy_mode, enabled, shared, owner_id, category, icon, tags, next_run_at, cloned_from_id,
              is_builtin, created_at, updated_at
              FROM skills
              WHERE trigger_type = 'schedule' AND enabled = 1 AND next_run_at <= ?1",
@@ -276,17 +279,18 @@ pub fn get_due_scheduled_skills(conn: &Connection) -> Result<Vec<Skill>, String>
                 context_config: row.get(5)?,
                 action_config: row.get(6)?,
                 approval_mode: row.get(7)?,
-                enabled: row.get::<_, i32>(8)? != 0,
-                shared: row.get::<_, i32>(9)? != 0,
-                owner_id: row.get(10)?,
-                category: row.get(11)?,
-                icon: row.get(12)?,
-                tags: row.get(13)?,
-                next_run_at: row.get(14)?,
-                cloned_from_id: row.get(15)?,
-                is_builtin: row.get::<_, i32>(16)? != 0,
-                created_at: row.get(17)?,
-                updated_at: row.get(18)?,
+                autonomy_mode: row.get(8)?,
+                enabled: row.get::<_, i32>(9)? != 0,
+                shared: row.get::<_, i32>(10)? != 0,
+                owner_id: row.get(11)?,
+                category: row.get(12)?,
+                icon: row.get(13)?,
+                tags: row.get(14)?,
+                next_run_at: row.get(15)?,
+                cloned_from_id: row.get(16)?,
+                is_builtin: row.get::<_, i32>(17)? != 0,
+                created_at: row.get(18)?,
+                updated_at: row.get(19)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -300,7 +304,7 @@ pub fn get_skills_for_event(conn: &Connection, event_type: &str) -> Result<Vec<S
     let mut stmt = conn
         .prepare(
             "SELECT id, name, description, trigger_type, trigger_config, context_config, action_config,
-             approval_mode, enabled, shared, owner_id, category, icon, tags, next_run_at, cloned_from_id,
+             approval_mode, autonomy_mode, enabled, shared, owner_id, category, icon, tags, next_run_at, cloned_from_id,
              is_builtin, created_at, updated_at
              FROM skills
              WHERE trigger_type = 'event' AND enabled = 1",
@@ -318,17 +322,18 @@ pub fn get_skills_for_event(conn: &Connection, event_type: &str) -> Result<Vec<S
                 context_config: row.get(5)?,
                 action_config: row.get(6)?,
                 approval_mode: row.get(7)?,
-                enabled: row.get::<_, i32>(8)? != 0,
-                shared: row.get::<_, i32>(9)? != 0,
-                owner_id: row.get(10)?,
-                category: row.get(11)?,
-                icon: row.get(12)?,
-                tags: row.get(13)?,
-                next_run_at: row.get(14)?,
-                cloned_from_id: row.get(15)?,
-                is_builtin: row.get::<_, i32>(16)? != 0,
-                created_at: row.get(17)?,
-                updated_at: row.get(18)?,
+                autonomy_mode: row.get(8)?,
+                enabled: row.get::<_, i32>(9)? != 0,
+                shared: row.get::<_, i32>(10)? != 0,
+                owner_id: row.get(11)?,
+                category: row.get(12)?,
+                icon: row.get(13)?,
+                tags: row.get(14)?,
+                next_run_at: row.get(15)?,
+                cloned_from_id: row.get(16)?,
+                is_builtin: row.get::<_, i32>(17)? != 0,
+                created_at: row.get(18)?,
+                updated_at: row.get(19)?,
             })
         })
         .map_err(|e| e.to_string())?

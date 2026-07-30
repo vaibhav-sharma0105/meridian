@@ -1,5 +1,10 @@
 use tauri::State;
 
+use crate::governance::{
+    approval as governance_approval,
+    autonomy::{AutonomyContext, AutonomyController},
+    risk::{self, ActionType, ContentRisk, DestinationType},
+};
 use crate::integrations::framework::{IntegrationRegistry, OAuthHelper};
 use crate::integrations::models::{
     CreateIntegrationInput, CreateLinkInput, Integration, IntegrationCache, IntegrationLink,
@@ -8,6 +13,49 @@ use crate::integrations::models::{
 use crate::integrations::repository;
 use crate::integrations::{get_provider, IntegrationProvider};
 use crate::AppState;
+
+#[derive(serde::Serialize)]
+pub struct IntegrationWriteResult {
+    pub success: bool,
+    pub queued_for_approval: bool,
+    pub approval_id: Option<String>,
+    pub result: Option<serde_json::Value>,
+}
+
+fn evaluate_integration_write(
+    conn: &rusqlite::Connection,
+    integration_id: &str,
+    action_type: ActionType,
+    destination: DestinationType,
+    action_description: &str,
+    action_config: &str,
+) -> Result<Option<String>, String> {
+    let risk_score = risk::calculate_risk(action_type, destination, ContentRisk::Normal);
+
+    let autonomy_context = AutonomyContext {
+        integration_id: Some(integration_id.to_string()),
+        skill_id: None,
+    };
+
+    let decision = AutonomyController::evaluate_action(conn, &autonomy_context, risk_score.risk_level)?;
+
+    if decision.requires_approval {
+        let approval_id = governance_approval::queue_for_approval(
+            conn,
+            action_description,
+            action_config,
+            Some("integration"),
+            Some(integration_id),
+            decision.risk_level,
+            decision.autonomy_mode,
+            Some(&decision.reason),
+            None,
+        )?;
+        return Ok(Some(approval_id));
+    }
+
+    Ok(None)
+}
 
 #[tauri::command]
 pub fn list_integrations(state: State<AppState>) -> Result<Vec<Integration>, String> {
@@ -368,4 +416,43 @@ pub fn detect_slack_action_items(
     .iter()
     .map(|item| item.as_str().to_string())
     .collect()
+}
+
+#[tauri::command]
+pub fn agent_integration_write(
+    state: State<AppState>,
+    integration_id: String,
+    action_type: String,
+    action_config: String,
+) -> Result<IntegrationWriteResult, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+
+    let action = risk::ActionType::from_str(&action_type).unwrap_or(risk::ActionType::Update);
+
+    let destination = DestinationType::External;
+
+    let approval_id = evaluate_integration_write(
+        &conn,
+        &integration_id,
+        action,
+        destination,
+        &format!("integration:{}", action_type),
+        &action_config,
+    )?;
+
+    if let Some(id) = approval_id {
+        return Ok(IntegrationWriteResult {
+            success: false,
+            queued_for_approval: true,
+            approval_id: Some(id),
+            result: None,
+        });
+    }
+
+    Ok(IntegrationWriteResult {
+        success: true,
+        queued_for_approval: false,
+        approval_id: None,
+        result: None,
+    })
 }

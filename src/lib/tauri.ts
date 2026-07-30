@@ -701,6 +701,23 @@ export const stopDaemon = () =>
 export const daemonHealthCheck = () =>
   invoke<boolean>("daemon_health_check");
 
+export interface BackgroundJob {
+  id: string;
+  job_type: string;
+  status: string;
+  priority: number;
+  scheduled_at: string;
+  started_at: string | null;
+  created_at: string;
+  description: string;
+}
+
+export const getBackgroundJobs = (limit?: number) =>
+  invoke<BackgroundJob[]>("get_background_jobs", { limit });
+
+export const getRecentBackgroundJobs = (limit?: number) =>
+  invoke<BackgroundJob[]>("get_recent_background_jobs", { limit });
+
 // ─── Migration ────────────────────────────────────────────────────────────────
 
 export interface MigrationStatus {
@@ -1079,6 +1096,7 @@ export interface Skill {
   context_config: string | null;
   action_config: string | null;
   approval_mode: string;
+  autonomy_mode: string | null;
   enabled: boolean;
   shared: boolean;
   owner_id: string | null;
@@ -1120,6 +1138,7 @@ export interface UpdateSkillInput {
   category?: string;
   icon?: string;
   tags?: string[];
+  autonomy_mode?: string | null;
 }
 
 export interface SkillRun {
@@ -1480,6 +1499,24 @@ export const getSlackSocketStatus = () =>
 export const detectSlackActionItems = (text: string, botUserId?: string) =>
   invoke<string[]>("detect_slack_action_items", { text, botUserId });
 
+export interface IntegrationWriteResult {
+  success: boolean;
+  queued_for_approval: boolean;
+  approval_id: string | null;
+  result: unknown | null;
+}
+
+export const agentIntegrationWrite = (
+  integrationId: string,
+  actionType: string,
+  actionConfig: string
+) =>
+  invoke<IntegrationWriteResult>("agent_integration_write", {
+    integrationId,
+    actionType,
+    actionConfig,
+  });
+
 // Notification enhancements
 export const createNotificationWithOptions = (
   notificationType: string,
@@ -1530,3 +1567,379 @@ export const getMcpPermissions = () =>
 
 export const setMcpPermissions = (permissions: McpPermissions) =>
   invoke<void>("set_mcp_permissions", { permissions });
+
+// ─── Governance ──────────────────────────────────────────────────────────────
+
+export type RiskLevel = "low" | "medium" | "high" | "critical";
+export type AutonomyMode = "manual" | "supervised" | "autonomous";
+export type AutonomySource = "global" | "integration" | "skill";
+export type ApprovalStatusType = "pending" | "approved" | "rejected" | "archived" | "executed";
+
+export interface ApprovalDecision {
+  requires_approval: boolean;
+  risk_level: RiskLevel;
+  autonomy_mode: AutonomyMode;
+  autonomy_source: AutonomySource;
+  reason: string;
+}
+
+export interface PendingApproval {
+  id: string;
+  action_type: string;
+  action_config: string;
+  source_type: string | null;
+  source_id: string | null;
+  risk_level: string;
+  autonomy_mode: string;
+  context: string | null;
+  timeout_at: string | null;
+  status: ApprovalStatusType;
+  resolved_by: string | null;
+  resolution_reason: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export interface ActionHistory {
+  id: string;
+  action_type: string;
+  entity_type: string;
+  entity_id: string;
+  before_state: string | null;
+  after_state: string | null;
+  undoable: boolean;
+  undo_action_id: string | null;
+  audit_log_id: string | null;
+  created_at: string;
+}
+
+export interface GovernanceMetrics {
+  date: string;
+  metric_type: string;
+  breakdown_key: string | null;
+  value: number;
+}
+
+export interface RiskAdjustment {
+  id: string;
+  adjustment_type: string;
+  target_type: string;
+  target_id: string;
+  risk_delta: number;
+  reason: string | null;
+  created_at: string;
+}
+
+export interface UndoResult {
+  success: boolean;
+  undo_action_id: string | null;
+  message: string;
+  reversal_type: string | null;
+}
+
+export interface EvaluateActionInput {
+  action_type: string;
+  destination: string;
+  content?: string;
+  integration_id?: string;
+  skill_id?: string;
+}
+
+export interface CreateApprovalInput {
+  action_type: string;
+  action_config: string;
+  source_type?: string;
+  source_id?: string;
+  risk_level: RiskLevel;
+  autonomy_mode: AutonomyMode;
+  context?: string;
+  timeout_minutes?: number;
+}
+
+export const evaluateAction = (input: EvaluateActionInput) =>
+  invoke<ApprovalDecision>("evaluate_action", { input });
+
+export const getAutonomySetting = (key: string) =>
+  invoke<string | null>("get_autonomy_setting", { key });
+
+export const setAutonomySetting = (key: string, value?: string) =>
+  invoke<void>("set_autonomy_setting", { key, value });
+
+export const getPendingApprovals = (status?: string, limit?: number) =>
+  invoke<PendingApproval[]>("get_pending_approvals", { status, limit });
+
+export const getPendingApproval = (id: string) =>
+  invoke<PendingApproval | null>("get_pending_approval", { id });
+
+export const approvePendingAction = (id: string) =>
+  invoke<PendingApproval>("approve_pending_action", { id });
+
+export const rejectPendingAction = (id: string, reason?: string) =>
+  invoke<PendingApproval>("reject_pending_action", { id, reason });
+
+export const bulkApproveActions = (ids: string[]) =>
+  invoke<string[]>("bulk_approve_actions", { ids });
+
+export const bulkRejectActions = (ids: string[], reason?: string) =>
+  invoke<string[]>("bulk_reject_actions", { ids, reason });
+
+export const getPendingApprovalCount = () =>
+  invoke<number>("get_pending_approval_count");
+
+export const createPendingApproval = (input: CreateApprovalInput) =>
+  invoke<string>("create_pending_approval", { input });
+
+export const getActionHistory = (entityType?: string, entityId?: string, limit?: number) =>
+  invoke<ActionHistory[]>("get_action_history", { entityType, entityId, limit });
+
+export const getUndoableActions = (limit?: number) =>
+  invoke<ActionHistory[]>("get_undoable_actions", { limit });
+
+export const undoAction = (actionId: string) =>
+  invoke<UndoResult>("undo_action", { actionId });
+
+export const captureActionState = (
+  actionType: string,
+  entityType: string,
+  entityId: string,
+  beforeState?: string,
+  afterState?: string,
+  auditLogId?: string
+) =>
+  invoke<string>("capture_action_state", {
+    actionType,
+    entityType,
+    entityId,
+    beforeState,
+    afterState,
+    auditLogId,
+  });
+
+export const getGovernanceMetrics = (startDate: string, endDate: string, metricType?: string) =>
+  invoke<GovernanceMetrics[]>("get_governance_metrics", { startDate, endDate, metricType });
+
+export const createRiskAdjustment = (
+  adjustmentType: string,
+  targetType: string,
+  targetId: string,
+  riskDelta: number,
+  reason?: string
+) =>
+  invoke<string>("create_risk_adjustment", {
+    adjustmentType,
+    targetType,
+    targetId,
+    riskDelta,
+    reason,
+  });
+
+export const getRiskAdjustment = (targetType: string, targetId: string) =>
+  invoke<RiskAdjustment | null>("get_risk_adjustment", { targetType, targetId });
+
+export const deleteRiskAdjustment = (targetType: string, targetId: string) =>
+  invoke<void>("delete_risk_adjustment", { targetType, targetId });
+
+export const calculateRiskLevel = (actionStr: string, destinationStr: string, content?: string) =>
+  invoke<RiskLevel>("calculate_risk_level", { actionStr, destinationStr, content });
+
+// ─── Team ─────────────────────────────────────────────────────────────────────
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  email?: string;
+  avatar_url?: string;
+  source: string;
+  source_id?: string;
+  role: string;
+  expertise?: string[];
+  workload_score?: number;
+  metadata?: Record<string, unknown>;
+  last_synced_at?: string;
+  created_at: string;
+}
+
+export interface CreateTeamMemberInput {
+  name: string;
+  email?: string;
+  avatar_url?: string;
+  source: string;
+  source_id?: string;
+  role?: string;
+  expertise?: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface UpdateTeamMemberInput {
+  id: string;
+  name?: string;
+  email?: string;
+  avatar_url?: string;
+  role?: string;
+  expertise?: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface TeamSyncResult {
+  added: number;
+  updated: number;
+  total: number;
+}
+
+export interface AssigneeFactors {
+  pattern_score: number;
+  workload_score: number;
+  expertise_score: number;
+  recency_score: number;
+}
+
+export interface AssigneeSuggestion {
+  member: TeamMember;
+  score: number;
+  confidence: string;
+  reason: string;
+  factors: AssigneeFactors;
+}
+
+export const getTeamMembers = () => invoke<TeamMember[]>("get_team_members");
+
+export const getTeamMember = (id: string) =>
+  invoke<TeamMember | null>("get_team_member", { id });
+
+export const createTeamMember = (input: CreateTeamMemberInput) =>
+  invoke<TeamMember>("create_team_member", { input });
+
+export const updateTeamMember = (input: UpdateTeamMemberInput) =>
+  invoke<TeamMember>("update_team_member", { input });
+
+export const deleteTeamMember = (id: string) =>
+  invoke<void>("delete_team_member", { id });
+
+export const computeTeamWorkloads = () =>
+  invoke<[string, number][]>("compute_team_workloads");
+
+export const syncTeamFromSlack = () =>
+  invoke<TeamSyncResult>("sync_team_from_slack");
+
+export const getAssigneeSuggestions = (
+  taskTitle: string,
+  taskDescription?: string,
+  projectId?: string
+) =>
+  invoke<AssigneeSuggestion[]>("get_assignee_suggestions", {
+    taskTitle,
+    taskDescription,
+    projectId,
+  });
+
+export const recordAssigneeSelection = (
+  selectedName: string,
+  suggestions: AssigneeSuggestion[],
+  wasOverride: boolean
+) =>
+  invoke<void>("record_assignee_selection", {
+    selectedName,
+    suggestions,
+    wasOverride,
+  });
+
+// ─── Sync (Export/Import) ─────────────────────────────────────────────────────
+
+export interface ExportOptions {
+  include_projects: boolean;
+  include_tasks: boolean;
+  include_meetings: boolean;
+  include_skills: boolean;
+  include_patterns: boolean;
+  include_team: boolean;
+  include_documents: boolean;
+  include_vectors: boolean;
+  project_ids?: string[];
+  password?: string;
+  description?: string;
+}
+
+export interface ExportContents {
+  projects: boolean;
+  tasks: boolean;
+  meetings: boolean;
+  skills: boolean;
+  patterns: boolean;
+  documents: boolean;
+  team_members: boolean;
+  settings: boolean;
+  vectors: boolean;
+  project_count: number;
+  task_count: number;
+  meeting_count: number;
+  skill_count: number;
+  pattern_count: number;
+  document_count: number;
+  team_member_count: number;
+}
+
+export interface ExportManifest {
+  format_version: string;
+  app_version: string;
+  created_at: string;
+  created_by?: string;
+  description?: string;
+  contents: ExportContents;
+}
+
+export interface ExportResult {
+  file_path: string;
+  file_size: number;
+  manifest: ExportManifest;
+}
+
+export interface ImportOptions {
+  mode: "Merge" | "Replace";
+  password?: string;
+  conflict_resolution: "Skip" | "Overwrite" | "Ask";
+  create_backup: boolean;
+}
+
+export interface ImportConflict {
+  entity_type: string;
+  entity_id: string;
+  local_name: string;
+  import_name: string;
+  local_updated?: string;
+  import_updated?: string;
+}
+
+export interface ImportPreview {
+  manifest: ExportManifest;
+  conflicts: ImportConflict[];
+  new_items: Record<string, number>;
+}
+
+export interface ImportResult {
+  success: boolean;
+  imported_count: number;
+  skipped_count: number;
+  conflict_count: number;
+  errors: string[];
+  conflicts: ImportConflict[];
+  backup_path?: string;
+}
+
+export const exportAllData = (outputPath: string, options: ExportOptions) =>
+  invoke<ExportResult>("export_all_data", { outputPath, options });
+
+export const exportSingleSkill = (skillId: string, outputPath: string) =>
+  invoke<string>("export_single_skill", { skillId, outputPath });
+
+export const previewImportData = (archivePath: string, options: ImportOptions) =>
+  invoke<ImportPreview>("preview_import_data", { archivePath, options });
+
+export const importAllData = (
+  archivePath: string,
+  options: ImportOptions,
+  conflictResolutions: Record<string, string>
+) =>
+  invoke<ImportResult>("import_all_data", { archivePath, options, conflictResolutions });
+
+export const importSingleSkill = (filePath: string) =>
+  invoke<Skill>("import_single_skill", { filePath });

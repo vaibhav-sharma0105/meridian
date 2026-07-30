@@ -348,3 +348,68 @@ impl Default for DraftQueue {
         Self::new()
     }
 }
+
+#[derive(Debug, Deserialize)]
+struct SlackUser {
+    id: String,
+    name: String,
+    real_name: Option<String>,
+    profile: SlackUserProfile,
+    deleted: bool,
+    is_bot: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct SlackUserProfile {
+    email: Option<String>,
+    image_72: Option<String>,
+    display_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SlackUsersListResponse {
+    ok: bool,
+    members: Option<Vec<SlackUser>>,
+    error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SlackTeamMember {
+    pub id: String,
+    pub name: String,
+    pub email: Option<String>,
+    pub avatar_url: Option<String>,
+}
+
+pub async fn fetch_workspace_members(access_token: &str) -> Result<Vec<SlackTeamMember>, String> {
+    let client = Client::new();
+    let url = format!("{}/users.list?limit=200", SLACK_API_URL);
+
+    let response = client
+        .get(&url)
+        .header("Authorization", format!("Bearer {}", access_token))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let result: SlackUsersListResponse = response.json().await.map_err(|e| e.to_string())?;
+
+    if !result.ok {
+        return Err(result.error.unwrap_or_else(|| "Failed to fetch users".to_string()));
+    }
+
+    let members = result
+        .members
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|u| !u.deleted && !u.is_bot)
+        .map(|u| SlackTeamMember {
+            id: u.id,
+            name: u.real_name.or(u.profile.display_name).unwrap_or(u.name),
+            email: u.profile.email,
+            avatar_url: u.profile.image_72,
+        })
+        .collect();
+
+    Ok(members)
+}

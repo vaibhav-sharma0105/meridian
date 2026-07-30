@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { X, Play, Loader2, AlertCircle, Variable, Code, Settings2 } from "lucide-react";
 import type { Skill, CreateSkillInput } from "@/lib/tauri";
 import { useCreateSkill, useUpdateSkill, useTestRunSkill } from "@/hooks/useSkills";
+import { AutonomySelect } from "@/components/governance/AutonomySettings";
 import { useUIStore } from "@/stores/uiStore";
 import {
   parseSkillFile,
@@ -85,6 +86,7 @@ export function SkillEditorModal({ skill, onClose }: SkillEditorModalProps) {
   const [category, setCategory] = useState("custom");
   const [instructions, setInstructions] = useState("");
   const [shared, setShared] = useState(false);
+  const [autonomyMode, setAutonomyMode] = useState<string | null>(null);
   const [includeDocuments, setIncludeDocuments] = useState(false);
   const [documentFilter, setDocumentFilter] = useState("");
   const [maxDocuments, setMaxDocuments] = useState(10);
@@ -147,6 +149,8 @@ export function SkillEditorModal({ skill, onClose }: SkillEditorModalProps) {
       parseIntoFields(content);
       // Set shared from skill directly (not in YAML)
       setShared(skill.shared ?? false);
+      // Set autonomy_mode from skill directly (not in YAML)
+      setAutonomyMode(skill.autonomy_mode ?? null);
       // Set document options from context_config
       try {
         const ctxConfig = skill.context_config ? JSON.parse(skill.context_config) : {};
@@ -264,12 +268,13 @@ export function SkillEditorModal({ skill, onClose }: SkillEditorModalProps) {
 
     try {
       if (skill) {
-        // For updates, include shared and updated context_config
+        // For updates, include shared, autonomy_mode and updated context_config
         await updateSkill.mutateAsync({
           id: skill.id,
           ...input,
           context_config: contextConfig,
           shared,
+          autonomy_mode: autonomyMode,
         });
       } else {
         // For creates, include updated context_config (shared defaults to false on create)
@@ -467,6 +472,22 @@ export function SkillEditorModal({ skill, onClose }: SkillEditorModalProps) {
                     {APPROVAL_MODES.find((a) => a.value === approvalMode)?.description}
                   </p>
                 </div>
+              </div>
+
+              {/* Governance Autonomy */}
+              <div className="border border-zinc-200 dark:border-zinc-700 rounded-lg p-4 space-y-3">
+                <label className="block text-[12px] font-semibold text-zinc-700 dark:text-zinc-300">
+                  Governance
+                </label>
+                <AutonomySelect
+                  value={autonomyMode}
+                  onChange={setAutonomyMode}
+                  label="Autonomy Mode"
+                  inheritLabel="Inherit from global settings"
+                />
+                <p className="text-[10px] text-zinc-400">
+                  Controls when this skill's actions require governance approval (separate from skill's own approval mode above)
+                </p>
               </div>
 
               {/* Options */}

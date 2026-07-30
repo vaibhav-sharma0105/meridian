@@ -17,6 +17,7 @@ import AIChatPanel from "@/components/ai/AIChatPanel";
 import EmptyState from "@/components/shared/EmptyState";
 import { useTaskStore } from "@/stores/taskStore";
 import { SkillsPage } from "@/components/skills/SkillsPage";
+import { GovernancePage } from "@/components/governance/GovernancePage";
 
 const VIEW_ICONS = {
   list: LayoutList,
@@ -44,6 +45,11 @@ export default function MainCanvas() {
   // Skills view is global (no project needed)
   if (activeView === "skills") {
     return <SkillsPage />;
+  }
+
+  // Governance view is global (no project needed)
+  if (activeView === "governance") {
+    return <GovernancePage />;
   }
 
   if (!activeProjectId && activeView !== "tasks") {

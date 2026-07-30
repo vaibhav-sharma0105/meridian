@@ -9,7 +9,12 @@
       "Bash(npx --version)",
       "Bash(npm list:*)",
       "Bash(cargo build *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(cargo check *)",
+      "Bash(cargo test *)",
+      "Bash(curl -s http://localhost:1420)",
+      "Bash(openspec status *)",
+      "Bash(openspec instructions *)"
     ]
   },
   "enabledMcpjsonServers": [

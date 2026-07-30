@@ -8,6 +8,11 @@ use crate::db::repositories::{
     ai_settings as ai_repo, documents as docs_repo, meetings as meetings_repo,
     projects as projects_repo, tasks as tasks_repo,
 };
+use crate::governance::{
+    approval as governance_approval,
+    autonomy::{AutonomyContext, AutonomyController},
+    risk::{self, ActionType, ContentRisk, DestinationType},
+};
 use crate::models::task::TaskFilters;
 use crate::skills::{
     repository as skills_repo, ActionConfig, ApprovalMode, ContextConfig, Skill, SkillRun,
@@ -201,11 +206,65 @@ pub fn check_needs_approval(skill: &Skill, action_config: &ActionConfig) -> bool
         ApprovalMode::Notify => false,
         ApprovalMode::ApproveAlways => true,
         ApprovalMode::ApproveFirst => {
-            // Need approval for actions with side effects
             action_config.has_side_effects.unwrap_or(false)
                 || action_config.action_type.as_deref() == Some("create_tasks")
         }
     }
+}
+
+pub fn evaluate_skill_action_governance(
+    conn: &Connection,
+    skill: &Skill,
+    action_config: &ActionConfig,
+    content: Option<&str>,
+) -> Result<(bool, Option<String>), String> {
+    let autonomy_context = AutonomyContext {
+        integration_id: None,
+        skill_id: Some(skill.id.clone()),
+    };
+
+    let action_type = match action_config.action_type.as_deref() {
+        Some("summarize") | Some("analyze") => ActionType::Read,
+        Some("create_tasks") => ActionType::Create,
+        Some("draft_message") => ActionType::ExternalSend,
+        Some("custom") => {
+            if action_config.has_side_effects.unwrap_or(false) {
+                ActionType::Update
+            } else {
+                ActionType::Read
+            }
+        }
+        _ => ActionType::Read,
+    };
+
+    let destination = match action_config.channel.as_deref() {
+        Some("slack") | Some("email") => DestinationType::Team,
+        Some("external") => DestinationType::External,
+        _ => DestinationType::Internal,
+    };
+
+    let content_risk = content.map(risk::classify_content).unwrap_or(ContentRisk::Normal);
+
+    let risk_score = risk::calculate_risk(action_type, destination, content_risk);
+    let decision = AutonomyController::evaluate_action(conn, &autonomy_context, risk_score.risk_level)?;
+
+    if decision.requires_approval {
+        let action_config_json = serde_json::to_string(action_config).unwrap_or_default();
+        let approval_id = governance_approval::queue_for_approval(
+            conn,
+            &format!("skill:{}", action_config.action_type.as_deref().unwrap_or("custom")),
+            &action_config_json,
+            Some("skill"),
+            Some(&skill.id),
+            decision.risk_level,
+            decision.autonomy_mode,
+            Some(&decision.reason),
+            None,
+        )?;
+        return Ok((true, Some(approval_id)));
+    }
+
+    Ok((false, None))
 }
 
 pub fn get_ai_client(conn: &Connection) -> Result<LiteLLMClient, String> {
@@ -229,6 +288,23 @@ pub fn execute_skill(
 
     let context = build_context(conn, skill)?;
     let action_config = skill.get_action_config().unwrap_or_default();
+
+    let (governance_requires_approval, approval_id) =
+        evaluate_skill_action_governance(conn, skill, &action_config, None)?;
+
+    if governance_requires_approval {
+        let duration_ms = start.elapsed().as_millis() as i64;
+        return Ok(ExecutionResult {
+            output: format!(
+                "Action queued for approval (ID: {})",
+                approval_id.as_deref().unwrap_or("unknown")
+            ),
+            duration_ms,
+            pending_changes: None,
+            needs_approval: true,
+        });
+    }
+
     let needs_approval = check_needs_approval(skill, &action_config);
     let action_type = action_config.action_type.as_deref().unwrap_or("summarize");
 
@@ -265,6 +341,23 @@ pub async fn execute_skill_async(
 
     let context = build_context(conn, skill)?;
     let action_config = skill.get_action_config().unwrap_or_default();
+
+    let (governance_requires_approval, approval_id) =
+        evaluate_skill_action_governance(conn, skill, &action_config, None)?;
+
+    if governance_requires_approval {
+        let duration_ms = start.elapsed().as_millis() as i64;
+        return Ok(ExecutionResult {
+            output: format!(
+                "Action queued for approval (ID: {})",
+                approval_id.as_deref().unwrap_or("unknown")
+            ),
+            duration_ms,
+            pending_changes: None,
+            needs_approval: true,
+        });
+    }
+
     let needs_approval = check_needs_approval(skill, &action_config);
     let action_type = action_config.action_type.as_deref().unwrap_or("summarize");
 

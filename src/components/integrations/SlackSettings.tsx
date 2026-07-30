@@ -19,6 +19,7 @@ import {
   useDeleteIntegration,
   useSyncIntegration,
 } from "@/hooks/useIntegrations";
+import { AutonomySelect } from "@/components/governance/AutonomySettings";
 import type { Integration, ChannelConfig } from "@/lib/tauri";
 import toast from "react-hot-toast";
 
@@ -47,6 +48,9 @@ export function SlackSettings({ integration, onClose }: SlackSettingsProps) {
   const [socketModeEnabled, setSocketModeEnabled] = useState(
     integration?.config.socket_mode_enabled ?? false
   );
+  const [autonomyMode, setAutonomyMode] = useState<string | null>(
+    integration?.autonomy_mode ?? null
+  );
   const [showAppTokenHelp, setShowAppTokenHelp] = useState(false);
 
   const updateMutation = useUpdateIntegration();
@@ -65,6 +69,7 @@ export function SlackSettings({ integration, onClose }: SlackSettingsProps) {
           socket_mode_enabled: socketModeEnabled && !!appToken,
         },
         sync_interval_minutes: syncInterval,
+        autonomy_mode: autonomyMode ?? undefined,
       });
       toast.success("Slack settings saved");
     } catch (e) {
@@ -225,6 +230,19 @@ export function SlackSettings({ integration, onClose }: SlackSettingsProps) {
                 </p>
               )}
             </div>
+          </div>
+
+          {/* Integration Autonomy Mode */}
+          <div>
+            <AutonomySelect
+              value={autonomyMode}
+              onChange={setAutonomyMode}
+              label="Integration Autonomy Mode"
+              inheritLabel="Inherit from global settings"
+            />
+            <p className="mt-1 text-xs text-zinc-500">
+              Controls when Slack actions require approval (channels can override below)
+            </p>
           </div>
 
           {/* Draft Queue Delay */}

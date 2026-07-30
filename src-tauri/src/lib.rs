@@ -7,6 +7,7 @@ pub mod daemon;
 pub mod db;
 pub mod documents;
 pub mod drafts;
+pub mod governance;
 pub mod integrations;
 pub mod models;
 pub mod patterns;
@@ -14,6 +15,8 @@ pub mod plans;
 pub mod sensitive;
 pub mod skills;
 pub mod suggestions;
+pub mod sync;
+pub mod team;
 pub mod utils;
 pub mod vectors;
 
@@ -149,6 +152,8 @@ pub fn run() {
             commands::daemon::start_daemon,
             commands::daemon::stop_daemon,
             commands::daemon::daemon_health_check,
+            commands::daemon::get_background_jobs,
+            commands::daemon::get_recent_background_jobs,
             // Migration
             commands::migration::get_migration_status,
             commands::migration::migrate_database,
@@ -247,6 +252,44 @@ pub fn run() {
             commands::integrations::unlink_integration_item,
             commands::integrations::get_slack_socket_status,
             commands::integrations::detect_slack_action_items,
+            commands::integrations::agent_integration_write,
+            // Governance
+            commands::governance::evaluate_action,
+            commands::governance::get_autonomy_setting,
+            commands::governance::set_autonomy_setting,
+            commands::governance::get_pending_approvals,
+            commands::governance::get_pending_approval,
+            commands::governance::approve_pending_action,
+            commands::governance::reject_pending_action,
+            commands::governance::bulk_approve_actions,
+            commands::governance::bulk_reject_actions,
+            commands::governance::get_pending_approval_count,
+            commands::governance::create_pending_approval,
+            commands::governance::get_action_history,
+            commands::governance::get_undoable_actions,
+            commands::governance::undo_action,
+            commands::governance::capture_action_state,
+            commands::governance::get_governance_metrics,
+            commands::governance::create_risk_adjustment,
+            commands::governance::get_risk_adjustment,
+            commands::governance::delete_risk_adjustment,
+            commands::governance::calculate_risk_level,
+            // Team
+            commands::team::get_team_members,
+            commands::team::get_team_member,
+            commands::team::create_team_member,
+            commands::team::update_team_member,
+            commands::team::delete_team_member,
+            commands::team::compute_team_workloads,
+            commands::team::get_assignee_suggestions,
+            commands::team::record_assignee_selection,
+            commands::team::sync_team_from_slack,
+            // Sync (Export/Import)
+            commands::sync::export_all_data,
+            commands::sync::export_single_skill,
+            commands::sync::preview_import_data,
+            commands::sync::import_all_data,
+            commands::sync::import_single_skill,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -142,6 +142,7 @@ pub struct Skill {
     pub context_config: Option<String>,     // JSON
     pub action_config: Option<String>,      // JSON
     pub approval_mode: String,
+    pub autonomy_mode: Option<String>,
     pub enabled: bool,
     pub shared: bool,
     pub owner_id: Option<String>,
@@ -203,6 +204,7 @@ pub struct UpdateSkillInput {
     pub context_config: Option<ContextConfig>,
     pub action_config: Option<ActionConfig>,
     pub approval_mode: Option<String>,
+    pub autonomy_mode: Option<String>,
     pub enabled: Option<bool>,
     pub shared: Option<bool>,
     pub category: Option<String>,

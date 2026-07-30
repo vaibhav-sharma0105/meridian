@@ -1,97 +1,63 @@
-# integration-mcp-server Specification
+## ADDED Requirements
 
-## Purpose
-TBD - created by archiving change document-existing-system. Update Purpose after archive.
-## Requirements
-### Requirement: MCP Server Binary
+### Requirement: MCP Tools - Write Operations
+The system SHALL expose write tools for external agents to create and modify Meridian data.
 
-The system SHALL provide a separate MCP server binary (meridian-mcp) that exposes Meridian data to external AI agents via Model Context Protocol.
+#### Scenario: create_task tool
+- **WHEN** agent calls create_task with title, project_id, and optional fields
+- **THEN** server creates task and returns created task details
 
-#### Scenario: Build MCP server
-- **WHEN** running npm run build:mcp
-- **THEN** system produces meridian-mcp binary in src-tauri/target/release/
+#### Scenario: update_task tool
+- **WHEN** agent calls update_task with task_id and fields to update
+- **THEN** server updates task and returns updated task details
 
-#### Scenario: Run MCP server
-- **WHEN** external agent connects via stdio
-- **THEN** MCP server accepts JSON-RPC 2.0 requests
+#### Scenario: create_meeting_note tool
+- **WHEN** agent calls create_meeting_note with project_id, title, and content
+- **THEN** server creates meeting record and returns meeting details
 
-### Requirement: MCP Protocol Compliance
+#### Scenario: run_skill tool
+- **WHEN** agent calls run_skill with skill_id
+- **THEN** server queues skill execution and returns run_id
 
-The system SHALL implement MCP protocol with JSON-RPC 2.0 over stdio transport.
+### Requirement: MCP Permission System
+The system SHALL enforce configurable permissions for MCP write operations.
 
-#### Scenario: Handle initialize
-- **WHEN** agent sends initialize request
-- **THEN** server responds with capabilities and protocol version
+#### Scenario: Permission check on write
+- **WHEN** agent calls write tool
+- **THEN** server checks if operation is allowed by user configuration
+- **THEN** if denied, server returns permission error
 
-#### Scenario: Handle tool calls
-- **WHEN** agent calls a tool
-- **THEN** server executes tool and returns result
+#### Scenario: Configure MCP permissions
+- **WHEN** user opens MCP settings
+- **THEN** user can enable/disable: create_task, update_task, create_meeting_note, run_skill
 
-#### Scenario: Handle resource reads
-- **WHEN** agent reads a resource
-- **THEN** server returns resource content
+### Requirement: MCP Audit Logging
+The system SHALL log all MCP write operations to the audit log.
 
-### Requirement: MCP Tools - Read Operations
+#### Scenario: Log MCP write
+- **WHEN** agent successfully executes write operation
+- **THEN** system logs action with agent context and operation details
 
-The system SHALL expose read-only tools for querying Meridian data.
+### Requirement: MCP Rate Limiting
+The system SHALL rate-limit MCP operations to prevent abuse.
 
-#### Scenario: list_projects tool
-- **WHEN** agent calls list_projects
-- **THEN** server returns all projects with task counts
+#### Scenario: Exceed rate limit
+- **WHEN** agent exceeds 100 operations per minute
+- **THEN** server returns rate limit error with retry-after header
 
-#### Scenario: list_tasks tool
-- **WHEN** agent calls list_tasks with optional filters
-- **THEN** server returns tasks matching filters (status, priority, assignee, due_date, text_search)
-
-#### Scenario: get_task tool
-- **WHEN** agent calls get_task with task_id
-- **THEN** server returns detailed task info with project and meeting context
-
-#### Scenario: list_meetings tool
-- **WHEN** agent calls list_meetings with optional project_id
-- **THEN** server returns meetings, optionally filtered by project
-
-#### Scenario: get_meeting tool
-- **WHEN** agent calls get_meeting with meeting_id
-- **THEN** server returns full meeting details including transcript and extracted tasks
-
-#### Scenario: get_task_context tool
-- **WHEN** agent calls get_task_context with task_id
-- **THEN** server returns rich context: task + project + source meeting excerpt
-
-### Requirement: MCP Resources
-
-The system SHALL expose Meridian data as MCP resources for agent browsing.
-
-#### Scenario: Projects resource
-- **WHEN** agent reads meridian://projects
-- **THEN** server returns project list
-
-#### Scenario: Tasks resource
-- **WHEN** agent reads meridian://tasks
-- **THEN** server returns all tasks
-
-#### Scenario: Meetings resource
-- **WHEN** agent reads meridian://meetings
-- **THEN** server returns all meetings
-
-### Requirement: MCP Configuration
-
-The system SHALL provide MCP configuration file for Claude Code integration.
-
-#### Scenario: MCP config file
-- **WHEN** .mcp.json exists in project root
-- **THEN** Claude Code can discover and connect to meridian-mcp server
+## MODIFIED Requirements
 
 ### Requirement: MCP Database Access
-
-The system SHALL access the same SQLite database as the main Meridian app.
+The system SHALL access the same SQLite database as the main Meridian app with read-write capability when permissions allow.
 
 #### Scenario: Shared database
 - **WHEN** MCP server starts
 - **THEN** server connects to ~/.meridian/meridian.db
 
-#### Scenario: Read-only access
-- **WHEN** MCP server accesses database
-- **THEN** operations are read-only (no writes currently supported)
+#### Scenario: Write access when permitted
+- **WHEN** MCP server has write permissions configured
+- **THEN** operations can modify database via write tools
 
+#### Scenario: Read-only fallback
+- **WHEN** MCP server has no write permissions
+- **THEN** write tool calls return permission denied error

@@ -638,12 +638,162 @@ struct McpPermissions {
 ```
 
 **Key Files:**
-- Backend: `src-tauri/src/integrations/` (mod, models, repository, github, jira, slack, webhook)
-- Commands: `src-tauri/src/commands/integrations.rs` (18 commands), `settings.rs` (MCP permissions)
+- Backend: `src-tauri/src/integrations/` (mod, models, repository, github, jira, slack, slack_socket, webhook)
+- Daemon: `src-tauri/src/daemon/jobs.rs` (sync_integration, poll_integration_syncs job handlers)
+- Commands: `src-tauri/src/commands/integrations.rs` (18 commands), `daemon.rs` (get_background_jobs), `settings.rs` (MCP permissions)
 - MCP: `src-tauri/meridian-mcp/src/handlers.rs` (write tools with permission checks, rate limiting)
-- Frontend: `src/components/integrations/` (IntegrationsPage, SetupWizard, *Settings, LinkPicker)
+- Frontend: `src/components/integrations/` (IntegrationsPage, SetupWizard, BackgroundJobsPanel, SlackDraftsPanel, *Settings, LinkPicker)
 - Hooks: `src/hooks/useIntegrations.ts`, `src/hooks/useIntegrationLinks.ts`
 - Store: `src/stores/integrationStore.ts`
+
+**Daemon Integration Jobs:**
+```
+poll_integration_syncs (every 5 min)
+  └─> For each connected integration where last_sync + sync_interval < now
+        └─> Queue sync_integration job
+
+sync_integration job
+  └─> Get IntegrationProvider for type
+  └─> provider.fetch_data(&integration)
+  └─> Upsert items to integration_cache
+  └─> Update last_sync timestamp
+  └─> Create notification (info for success, critical for errors)
+```
+
+**Slack Socket Mode:**
+- WebSocket connection via tokio-tungstenite
+- Auto-reconnect with exponential backoff (1s → 300s max)
+- Action item detection: mentions (@user), questions (?), requests (please/could you), deadlines (by/due/EOD), follow-ups
+- Per-channel autonomy modes: auto, notify, approve_first, approve_always
+
+---
+
+## Governance & Autonomy
+
+Phase 6 introduces unified autonomy control, risk classification, approval workflows, and undo capabilities for agent-initiated actions.
+
+### Autonomy Modes
+
+Three global autonomy modes control how much agent assistance runs automatically:
+
+| Mode | Low Risk | Medium Risk | High Risk | Critical Risk |
+|------|----------|-------------|-----------|---------------|
+| Manual | Requires approval | Requires approval | Requires approval | Requires approval |
+| Supervised (default) | Auto-execute | Auto-execute | Requires approval | Requires approval |
+| Autonomous | Auto-execute | Auto-execute | Auto-execute | Requires approval |
+
+### Autonomy Inheritance
+
+```
+Global Autonomy (app_settings.autonomy_mode)
+    ↓ inherited by (if NULL)
+Integration Autonomy (integrations.autonomy_mode)
+    ↓ inherited by (if NULL)
+Skill Autonomy (skills.autonomy_mode)
+```
+
+When evaluating an action, the system resolves the effective autonomy by walking up the chain.
+
+### Risk Classification
+
+Risk is calculated from three weighted scores:
+
+```
+RiskScore = (action_type_weight × destination_score × content_score) / max_possible
+
+action_type_weight:
+  read=1, create=2, update=3, external_send=4, delete=5
+
+destination_score:
+  internal=1, team=2, external=3, executive=4
+
+content_score:
+  normal=1, sensitive=2, pii=3, financial=4
+```
+
+**Critical Override:** If ANY individual score is at maximum (delete=5, executive=4, financial=4), the action is classified as Critical regardless of the composite score.
+
+### Approval Flow
+
+```
+Action Initiated (skill, MCP, suggestion)
+  └─> evaluate_action(action_type, destination, content)
+        └─> calculate_risk() → RiskLevel
+        └─> resolve_effective_autonomy() → AutonomyMode
+        └─> should_require_approval(risk, mode)?
+              ├─ No  → Execute immediately
+              └─ Yes → queue_for_approval()
+                         └─> Create pending_approval record
+                         └─> Set timeout (default 24h)
+                         └─> Notify user
+                         └─> Wait for approve/reject/timeout
+```
+
+### Undo System
+
+Agent-initiated mutations can be undone if they're internal and not deletes:
+
+```
+capture_action_state(action_type, entity_type, entity_id, before_state, after_state)
+  └─> is_undoable = !is_external(entity_type) && before_state.is_some() && action_type != "delete"
+  └─> Create action_history record
+
+undo_action(action_id)
+  └─> Check undoable=true AND undo_action_id=NULL
+  └─> Determine reversal_type (create→delete, update→restore)
+  └─> Execute reversal SQL
+  └─> Mark original action as undone
+```
+
+External entity types (slack_message, github_issue, jira_issue) are always non-undoable.
+
+### Governance Data Flow
+
+```
+Frontend (GovernancePage)
+  ├─ Approvals tab: usePendingApprovals() → get_pending_approvals
+  │    └─ User clicks Approve/Reject → approve_pending_action / reject_pending_action
+  ├─ History tab: useActionHistory() → get_action_history
+  │    └─ User clicks Undo → undo_action
+  ├─ Dashboard tab: useGovernanceMetrics() → get_governance_metrics
+  │    └─ Aggregated daily by daemon job: aggregate_governance_metrics
+  └─ Settings tab: useAutonomySetting() → get/set_autonomy_setting
+```
+
+### Daemon Jobs
+
+| Job | Frequency | Purpose |
+|-----|-----------|---------|
+| `check_approval_timeouts` | Every minute | Archive expired pending approvals |
+| `aggregate_governance_metrics` | Daily at midnight | Compute risk/approval aggregates |
+| `detect_anomalies` | Hourly | Flag activity spikes and high rejection rates |
+
+### Key Files
+
+**Backend:**
+- `src-tauri/src/governance/mod.rs` — Module root
+- `src-tauri/src/governance/models.rs` — RiskLevel, AutonomyMode, PendingApproval, ActionHistory
+- `src-tauri/src/governance/risk.rs` — Risk classification engine
+- `src-tauri/src/governance/autonomy.rs` — Autonomy controller with inheritance
+- `src-tauri/src/governance/approval.rs` — Approval queue operations
+- `src-tauri/src/governance/undo.rs` — Action history and undo system
+- `src-tauri/src/governance/repository.rs` — CRUD for governance tables
+- `src-tauri/src/commands/governance.rs` — 21 Tauri commands
+
+**Frontend:**
+- `src/hooks/useGovernance.ts` — React Query hooks
+- `src/components/governance/GovernancePage.tsx` — Main view with tabs
+- `src/components/governance/AutonomySettings.tsx` — Mode selector
+- `src/components/governance/ApprovalQueue.tsx` — Pending approvals list
+- `src/components/governance/UndoBar.tsx` — Toast-style undo notification
+- `src/components/governance/ActionHistoryPanel.tsx` — Filterable history
+- `src/components/governance/GovernanceDashboard.tsx` — Metrics and charts
+
+**Database (v015 migration):**
+- `pending_approvals` — Approval queue with timeouts
+- `action_history` — Before/after state for undo
+- `governance_metrics` — Daily aggregates
+- `risk_adjustments` — User-defined risk overrides
 
 ---
 

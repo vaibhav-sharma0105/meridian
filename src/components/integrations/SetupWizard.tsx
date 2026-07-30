@@ -343,11 +343,13 @@ function StepIndicator({
   index,
   isActive,
   isCompleted,
+  onToggleComplete,
 }: {
   step: SetupStep;
   index: number;
   isActive: boolean;
   isCompleted: boolean;
+  onToggleComplete?: () => void;
 }) {
   return (
     <div
@@ -359,17 +361,23 @@ function StepIndicator({
           : "bg-zinc-50 dark:bg-zinc-800/50 border border-transparent"
       }`}
     >
-      <div
-        className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+      {/* Toggleable checkbox for completion status */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleComplete?.();
+        }}
+        className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all hover:scale-105 ${
           isCompleted
-            ? "bg-green-500 text-white"
+            ? "bg-green-500 text-white hover:bg-green-600"
             : isActive
-            ? "bg-indigo-500 text-white"
-            : "bg-zinc-200 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400"
+            ? "bg-indigo-500 text-white hover:bg-indigo-600"
+            : "bg-zinc-200 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-300 dark:hover:bg-zinc-600"
         }`}
+        title={isCompleted ? "Click to mark as incomplete" : "Click to mark as complete"}
       >
         {isCompleted ? <Check className="w-4 h-4" /> : index + 1}
-      </div>
+      </button>
       <div className="flex-1 min-w-0">
         <div
           className={`font-medium text-sm ${
@@ -440,6 +448,18 @@ export function SetupWizard({ integrationType, isMcp, onClose, onComplete }: Set
     if (!isLastStep) {
       setCurrentStep(currentStep + 1);
     }
+  };
+
+  const handleToggleStepComplete = (stepIndex: number) => {
+    setCompletedSteps((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(stepIndex)) {
+        newSet.delete(stepIndex);
+      } else {
+        newSet.add(stepIndex);
+      }
+      return newSet;
+    });
   };
 
   const handleStartOAuth = async () => {
@@ -573,20 +593,24 @@ export function SetupWizard({ integrationType, isMcp, onClose, onComplete }: Set
           </div>
           <div className="space-y-2">
             {steps.map((step, index) => (
-              <button
+              <div
                 key={step.id}
                 onClick={() => setCurrentStep(index)}
-                className="w-full text-left"
+                className="w-full text-left cursor-pointer"
               >
                 <StepIndicator
                   step={step}
                   index={index}
                   isActive={currentStep === index}
                   isCompleted={completedSteps.has(index)}
+                  onToggleComplete={() => handleToggleStepComplete(index)}
                 />
-              </button>
+              </div>
             ))}
           </div>
+          <p className="text-xs text-zinc-400 mt-2 italic">
+            Click the numbered circles to toggle step completion
+          </p>
         </div>
 
         {/* Current Step Content */}

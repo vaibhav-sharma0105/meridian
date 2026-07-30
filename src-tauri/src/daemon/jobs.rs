@@ -1,8 +1,11 @@
 use crate::ai::chunking::chunk_text;
 use crate::ai::embeddings::{get_embedding_provider, EmbeddingProvider};
 use crate::db::repositories::{documents as docs_repo, jobs as jobs_repo, meetings as meetings_repo, tasks as tasks_repo};
+use crate::db::repositories::notifications as notif_repo;
+use crate::governance::{approval as gov_approval, repository as gov_repo};
+use crate::integrations::{get_provider, repository as integration_repo};
 use crate::patterns::models::{
-    AssigneePattern, CommunicationStyleModelData, PriorityPattern, ProjectDefault,
+    AssigneePattern, CommunicationStyleModelData, PriorityPattern,
     SmartDefaultsModelData, UpsertPatternModelInput, WorkflowSequence, WorkflowSequenceModelData,
 };
 use crate::patterns::repository as patterns_repo;
@@ -252,6 +255,35 @@ pub fn process_job_sync(
         }
         "poll_scheduled_skills" => process_poll_scheduled_skills_job(conn, &job.id),
         "check_skill_approvals" => process_check_skill_approvals_job(conn, &job.id),
+        "sync_integration" => {
+            let payload: SyncIntegrationPayload = match &job.payload {
+                Some(p) => match serde_json::from_str(p) {
+                    Ok(parsed) => parsed,
+                    Err(e) => {
+                        return JobResult {
+                            success: false,
+                            chunks_embedded: None,
+                            error: Some(format!("Invalid sync job payload: {}", e)),
+                        };
+                    }
+                },
+                None => {
+                    return JobResult {
+                        success: false,
+                        chunks_embedded: None,
+                        error: Some("Missing sync job payload".to_string()),
+                    };
+                }
+            };
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current()
+                    .block_on(process_sync_integration_job(conn, &job.id, &payload))
+            })
+        }
+        "poll_integration_syncs" => process_poll_integration_syncs_job(conn, &job.id),
+        "check_approval_timeouts" => process_check_approval_timeouts_job(conn, &job.id),
+        "aggregate_governance_metrics" => process_aggregate_governance_metrics_job(conn, &job.id),
+        "detect_anomalies" => process_detect_anomalies_job(conn, &job.id),
         _ => JobResult {
             success: false,
             chunks_embedded: None,
@@ -1173,6 +1205,240 @@ fn schedule_next_approval_check(conn: &Connection) {
     );
 }
 
+// ─── Integration Sync Jobs ───────────────────────────────────────────────────
+
+pub async fn process_sync_integration_job(
+    conn: &Connection,
+    job_id: &str,
+    payload: &SyncIntegrationPayload,
+) -> JobResult {
+    if let Err(e) = jobs_repo::update_job_status(conn, job_id, "running", None, None) {
+        return JobResult {
+            success: false,
+            chunks_embedded: None,
+            error: Some(format!("Failed to update job status: {}", e)),
+        };
+    }
+
+    // Get the integration
+    let integration = match integration_repo::get_integration(conn, &payload.integration_id) {
+        Ok(Some(i)) => i,
+        Ok(None) => {
+            return JobResult {
+                success: false,
+                chunks_embedded: None,
+                error: Some("Integration not found".to_string()),
+            };
+        }
+        Err(e) => {
+            return JobResult {
+                success: false,
+                chunks_embedded: None,
+                error: Some(format!("Failed to get integration: {}", e)),
+            };
+        }
+    };
+
+    // Get the provider
+    let provider = match get_provider(&integration.integration_type) {
+        Some(p) => p,
+        None => {
+            return JobResult {
+                success: false,
+                chunks_embedded: None,
+                error: Some(format!("Unknown integration type: {}", integration.integration_type)),
+            };
+        }
+    };
+
+    // Update status to syncing
+    let _ = integration_repo::update_integration_status(conn, &payload.integration_id, "syncing", None);
+
+    // Fetch data from the provider
+    let fetch_result = provider.fetch_data(&integration).await;
+
+    match fetch_result {
+        Ok(result) => {
+            let mut items_synced = 0;
+            for item in &result.items {
+                if integration_repo::upsert_cache_item(
+                    conn,
+                    &payload.integration_id,
+                    &item.external_type,
+                    &item.external_id,
+                    item.external_url.as_deref(),
+                    &item.data,
+                ).is_ok() {
+                    items_synced += 1;
+                }
+            }
+
+            // Update last sync time
+            let _ = integration_repo::update_integration_last_sync(conn, &payload.integration_id);
+            let _ = integration_repo::update_integration_status(conn, &payload.integration_id, "connected", None);
+
+            // Create notification if there were new items
+            if items_synced > 0 {
+                let _ = notif_repo::create_notification_full(
+                    conn,
+                    "integration_sync",
+                    &format!("{} sync complete", integration.name),
+                    &format!("Synced {} items from {}", items_synced, integration.name),
+                    None,
+                    None,
+                    None,
+                    Some(&integration.id),
+                    "info",
+                    false,
+                );
+            }
+
+            // Create notifications for errors
+            if !result.errors.is_empty() {
+                let _ = notif_repo::create_notification_full(
+                    conn,
+                    "integration_sync_error",
+                    &format!("{} sync warnings", integration.name),
+                    &format!("{} errors during sync", result.errors.len()),
+                    None,
+                    None,
+                    None,
+                    Some(&integration.id),
+                    "warning",
+                    false,
+                );
+            }
+
+            JobResult {
+                success: true,
+                chunks_embedded: Some(items_synced),
+                error: None,
+            }
+        }
+        Err(e) => {
+            let _ = integration_repo::update_integration_status(
+                conn,
+                &payload.integration_id,
+                "error",
+                Some(&e),
+            );
+
+            // Create error notification
+            let _ = notif_repo::create_notification_full(
+                conn,
+                "integration_sync_error",
+                &format!("{} sync failed", integration.name),
+                &e,
+                None,
+                None,
+                None,
+                Some(&integration.id),
+                "critical",
+                true, // Desktop notification for errors
+            );
+
+            JobResult {
+                success: false,
+                chunks_embedded: None,
+                error: Some(e),
+            }
+        }
+    }
+}
+
+pub fn process_poll_integration_syncs_job(conn: &Connection, job_id: &str) -> JobResult {
+    if let Err(e) = jobs_repo::update_job_status(conn, job_id, "running", None, None) {
+        return JobResult {
+            success: false,
+            chunks_embedded: None,
+            error: Some(format!("Failed to update job status: {}", e)),
+        };
+    }
+
+    // Get all connected integrations
+    let integrations = match integration_repo::list_integrations(conn) {
+        Ok(list) => list,
+        Err(e) => {
+            schedule_next_integration_sync(conn);
+            return JobResult {
+                success: false,
+                chunks_embedded: None,
+                error: Some(format!("Failed to list integrations: {}", e)),
+            };
+        }
+    };
+
+    let mut queued = 0;
+    let now = chrono::Utc::now();
+
+    for integration in integrations {
+        // Skip disconnected or errored integrations
+        if integration.status != "connected" {
+            continue;
+        }
+
+        // Check if sync is due based on sync_interval_minutes
+        let should_sync = match &integration.last_sync {
+            Some(last_sync_str) => {
+                match chrono::DateTime::parse_from_rfc3339(last_sync_str) {
+                    Ok(last_sync) => {
+                        let minutes_since = (now - last_sync.with_timezone(&chrono::Utc))
+                            .num_minutes();
+                        minutes_since >= integration.sync_interval_minutes as i64
+                    }
+                    Err(_) => true, // Invalid timestamp, sync anyway
+                }
+            }
+            None => true, // Never synced, sync now
+        };
+
+        if should_sync {
+            let payload = SyncIntegrationPayload {
+                integration_id: integration.id.clone(),
+            };
+
+            if jobs_repo::create_job(
+                conn,
+                "sync_integration",
+                Some(&serde_json::to_string(&payload).unwrap_or_default()),
+                5, // Normal priority
+            ).is_ok() {
+                queued += 1;
+            }
+        }
+    }
+
+    schedule_next_integration_sync(conn);
+
+    JobResult {
+        success: true,
+        chunks_embedded: Some(queued),
+        error: None,
+    }
+}
+
+fn schedule_next_integration_sync(conn: &Connection) {
+    // Check every 5 minutes for integrations that need syncing
+    let next_run = chrono::Utc::now() + chrono::Duration::minutes(5);
+    let _ = jobs_repo::create_job_scheduled(
+        conn,
+        "poll_integration_syncs",
+        None,
+        1, // Low priority
+        &next_run.to_rfc3339(),
+    );
+}
+
+/// Initialize integration sync jobs on daemon startup
+pub fn init_integration_jobs(conn: &Connection) {
+    // Check if poll job already exists
+    let pending_polls = jobs_repo::get_pending_jobs_by_type(conn, "poll_integration_syncs")
+        .unwrap_or_default();
+    if pending_polls.is_empty() {
+        schedule_next_integration_sync(conn);
+    }
+}
+
 /// Queue a skill for execution based on an event trigger
 pub fn queue_skill_for_event(
     conn: &Connection,
@@ -1220,6 +1486,627 @@ pub fn init_skill_jobs(conn: &Connection) {
         .unwrap_or_default();
     if pending_checks.is_empty() {
         schedule_next_approval_check(conn);
+    }
+
+    // Initialize integration sync jobs
+    init_integration_jobs(conn);
+
+    // Initialize governance jobs
+    init_governance_jobs(conn);
+}
+
+// ─── Governance Jobs ────────────────────────────────────────────────────────
+
+pub fn process_check_approval_timeouts_job(conn: &Connection, job_id: &str) -> JobResult {
+    if let Err(e) = jobs_repo::update_job_status(conn, job_id, "running", None, None) {
+        return JobResult {
+            success: false,
+            chunks_embedded: None,
+            error: Some(format!("Failed to update job status: {}", e)),
+        };
+    }
+
+    let archived = match gov_approval::archive_expired_approvals(conn) {
+        Ok(ids) => ids,
+        Err(e) => {
+            schedule_next_governance_approval_check(conn);
+            return JobResult {
+                success: false,
+                chunks_embedded: None,
+                error: Some(format!("Failed to archive expired approvals: {}", e)),
+            };
+        }
+    };
+
+    if !archived.is_empty() {
+        let _ = notif_repo::create_notification_full(
+            conn,
+            "approval_timeout",
+            "Approvals timed out",
+            &format!("{} pending approvals have expired and been archived", archived.len()),
+            None,
+            None,
+            None,
+            None,
+            "warning",
+            false,
+        );
+    }
+
+    schedule_next_governance_approval_check(conn);
+
+    JobResult {
+        success: true,
+        chunks_embedded: Some(archived.len()),
+        error: None,
+    }
+}
+
+pub fn process_aggregate_governance_metrics_job(conn: &Connection, job_id: &str) -> JobResult {
+    if let Err(e) = jobs_repo::update_job_status(conn, job_id, "running", None, None) {
+        return JobResult {
+            success: false,
+            chunks_embedded: None,
+            error: Some(format!("Failed to update job status: {}", e)),
+        };
+    }
+
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+
+    // Count actions by risk level
+    let risk_counts = count_audit_actions_by_risk(conn, &today);
+    for (risk_level, count) in &risk_counts {
+        let _ = gov_repo::upsert_governance_metric(
+            conn,
+            &today,
+            "risk_distribution",
+            Some(risk_level),
+            *count,
+        );
+    }
+
+    // Count actions by autonomy mode
+    let autonomy_counts = count_audit_actions_by_autonomy(conn, &today);
+    for (mode, count) in &autonomy_counts {
+        let _ = gov_repo::upsert_governance_metric(
+            conn,
+            &today,
+            "autonomy_breakdown",
+            Some(mode),
+            *count,
+        );
+    }
+
+    // Count approval outcomes
+    let approval_counts = count_approval_outcomes(conn, &today);
+    for (status, count) in &approval_counts {
+        let _ = gov_repo::upsert_governance_metric(
+            conn,
+            &today,
+            "approval_rate",
+            Some(status),
+            *count,
+        );
+    }
+
+    // Total action count
+    let total_actions: i64 = risk_counts.values().sum();
+    let _ = gov_repo::upsert_governance_metric(
+        conn,
+        &today,
+        "action_count",
+        None,
+        total_actions,
+    );
+
+    // Count actions by integration source
+    let integration_counts = count_actions_by_integration(conn, &today);
+    for (integration_name, count) in &integration_counts {
+        let _ = gov_repo::upsert_governance_metric(
+            conn,
+            &today,
+            "integration_activity",
+            Some(integration_name),
+            *count,
+        );
+    }
+
+    // Count actions by skill source
+    let skill_counts = count_actions_by_skill(conn, &today);
+    for (skill_name, count) in &skill_counts {
+        let _ = gov_repo::upsert_governance_metric(
+            conn,
+            &today,
+            "skill_activity",
+            Some(skill_name),
+            *count,
+        );
+    }
+
+    schedule_next_governance_metrics_aggregation(conn);
+
+    JobResult {
+        success: true,
+        chunks_embedded: Some(risk_counts.len()),
+        error: None,
+    }
+}
+
+pub fn process_detect_anomalies_job(conn: &Connection, job_id: &str) -> JobResult {
+    if let Err(e) = jobs_repo::update_job_status(conn, job_id, "running", None, None) {
+        return JobResult {
+            success: false,
+            chunks_embedded: None,
+            error: Some(format!("Failed to update job status: {}", e)),
+        };
+    }
+
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let seven_days_ago = (chrono::Utc::now() - chrono::Duration::days(7))
+        .format("%Y-%m-%d")
+        .to_string();
+
+    // Get average daily action count
+    let metrics = gov_repo::get_governance_metrics(conn, &seven_days_ago, &today, Some("action_count"))
+        .unwrap_or_default();
+
+    if metrics.len() < 3 {
+        schedule_next_anomaly_detection(conn);
+        return JobResult {
+            success: true,
+            chunks_embedded: Some(0),
+            error: None,
+        };
+    }
+
+    let avg_actions: f64 = metrics.iter().map(|m| m.value as f64).sum::<f64>() / metrics.len() as f64;
+    let today_actions = metrics.iter()
+        .find(|m| m.date == today)
+        .map(|m| m.value)
+        .unwrap_or(0);
+
+    let mut anomalies_detected = 0;
+
+    // Check for activity spike (>2x average)
+    if today_actions as f64 > avg_actions * 2.0 && avg_actions > 5.0 {
+        let _ = notif_repo::create_notification_full(
+            conn,
+            "anomaly_detected",
+            "Unusual activity detected",
+            &format!(
+                "Agent actions today ({}) are more than 2x the average ({})",
+                today_actions,
+                avg_actions as i64
+            ),
+            None,
+            None,
+            None,
+            None,
+            "warning",
+            true,
+        );
+        anomalies_detected += 1;
+    }
+
+    // Check for high rejection rate
+    let approval_metrics = gov_repo::get_governance_metrics(conn, &today, &today, Some("approval_rate"))
+        .unwrap_or_default();
+
+    let approved = approval_metrics.iter()
+        .find(|m| m.breakdown_key.as_deref() == Some("approved"))
+        .map(|m| m.value)
+        .unwrap_or(0);
+    let rejected = approval_metrics.iter()
+        .find(|m| m.breakdown_key.as_deref() == Some("rejected"))
+        .map(|m| m.value)
+        .unwrap_or(0);
+
+    let total_resolved = approved + rejected;
+    if total_resolved > 5 && rejected as f64 / total_resolved as f64 > 0.5 {
+        let _ = notif_repo::create_notification_full(
+            conn,
+            "anomaly_detected",
+            "High rejection rate",
+            &format!(
+                "{:.0}% of agent actions were rejected today. Review agent suggestions.",
+                (rejected as f64 / total_resolved as f64) * 100.0
+            ),
+            None,
+            None,
+            None,
+            None,
+            "warning",
+            true,
+        );
+        anomalies_detected += 1;
+    }
+
+    schedule_next_anomaly_detection(conn);
+
+    JobResult {
+        success: true,
+        chunks_embedded: Some(anomalies_detected),
+        error: None,
+    }
+}
+
+fn count_audit_actions_by_risk(conn: &Connection, date: &str) -> HashMap<String, i64> {
+    let mut counts = HashMap::new();
+
+    let query = format!(
+        "SELECT risk_level, COUNT(*) FROM audit_log
+         WHERE risk_level IS NOT NULL AND DATE(timestamp) = '{}'
+         GROUP BY risk_level",
+        date
+    );
+
+    if let Ok(mut stmt) = conn.prepare(&query) {
+        let _ = stmt.query_map([], |row| {
+            let risk_level: String = row.get(0)?;
+            let count: i64 = row.get(1)?;
+            counts.insert(risk_level, count);
+            Ok(())
+        }).map(|iter| iter.for_each(drop));
+    }
+
+    counts
+}
+
+fn count_audit_actions_by_autonomy(conn: &Connection, date: &str) -> HashMap<String, i64> {
+    let mut counts = HashMap::new();
+
+    let query = format!(
+        "SELECT autonomy_mode, COUNT(*) FROM audit_log
+         WHERE autonomy_mode IS NOT NULL AND DATE(timestamp) = '{}'
+         GROUP BY autonomy_mode",
+        date
+    );
+
+    if let Ok(mut stmt) = conn.prepare(&query) {
+        let _ = stmt.query_map([], |row| {
+            let mode: String = row.get(0)?;
+            let count: i64 = row.get(1)?;
+            counts.insert(mode, count);
+            Ok(())
+        }).map(|iter| iter.for_each(drop));
+    }
+
+    counts
+}
+
+fn count_approval_outcomes(conn: &Connection, date: &str) -> HashMap<String, i64> {
+    let mut counts = HashMap::new();
+
+    let query = format!(
+        "SELECT status, COUNT(*) FROM pending_approvals
+         WHERE DATE(resolved_at) = '{}' AND status IN ('approved', 'rejected', 'archived')
+         GROUP BY status",
+        date
+    );
+
+    if let Ok(mut stmt) = conn.prepare(&query) {
+        let _ = stmt.query_map([], |row| {
+            let status: String = row.get(0)?;
+            let count: i64 = row.get(1)?;
+            counts.insert(status, count);
+            Ok(())
+        }).map(|iter| iter.for_each(drop));
+    }
+
+    counts
+}
+
+fn count_actions_by_integration(conn: &Connection, date: &str) -> HashMap<String, i64> {
+    let mut counts = HashMap::new();
+
+    let query = format!(
+        "SELECT COALESCE(i.name, pa.source_id), COUNT(*)
+         FROM pending_approvals pa
+         LEFT JOIN integrations i ON pa.source_id = i.id
+         WHERE pa.source_type = 'integration' AND DATE(pa.created_at) = '{}'
+         GROUP BY COALESCE(i.name, pa.source_id)",
+        date
+    );
+
+    if let Ok(mut stmt) = conn.prepare(&query) {
+        let _ = stmt.query_map([], |row| {
+            let name: String = row.get(0)?;
+            let count: i64 = row.get(1)?;
+            counts.insert(name, count);
+            Ok(())
+        }).map(|iter| iter.for_each(drop));
+    }
+
+    counts
+}
+
+fn count_actions_by_skill(conn: &Connection, date: &str) -> HashMap<String, i64> {
+    let mut counts = HashMap::new();
+
+    let query = format!(
+        "SELECT COALESCE(s.name, pa.source_id), COUNT(*)
+         FROM pending_approvals pa
+         LEFT JOIN skills s ON pa.source_id = s.id
+         WHERE pa.source_type = 'skill' AND DATE(pa.created_at) = '{}'
+         GROUP BY COALESCE(s.name, pa.source_id)",
+        date
+    );
+
+    if let Ok(mut stmt) = conn.prepare(&query) {
+        let _ = stmt.query_map([], |row| {
+            let name: String = row.get(0)?;
+            let count: i64 = row.get(1)?;
+            counts.insert(name, count);
+            Ok(())
+        }).map(|iter| iter.for_each(drop));
+    }
+
+    counts
+}
+
+fn schedule_next_governance_approval_check(conn: &Connection) {
+    let next_run = chrono::Utc::now() + chrono::Duration::minutes(1);
+    let _ = jobs_repo::create_job_scheduled(
+        conn,
+        "check_approval_timeouts",
+        None,
+        1,
+        &next_run.to_rfc3339(),
+    );
+}
+
+fn schedule_next_governance_metrics_aggregation(conn: &Connection) {
+    // Run daily at midnight
+    let now = chrono::Utc::now();
+    let tomorrow = (now + chrono::Duration::days(1))
+        .date_naive()
+        .and_hms_opt(0, 5, 0)
+        .unwrap();
+    let next_run = chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(
+        tomorrow,
+        chrono::Utc,
+    );
+    let _ = jobs_repo::create_job_scheduled(
+        conn,
+        "aggregate_governance_metrics",
+        None,
+        1,
+        &next_run.to_rfc3339(),
+    );
+}
+
+fn schedule_next_anomaly_detection(conn: &Connection) {
+    let next_run = chrono::Utc::now() + chrono::Duration::hours(1);
+    let _ = jobs_repo::create_job_scheduled(
+        conn,
+        "detect_anomalies",
+        None,
+        1,
+        &next_run.to_rfc3339(),
+    );
+}
+
+pub fn init_governance_jobs(conn: &Connection) {
+    // Check for approval timeouts every minute
+    let pending_timeouts = jobs_repo::get_pending_jobs_by_type(conn, "check_approval_timeouts")
+        .unwrap_or_default();
+    if pending_timeouts.is_empty() {
+        schedule_next_governance_approval_check(conn);
+    }
+
+    // Aggregate metrics daily
+    let pending_metrics = jobs_repo::get_pending_jobs_by_type(conn, "aggregate_governance_metrics")
+        .unwrap_or_default();
+    if pending_metrics.is_empty() {
+        schedule_next_governance_metrics_aggregation(conn);
+    }
+
+    // Detect anomalies hourly
+    let pending_anomalies = jobs_repo::get_pending_jobs_by_type(conn, "detect_anomalies")
+        .unwrap_or_default();
+    if pending_anomalies.is_empty() {
+        schedule_next_anomaly_detection(conn);
+    }
+
+    // Initialize team sync jobs
+    init_team_sync_jobs(conn);
+}
+
+// ─── Team Sync Jobs ─────────────────────────────────────────────────────────
+
+use crate::team::repository as team_repo;
+use crate::integrations::slack;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncTeamRosterPayload {
+    pub source: String, // "slack", "google"
+    pub integration_id: Option<String>,
+}
+
+pub async fn process_sync_team_roster_job(
+    conn: &Connection,
+    job_id: &str,
+    payload: &SyncTeamRosterPayload,
+) -> JobResult {
+    if let Err(e) = jobs_repo::update_job_status(conn, job_id, "running", None, None) {
+        return JobResult {
+            success: false,
+            chunks_embedded: None,
+            error: Some(format!("Failed to update job status: {}", e)),
+        };
+    }
+
+    match payload.source.as_str() {
+        "slack" => sync_team_from_slack_internal(conn).await,
+        "google" => {
+            // Google Workspace sync - placeholder for future implementation
+            JobResult {
+                success: true,
+                chunks_embedded: Some(0),
+                error: Some("Google Workspace sync not yet implemented".to_string()),
+            }
+        }
+        _ => JobResult {
+            success: false,
+            chunks_embedded: None,
+            error: Some(format!("Unknown team sync source: {}", payload.source)),
+        },
+    }
+}
+
+async fn sync_team_from_slack_internal(conn: &Connection) -> JobResult {
+    // Get Slack integration
+    let access_token = match integration_repo::get_integration_by_type(conn, "slack") {
+        Ok(Some(integration)) => {
+            match integration.config.access_token {
+                Some(token) => token,
+                None => {
+                    return JobResult {
+                        success: false,
+                        chunks_embedded: None,
+                        error: Some("No access token in Slack integration".to_string()),
+                    };
+                }
+            }
+        }
+        Ok(None) => {
+            return JobResult {
+                success: true,
+                chunks_embedded: Some(0),
+                error: None, // No Slack integration, skip silently
+            };
+        }
+        Err(e) => {
+            return JobResult {
+                success: false,
+                chunks_embedded: None,
+                error: Some(format!("Failed to get Slack integration: {}", e)),
+            };
+        }
+    };
+
+    // Fetch members from Slack
+    let slack_members = match slack::fetch_workspace_members(&access_token).await {
+        Ok(members) => members,
+        Err(e) => {
+            return JobResult {
+                success: false,
+                chunks_embedded: None,
+                error: Some(format!("Failed to fetch Slack members: {}", e)),
+            };
+        }
+    };
+
+    let mut synced = 0;
+
+    for member in &slack_members {
+        let input = crate::team::models::CreateTeamMemberInput {
+            name: member.name.clone(),
+            email: member.email.clone(),
+            avatar_url: member.avatar_url.clone(),
+            source: "slack".to_string(),
+            source_id: Some(member.id.clone()),
+            role: None,
+            expertise: None,
+            metadata: None,
+        };
+
+        if team_repo::upsert_team_member(conn, &input).is_ok() {
+            synced += 1;
+        }
+    }
+
+    // Create notification if new members were synced
+    if synced > 0 {
+        let _ = notif_repo::create_notification_full(
+            conn,
+            "team_sync",
+            "Team roster synced",
+            &format!("Synced {} team members from Slack", synced),
+            None,
+            None,
+            None,
+            None,
+            "info",
+            false,
+        );
+    }
+
+    JobResult {
+        success: true,
+        chunks_embedded: Some(synced),
+        error: None,
+    }
+}
+
+pub fn process_poll_team_syncs_job(conn: &Connection, job_id: &str) -> JobResult {
+    if let Err(e) = jobs_repo::update_job_status(conn, job_id, "running", None, None) {
+        return JobResult {
+            success: false,
+            chunks_embedded: None,
+            error: Some(format!("Failed to update job status: {}", e)),
+        };
+    }
+
+    let mut queued = 0;
+
+    // Check for Slack integration
+    if let Ok(Some(_)) = integration_repo::get_integration_by_type(conn, "slack") {
+        let payload = SyncTeamRosterPayload {
+            source: "slack".to_string(),
+            integration_id: None,
+        };
+
+        if jobs_repo::create_job(
+            conn,
+            "sync_team_roster",
+            Some(&serde_json::to_string(&payload).unwrap_or_default()),
+            3, // Lower priority than regular syncs
+        ).is_ok() {
+            queued += 1;
+        }
+    }
+
+    // Check for Google integration (future)
+    // if let Ok(Some(_)) = integration_repo::get_integration_by_type(conn, "google") { ... }
+
+    // Recompute workload scores for the whole roster alongside the daily sync.
+    let _ = team_repo::compute_all_workload_scores(conn);
+
+    schedule_next_team_sync(conn);
+
+    JobResult {
+        success: true,
+        chunks_embedded: Some(queued),
+        error: None,
+    }
+}
+
+fn schedule_next_team_sync(conn: &Connection) {
+    // Sync team roster daily
+    let now = chrono::Utc::now();
+    let tomorrow = (now + chrono::Duration::days(1))
+        .date_naive()
+        .and_hms_opt(2, 0, 0) // 2 AM UTC
+        .unwrap();
+    let next_run = chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(
+        tomorrow,
+        chrono::Utc,
+    );
+    let _ = jobs_repo::create_job_scheduled(
+        conn,
+        "poll_team_syncs",
+        None,
+        1,
+        &next_run.to_rfc3339(),
+    );
+}
+
+pub fn init_team_sync_jobs(conn: &Connection) {
+    let pending_syncs = jobs_repo::get_pending_jobs_by_type(conn, "poll_team_syncs")
+        .unwrap_or_default();
+    if pending_syncs.is_empty() {
+        schedule_next_team_sync(conn);
     }
 }
 

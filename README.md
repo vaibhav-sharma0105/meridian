@@ -15,12 +15,13 @@ Meridian is a **local-first, AI-powered meeting intelligence desktop application
 5. [First Run & Onboarding](#first-run--onboarding)
 6. [Configuring Your AI Provider](#configuring-your-ai-provider)
 7. [Using Meridian](#using-meridian)
-8. [Connector: Zoom](#connector-zoom)
-9. [Connector: Google Sheets Relay](#connector-google-sheets-relay)
-10. [Moving to a New Device](#moving-to-a-new-device)
-11. [Keyboard Shortcuts](#keyboard-shortcuts)
-12. [Data & Privacy](#data--privacy)
-13. [Troubleshooting](#troubleshooting)
+8. [Governance & Autonomy](#governance--autonomy)
+9. [Connector: Zoom](#connector-zoom)
+10. [Connector: Google Sheets Relay](#connector-google-sheets-relay)
+11. [Moving to a New Device](#moving-to-a-new-device)
+12. [Keyboard Shortcuts](#keyboard-shortcuts)
+13. [Data & Privacy](#data--privacy)
+14. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -397,6 +398,65 @@ The right panel contains an AI chat scoped to your active project. It has access
 - 📅 **Next Agenda** — follow-up meeting agenda based on open items
 - 📈 **Status Report** — progress summary for a project update
 - 💬 **Free-form** — open-ended chat with project context
+
+---
+
+## Governance & Autonomy
+
+Meridian includes a governance system that controls how much agent assistance runs automatically. This gives you visibility and control over AI-initiated actions.
+
+### Autonomy Modes
+
+Access the Governance view via the **Shield** icon in the sidebar. Three modes are available:
+
+| Mode | Description | Best For |
+|------|-------------|----------|
+| **Manual** | All agent actions require your approval | Maximum control, learning Meridian |
+| **Supervised** (default) | Low/medium-risk actions auto-execute; high/critical require approval | Balanced automation |
+| **Autonomous** | Most actions auto-execute; only critical-risk requires approval | Experienced users |
+
+### Approval Queue
+
+When an action requires approval, it appears in the **Approvals** tab:
+
+1. Click **Governance** in the sidebar
+2. Review pending actions with their risk level and context
+3. Click **Approve** to execute or **Reject** to cancel
+4. Actions auto-expire after 24 hours if not reviewed
+
+### Undo Actions
+
+Most internal changes made by agents can be undone within 10 seconds:
+
+1. After an agent modifies a task or meeting, an **Undo** bar appears at the bottom
+2. Click **Undo** to revert the change
+3. View full history in the **History** tab
+
+### Per-Integration Autonomy
+
+Override the global mode for specific integrations:
+
+1. Go to **Integrations** → click a connected integration → **Settings**
+2. Under **Governance**, select a different autonomy mode
+3. "Inherit" uses the global setting
+
+### Per-Skill Autonomy
+
+Override the global mode for specific skills:
+
+1. Go to **Skills** → click a skill → **Edit**
+2. Scroll to **Governance** section
+3. Select a different autonomy mode
+
+### Dashboard
+
+The **Dashboard** tab shows governance metrics:
+
+- **Total Actions** — Agent actions in the selected time range
+- **Pending Approvals** — Actions waiting for review
+- **Approval Rate** — Percentage of approved vs. rejected actions
+- **Risk Distribution** — Breakdown by risk level
+- **Autonomy Breakdown** — Actions by mode (auto-executed vs. approved)
 
 ---
 

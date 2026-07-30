@@ -20,6 +20,7 @@ import { GitHubSettings } from "./GitHubSettings";
 import { JiraSettings } from "./JiraSettings";
 import { SlackSettings } from "./SlackSettings";
 import { MCPSettings } from "./MCPSettings";
+import { BackgroundJobsPanel } from "./BackgroundJobsPanel";
 import type { Integration } from "@/lib/tauri";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -513,6 +514,9 @@ export function IntegrationsPage() {
           </div>
         )}
       </div>
+
+      {/* Background Jobs Section */}
+      <BackgroundJobsPanel />
 
       {/* Setup Wizard Modal */}
       {showSetupWizard && setupType && (

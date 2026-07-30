@@ -118,7 +118,10 @@ pub struct AuditEntry {
     pub details: Option<String>,
     pub agent_initiated: bool,
     pub autonomy_mode: Option<String>,
+    pub autonomy_source: Option<String>,
     pub risk_level: Option<String>,
+    pub approval_id: Option<String>,
+    pub undo_action_id: Option<String>,
     pub created_at: String,
 }
 
@@ -130,7 +133,10 @@ pub struct LogActionParams {
     pub details: Option<serde_json::Value>,
     pub agent_initiated: bool,
     pub autonomy_mode: Option<AutonomyMode>,
+    pub autonomy_source: Option<String>,
     pub risk_level: Option<RiskLevel>,
+    pub approval_id: Option<String>,
+    pub undo_action_id: Option<String>,
 }
 
 impl Default for ActionType {
@@ -190,8 +196,8 @@ pub fn log_action(conn: &Connection, params: LogActionParams) -> Result<String, 
     let risk_str = params.risk_level.as_ref().map(|r| r.as_str().to_string());
 
     conn.execute(
-        "INSERT INTO audit_log (id, timestamp, action_type, entity_type, entity_id, details, agent_initiated, autonomy_mode, risk_level)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        "INSERT INTO audit_log (id, timestamp, action_type, entity_type, entity_id, details, agent_initiated, autonomy_mode, autonomy_source, risk_level, approval_id, undo_action_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
         rusqlite::params![
             id,
             timestamp,
@@ -201,7 +207,10 @@ pub fn log_action(conn: &Connection, params: LogActionParams) -> Result<String, 
             details_str,
             params.agent_initiated as i32,
             autonomy_str,
+            params.autonomy_source,
             risk_str,
+            params.approval_id,
+            params.undo_action_id,
         ],
     )
     .map_err(|e| format!("Failed to log action: {}", e))?;
@@ -228,6 +237,7 @@ pub fn log_user_action(
             agent_initiated: false,
             autonomy_mode: None,
             risk_level: Some(risk),
+            ..Default::default()
         },
     )
 }
@@ -253,6 +263,7 @@ pub fn log_agent_action(
             agent_initiated: true,
             autonomy_mode: Some(autonomy_mode),
             risk_level: Some(risk),
+            ..Default::default()
         },
     )
 }
@@ -277,7 +288,7 @@ pub fn query_audit_log(
 ) -> Result<Vec<AuditEntry>, String> {
     let mut sql = String::from(
         "SELECT id, timestamp, action_type, entity_type, entity_id, details,
-                agent_initiated, autonomy_mode, risk_level, created_at
+                agent_initiated, autonomy_mode, autonomy_source, risk_level, approval_id, undo_action_id, created_at
          FROM audit_log WHERE 1=1",
     );
     let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
@@ -337,8 +348,11 @@ pub fn query_audit_log(
                 details: row.get(5)?,
                 agent_initiated: row.get::<_, i32>(6)? != 0,
                 autonomy_mode: row.get(7)?,
-                risk_level: row.get(8)?,
-                created_at: row.get(9)?,
+                autonomy_source: row.get(8)?,
+                risk_level: row.get(9)?,
+                approval_id: row.get(10)?,
+                undo_action_id: row.get(11)?,
+                created_at: row.get(12)?,
             })
         })
         .map_err(|e| format!("Failed to query audit log: {}", e))?
@@ -414,7 +428,10 @@ mod tests {
                 details TEXT,
                 agent_initiated INTEGER DEFAULT 0,
                 autonomy_mode TEXT,
+                autonomy_source TEXT,
                 risk_level TEXT DEFAULT 'low',
+                approval_id TEXT,
+                undo_action_id TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )",
         )

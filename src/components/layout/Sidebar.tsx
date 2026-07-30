@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Bell, Settings, Settings2, Plus, LayoutList, Zap,
+  Bell, Settings, Settings2, Plus, LayoutList, Zap, Shield,
   Sun, Moon, Monitor, Link2, Sparkles, ChevronDown, ChevronRight, ArchiveRestore,
 } from "lucide-react";
 import { useProjectStore } from "@/stores/projectStore";
@@ -10,6 +10,7 @@ import { useUIStore } from "@/stores/uiStore";
 import { useNotificationStore } from "@/stores/notificationStore";
 import { useProjects } from "@/hooks/useProjects";
 import { usePendingImports } from "@/hooks/usePendingImports";
+import { usePendingApprovalCount } from "@/hooks/useGovernance";
 import ProjectCreate from "@/components/projects/ProjectCreate";
 import ProjectSettings from "@/components/projects/ProjectSettings";
 import { setAppSetting, getArchivedProjects, unarchiveProject } from "@/lib/tauri";
@@ -33,6 +34,7 @@ export default function Sidebar() {
   const { theme, setTheme, setNotificationCenterOpen, setSettingsOpen, activeView, setActiveView, rightPanelOpen, toggleRightPanel } = useUIStore();
   const { unreadCount } = useNotificationStore();
   const { pendingCount } = usePendingImports();
+  const { data: pendingApprovalCount = 0 } = usePendingApprovalCount();
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [settingsProject, setSettingsProject] = useState<Project | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -84,6 +86,14 @@ export default function Sidebar() {
           label="Skills"
           active={activeView === "skills"}
           onClick={() => { setActiveProject(null); setActiveView("skills"); }}
+        />
+        <NavItem
+          icon={<Shield className="w-[17px] h-[17px]" />}
+          label="Governance"
+          active={activeView === "governance"}
+          onClick={() => { setActiveProject(null); setActiveView("governance"); }}
+          badge={pendingApprovalCount > 0 ? pendingApprovalCount : undefined}
+          testId="sidebar-governance"
         />
       </div>
 
@@ -256,16 +266,19 @@ export default function Sidebar() {
 
 /* ── Shared nav item ──────────────────────────────────────────────────────── */
 function NavItem({
-  icon, label, active, onClick,
+  icon, label, active, onClick, badge, testId,
 }: {
   icon: React.ReactNode;
   label: string;
   active: boolean;
   onClick: () => void;
+  badge?: number;
+  testId?: string;
 }) {
   return (
     <button
       onClick={onClick}
+      data-testid={testId}
       className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-all duration-150 ${
         active
           ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50 font-medium shadow-[inset_2px_0_0_0_#6366f1]"
@@ -273,7 +286,12 @@ function NavItem({
       }`}
     >
       {icon}
-      {label}
+      <span className="flex-1 text-left">{label}</span>
+      {badge !== undefined && badge > 0 && (
+        <span data-testid={testId ? `${testId}-badge` : undefined} className="px-1.5 py-0.5 text-[10px] font-medium bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 rounded-full leading-none">
+          {badge > 99 ? "99+" : badge}
+        </span>
+      )}
     </button>
   );
 }

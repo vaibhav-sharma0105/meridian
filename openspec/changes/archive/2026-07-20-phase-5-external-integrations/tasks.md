@@ -71,10 +71,12 @@
 ### Section 9: Daemon Integration Jobs
 
 - [x] **9.1** Add `sync_integration` job type to `src-tauri/src/daemon/jobs.rs` (SyncIntegrationPayload struct added)
-- [ ] **9.2** Implement sync job handler: call integration.sync(), update cache, create notifications (deferred: requires async runtime in daemon)
-- [ ] **9.3** Add scheduled sync: every 15 minutes for connected integrations (deferred: uses manual sync via commands for now)
+- [x] **9.2** Implement sync job handler: call integration.sync(), update cache, create notifications
+- [x] **9.3** Add scheduled sync: every 5 minutes for connected integrations via `poll_integration_syncs` job
 - [x] **9.4** Add Slack Socket Mode listener with WebSocket connection (tokio-tungstenite)
 - [x] **9.5** Implement auto-reconnect with exponential backoff for Slack WebSocket
+- [x] **9.6** Add `get_background_jobs` and `get_recent_background_jobs` commands for UI visibility
+- [x] **9.7** Create `BackgroundJobsPanel.tsx` component showing active/recent daemon jobs
 
 ### Section 10: Frontend - Integration Hub
 

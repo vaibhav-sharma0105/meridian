@@ -286,3 +286,81 @@ pub fn cleanup_old_jobs(conn: &Connection, days_old: i32) -> Result<usize, Strin
         Err(e) => Err(e.to_string()),
     }
 }
+
+pub fn get_active_jobs(conn: &Connection, limit: i32) -> Result<Vec<DaemonJob>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, job_type, status, priority, payload, result, error, attempts, max_attempts,
+                    scheduled_at, started_at, completed_at, created_at
+             FROM daemon_jobs
+             WHERE status IN ('pending', 'running')
+             ORDER BY
+                CASE status WHEN 'running' THEN 0 ELSE 1 END,
+                priority DESC,
+                scheduled_at ASC
+             LIMIT ?1",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let jobs = stmt
+        .query_map(params![limit], |row| {
+            Ok(DaemonJob {
+                id: row.get(0)?,
+                job_type: row.get(1)?,
+                status: row.get(2)?,
+                priority: row.get(3)?,
+                payload: row.get(4)?,
+                result: row.get(5)?,
+                error: row.get(6)?,
+                attempts: row.get(7)?,
+                max_attempts: row.get(8)?,
+                scheduled_at: row.get(9)?,
+                started_at: row.get(10)?,
+                completed_at: row.get(11)?,
+                created_at: row.get(12)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(jobs)
+}
+
+pub fn get_recent_jobs(conn: &Connection, limit: i32) -> Result<Vec<DaemonJob>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, job_type, status, priority, payload, result, error, attempts, max_attempts,
+                    scheduled_at, started_at, completed_at, created_at
+             FROM daemon_jobs
+             ORDER BY
+                CASE status WHEN 'running' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END,
+                created_at DESC
+             LIMIT ?1",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let jobs = stmt
+        .query_map(params![limit], |row| {
+            Ok(DaemonJob {
+                id: row.get(0)?,
+                job_type: row.get(1)?,
+                status: row.get(2)?,
+                priority: row.get(3)?,
+                payload: row.get(4)?,
+                result: row.get(5)?,
+                error: row.get(6)?,
+                attempts: row.get(7)?,
+                max_attempts: row.get(8)?,
+                scheduled_at: row.get(9)?,
+                started_at: row.get(10)?,
+                completed_at: row.get(11)?,
+                created_at: row.get(12)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(jobs)
+}

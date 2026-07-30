@@ -523,20 +523,24 @@ Phase 5 adds a unified integration framework for connecting external services (G
 - `src-tauri/src/integrations/github.rs` — GitHub OAuth + sync (issues, PRs)
 - `src-tauri/src/integrations/jira.rs` — Jira OAuth + sync (issues)
 - `src-tauri/src/integrations/slack.rs` — Slack OAuth + channel sync
-- `src-tauri/src/integrations/webhook.rs` — Local HTTP server for callbacks
+- `src-tauri/src/integrations/slack_socket.rs` — Slack Socket Mode WebSocket client with auto-reconnect and action item detection
+- `src-tauri/src/integrations/webhook.rs` — Local HTTP server for OAuth callbacks
 - `src-tauri/src/commands/integrations.rs` — 18 Tauri commands for integration management
+- `src-tauri/src/daemon/jobs.rs` — `sync_integration` and `poll_integration_syncs` job handlers
 
 **Key files (Frontend):**
 - `src/hooks/useIntegrations.ts` — React Query hooks for integrations
 - `src/hooks/useIntegrationLinks.ts` — Hooks for task ↔ external item links
 - `src/stores/integrationStore.ts` — Zustand store for OAuth state
 - `src/components/integrations/IntegrationsPage.tsx` — Unified settings page (Native vs MCP sections)
-- `src/components/integrations/SetupWizard.tsx` — Step-by-step OAuth setup with prerequisites
+- `src/components/integrations/SetupWizard.tsx` — Step-by-step OAuth setup with toggleable step completion
 - `src/components/integrations/GitHubSettings.tsx` — GitHub repo selection and sync config
 - `src/components/integrations/JiraSettings.tsx` — Jira project selection
 - `src/components/integrations/SlackSettings.tsx` — Channel autonomy config
+- `src/components/integrations/SlackDraftsPanel.tsx` — Pending Slack drafts with delayed send queue
 - `src/components/integrations/MCPSettings.tsx` — MCP Server permission config
 - `src/components/integrations/NotificationSettings.tsx` — Desktop notification preferences
+- `src/components/integrations/BackgroundJobsPanel.tsx` — Shows active/recent daemon jobs (syncs, embeddings, skills)
 - `src/components/integrations/LinkPicker.tsx` — Search and link external items to tasks
 - `src/components/tasks/IntegrationLinkBadge.tsx` — Badge showing linked GitHub/Jira items
 
@@ -569,9 +573,21 @@ MCP server (`meridian-mcp`) includes write tools with permission checks:
 1. User clicks Integrations (Link2 icon) in sidebar → Opens IntegrationsPage modal
 2. Page shows two collapsible sections: Native Integrations and MCP Servers
 3. Click "Connect" on any integration → Opens SetupWizard
-4. SetupWizard shows: Prerequisites, step-by-step instructions, OAuth flow
+4. SetupWizard shows: Prerequisites, step-by-step instructions, OAuth flow (steps are toggleable for accidental clicks)
 5. After OAuth: Integration appears in "Connected" section with Settings button
 6. Settings modals: Configure sync interval, repo/project/channel selection, disconnect
+
+**Daemon Sync Jobs:**
+- `sync_integration` — Fetches data from integration provider, updates cache, creates notifications
+- `poll_integration_syncs` — Runs every 5 minutes, checks all connected integrations for sync due
+- `init_integration_jobs()` — Called on daemon startup to schedule initial poll job
+- BackgroundJobsPanel shows active/recent jobs with auto-refresh (5-second interval)
+
+**Slack Socket Mode:**
+- `slack_socket.rs` — WebSocket client for Slack real-time events
+- Auto-reconnect with exponential backoff (1s initial, 300s max)
+- Action item detection: mentions, questions, requests, deadlines, follow-ups
+- Per-channel autonomy: `auto`, `notify`, `approve_first`, `approve_always`
 
 **MCP Permissions (expanded):**
 ```typescript
@@ -587,6 +603,143 @@ interface McpPermissions {
   rate_limit_per_minute: number; // default: 100
 }
 ```
+
+### 17. Governance & Autonomy
+
+The governance layer provides unified control over agent actions with risk classification, approval workflows, and undo capabilities.
+
+**Autonomy Modes:**
+- `Manual` — All agent actions require explicit user approval
+- `Supervised` (default) — Low/medium-risk actions auto-execute; high/critical-risk require approval
+- `Autonomous` — Most actions auto-execute; only critical-risk requires approval
+
+**Autonomy Inheritance:**
+```
+Global Autonomy Mode (app_settings.autonomy_mode)
+    ↓ inherited by
+Integration Autonomy (integrations.autonomy_mode, nullable)
+    ↓ inherited by
+Skill Autonomy (skills.autonomy_mode, nullable)
+```
+
+**Risk Classification:**
+Risk level is calculated from three weighted scores:
+- `action_type_weight`: read=1, create=2, update=3, external_send=4, delete=5
+- `destination_score`: internal=1, team=2, external=3, executive=4
+- `content_score`: normal=1, sensitive=2, pii=3, financial=4
+
+Critical override: Any maximum individual score (delete, executive, financial) → Critical risk
+
+**Key files (Backend):**
+- `src-tauri/src/governance/mod.rs` — Module root
+- `src-tauri/src/governance/models.rs` — RiskLevel, AutonomyMode, PendingApproval, ActionHistory
+- `src-tauri/src/governance/risk.rs` — Risk classification engine with learned adjustments
+- `src-tauri/src/governance/autonomy.rs` — AutonomyController with inheritance resolution
+- `src-tauri/src/governance/approval.rs` — Approval queue operations (create, approve, reject, timeout)
+- `src-tauri/src/governance/undo.rs` — Action history and undo system
+- `src-tauri/src/governance/repository.rs` — CRUD for governance tables
+- `src-tauri/src/commands/governance.rs` — 21 Tauri commands
+
+**Key files (Frontend):**
+- `src/hooks/useGovernance.ts` — React Query hooks for all governance operations
+- `src/components/governance/AutonomySettings.tsx` — Global mode selector with inheritance info
+- `src/components/governance/ApprovalQueue.tsx` — Pending approvals list with bulk actions
+- `src/components/governance/UndoBar.tsx` — Toast-style undo with countdown timer
+- `src/components/governance/ActionHistoryPanel.tsx` — Filterable action history with diff view
+- `src/components/governance/GovernanceDashboard.tsx` — Metrics, charts, anomaly alerts
+
+**Database (v015 migration):**
+- `pending_approvals` — Queue for actions awaiting approval with timeout
+- `action_history` — Tracks before/after state for undoable actions
+- `governance_metrics` — Daily aggregates for dashboard (risk distribution, approval rates)
+- `risk_adjustments` — User-defined risk overrides for contacts/channels
+- `audit_log` extended with `risk_level`, `autonomy_mode`, `autonomy_source`, `approval_id`, `undo_action_id`
+- `integrations.autonomy_mode` and `skills.autonomy_mode` columns added
+
+**Approval Flow:**
+1. Action evaluated by `evaluate_action` → returns `ApprovalDecision`
+2. If `requires_approval: true`, action queued in `pending_approvals` with timeout
+3. User approves/rejects via UI or action times out (default: 24h, configurable)
+4. Approved actions execute and create `action_history` entry
+5. Rejected/timed-out actions archived with reason
+
+**Undo System:**
+- `capture_action_state()` records before/after JSON snapshots
+- `undo_action()` creates reversal action (create → delete, update → restore)
+- External actions (Slack, GitHub, Jira) marked `undoable: false`
+- UndoBar shows for 10 seconds after reversible agent actions
+
+**Daemon Jobs:**
+- `check_approval_timeouts` — Runs every minute, archives expired approvals
+- `aggregate_governance_metrics` — Runs daily, computes risk/approval aggregates
+- `detect_anomalies` — Runs hourly, flags activity spikes and high rejection rates
+
+### 18. Team & Sync
+
+Phase 7 adds team roster management, intelligent assignee suggestions, and data export/import.
+
+**Team Roster:**
+- `team_members` table stores members from multiple sources: `manual`, `slack`, `google` (Google sync is UI/command scaffolding only — no Google integration exists in this codebase yet, see Known Gaps below)
+- Each member has `workload_score` (0-1) computed from open task count via `compute_all_workload_scores()` (`team/repository.rs`). This now actually runs: daily as part of `process_poll_team_syncs_job` (`daemon/jobs.rs`), and on-demand via the "Recompute Workloads" button in `TeamSettings.tsx` (`compute_team_workloads` command). Previously the scoring function existed and was unit-tested but nothing ever called it, so `workload_score` stayed NULL forever.
+- Sync from Slack via `sync_team_from_slack` command
+- Daily sync job via `poll_team_syncs` daemon job
+
+**Assignee Intelligence:**
+Multi-factor scoring for task assignment suggestions:
+- `pattern_score` — Based on historical assignments in `pattern_models`
+- `workload_score` — Inverse of current workload (available = high score)
+- `expertise_score` — Keyword matching between task and member expertise
+- `recency_score` — Recent task completions by the member
+- **Empty-roster fallback**: `get_assignee_suggestions()` (`team/assignee.rs`) suggests directly from `smart_defaults` keyword→assignee patterns (`pattern_models`) when `team_members` is empty, instead of returning no suggestions. These fallback suggestions carry `member.source = "pattern"` (synthetic, not a real `TeamMember` row) so the frontend can distinguish them once AssigneePicker is wired up.
+- `record_assignee_selection()` is wired to the `record_assignee_selection` Tauri command (`commands/team.rs`) and exposed as `api.recordAssigneeSelection()`. Not yet called from any UI — see Known Gaps.
+
+**Key files (Backend):**
+- `src-tauri/src/team/mod.rs` — Module root
+- `src-tauri/src/team/models.rs` — TeamMember, AssigneeSuggestion structs
+- `src-tauri/src/team/repository.rs` — CRUD, workload computation
+- `src-tauri/src/team/assignee.rs` — Multi-factor scoring algorithm
+- `src-tauri/src/commands/team.rs` — 8 Tauri commands
+
+**Key files (Frontend):**
+- `src/hooks/useTeam.ts` — React Query hooks
+- `src/components/team/TeamSettings.tsx` — Roster management UI
+- `src/components/team/TeamMemberCard.tsx` — Member display with workload
+- `src/components/tasks/AssigneePicker.tsx` — AI-powered assignee suggestions
+
+**Export/Import:**
+- `src-tauri/src/sync/export.rs` — ZIP archive built in memory (projects, tasks, meetings, team members), hashed for integrity, optionally encrypted as a whole
+- `src-tauri/src/sync/import.rs` — Archive parsing with conflict resolution, transactional apply
+- `src-tauri/src/sync/manifest.rs` — Version tracking, content inventory, `compute_checksum()` helper
+- `src-tauri/src/sync/crypto.rs` — Real AES-256-GCM encryption (PBKDF2-SHA256 key derivation, 100k iterations, same pattern as `crypto/key.rs`'s SQLCipher key derivation). Encrypts the *finished* zip as a byte stream (`MRX1` magic + salt + nonce + ciphertext) rather than per-entry, since the `zip` crate (0.6) has no write-side AES support. If no password is given the file is a plain, unencrypted zip — `crypto::is_encrypted()` detects which on import.
+- `src-tauri/src/commands/sync.rs` — 5 Tauri commands
+- `src/components/sync/ExportDialog.tsx` — Content selection, password protection
+- `src/components/sync/ImportDialog.tsx` — Conflict resolution UI
+
+**Export/Import integrity & safety (previously non-functional, fixed):**
+- `checksum.sha256` is written into the archive (hash over the fixed-order data files + manifest) and verified on import when present; mismatch aborts the import with an error.
+- Meetings are now imported, not just exported — `import_meeting()` mirrors `import_project`/`import_task`. `import_task`'s existence check was also fixed (it previously called a `get_task()` that errors on "not found" instead of returning `Option`, which made importing brand-new tasks fail).
+- `ImportMode::Replace` is now actually applied: it wipes locally-present content types (in FK-safe order: tasks → meetings → projects, plus team_members) before inserting, instead of silently behaving like Merge.
+- The whole `import_data()` body runs inside `conn.unchecked_transaction()` — commits only if every item succeeds, otherwise rolls back automatically. Previously each row was written with no atomicity.
+- Pre-import backup reuses the existing `utils::backup::backup_database()` (the same mechanism used before schema migrations) rather than a new system — path returned in `ImportResult.backup_path` and shown in the Import dialog's completion screen. List/restore of any backup already exists via `commands::migration::{list_backups, restore_from_backup}`.
+- Test coverage: `sync/import.rs` has round-trip tests (encrypted, unencrypted, wrong password, Replace vs Merge, conflict detection, checksum-tamper detection); `sync/crypto.rs` has its own encrypt/decrypt/tamper tests.
+
+**Database (v016 migration):**
+- `team_members` — id, name, email, avatar_url, source, source_id, role, expertise (JSON), workload_score
+- `pattern_contributions` — Placeholder for team pattern sharing (see Known Gaps — shared patterns are 0% implemented beyond this schema)
+
+**Team & Sync: Known Gaps / Future Work**
+
+> **For agents:** these need a product decision or external dependency before they can be implemented — don't guess at them.
+
+| Item | Status | What's Missing |
+|------|--------|-----------------|
+| **AssigneePicker not mounted** | BLOCKED ON DECISION | Component exists (`src/components/tasks/AssigneePicker.tsx`) but is single-assignee, while the app's real assignee UI (`AssigneeChipInput`) is multi-assignee (comma-separated). Needs a decision on whether assignee stays multi-person (picker needs a rewrite) and which editing surface(s) get it. |
+| **Expertise auto-learning** | BLOCKED ON DECISION | Spec wants member expertise tags to update from completed-task keywords, with "confidence increases with repetition" — no threshold is specified anywhere, and adding one requires new counter storage. The hook point is easy (task-completion handler in `commands/tasks.rs` already extracts keywords), the threshold policy isn't. |
+| **Google Workspace roster sync** | TRUE BLOCKER | No Google integration exists in this codebase at all — no `google.rs`, no OAuth scaffolding, no connected-service record. This is full-integration-sized scope (comparable to the Slack/GitHub/Jira work), not a roster-sync fix. `poll_team_syncs_job` has the Google branch commented out as a placeholder. |
+| **Shared Patterns** | DEFERRED (by design) | Local-first app, no team sync mechanism. Only the `pattern_contributions` table and `pattern_models.scope`/`contributor_count` columns exist; no anonymization, no contribution opt-in, no dual-layer query, no UI. |
+| **Skill sharing team features** | SUPERSEDED | `proposal.md` for this phase lists `skill-sharing` as a modified capability (team visibility, clone tracking via `cloned_from_id`), but the current authoritative spec at `openspec/specs/skill-sharing/spec.md` has since explicitly REMOVED those requirements ("Meridian is a local-first single-user app... no multi-user sharing functionality exists"). Nothing to fix here — the proposal is stale, not the code. |
+| **Export progress events** | NOT IMPL | `export_all_data`/`import_all_data` are plain request/response commands with no incremental progress channel; the dialogs show an indeterminate spinner, not a real progress bar. |
+| **Qdrant snapshot export/restore** | NOT IMPL | Requires Qdrant API integration; explicitly deferred since Phase 7 proposal. |
 
 ---
 

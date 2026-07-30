@@ -1,6 +1,9 @@
+use crate::db::repositories::jobs as jobs_repo;
+use crate::AppState;
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
+use tauri::State;
 use tauri_plugin_shell::ShellExt;
 
 #[cfg(unix)]
@@ -191,4 +194,76 @@ pub async fn daemon_health_check() -> Result<bool, String> {
         }
         Err(_) => Ok(false),
     }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BackgroundJob {
+    pub id: String,
+    pub job_type: String,
+    pub status: String,
+    pub priority: i32,
+    pub scheduled_at: String,
+    pub started_at: Option<String>,
+    pub created_at: String,
+    pub description: String,
+}
+
+fn job_type_to_description(job_type: &str) -> String {
+    match job_type {
+        "embed_document" => "Embedding document".to_string(),
+        "aggregate_patterns" => "Analyzing usage patterns".to_string(),
+        "generate_suggestions" => "Generating suggestions".to_string(),
+        "execute_skill" => "Running skill".to_string(),
+        "poll_scheduled_skills" => "Checking scheduled skills".to_string(),
+        "check_skill_approvals" => "Checking pending approvals".to_string(),
+        "sync_integration" => "Syncing integration".to_string(),
+        "poll_integration_syncs" => "Checking integration sync schedules".to_string(),
+        _ => format!("Running {}", job_type.replace('_', " ")),
+    }
+}
+
+#[tauri::command]
+pub fn get_background_jobs(
+    state: State<AppState>,
+    limit: Option<i32>,
+) -> Result<Vec<BackgroundJob>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let jobs = jobs_repo::get_active_jobs(&conn, limit.unwrap_or(20))?;
+
+    Ok(jobs
+        .into_iter()
+        .map(|j| BackgroundJob {
+            id: j.id,
+            job_type: j.job_type.clone(),
+            status: j.status,
+            priority: j.priority,
+            scheduled_at: j.scheduled_at,
+            started_at: j.started_at,
+            created_at: j.created_at,
+            description: job_type_to_description(&j.job_type),
+        })
+        .collect())
+}
+
+#[tauri::command]
+pub fn get_recent_background_jobs(
+    state: State<AppState>,
+    limit: Option<i32>,
+) -> Result<Vec<BackgroundJob>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let jobs = jobs_repo::get_recent_jobs(&conn, limit.unwrap_or(20))?;
+
+    Ok(jobs
+        .into_iter()
+        .map(|j| BackgroundJob {
+            id: j.id,
+            job_type: j.job_type.clone(),
+            status: j.status,
+            priority: j.priority,
+            scheduled_at: j.scheduled_at,
+            started_at: j.started_at,
+            created_at: j.created_at,
+            description: job_type_to_description(&j.job_type),
+        })
+        .collect())
 }

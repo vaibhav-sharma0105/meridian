@@ -7,6 +7,12 @@ use crate::protocol::{
     ServerCapabilities, ServerInfo, ToolDefinition, ToolsCapability, ResourcesCapability,
 };
 use meridian_lib::db::{connection, repositories};
+use meridian_lib::governance::{
+    approval as governance_approval,
+    autonomy::{AutonomyContext, AutonomyController},
+    risk::{ActionType, ContentRisk, DestinationType, calculate_risk},
+    undo,
+};
 use meridian_lib::models::task::{CreateTaskInput, TaskFilters, UpdateTaskInput};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -735,8 +741,8 @@ fn check_permission(conn: &rusqlite::Connection, permission: &str) -> Result<(),
 
 fn log_mcp_action(conn: &rusqlite::Connection, action: &str, entity_type: &str, entity_id: &str, details: &str) {
     let _ = conn.execute(
-        "INSERT INTO audit_log (id, action_type, entity_type, entity_id, details, agent_initiated, risk_level, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, 1, 'medium', datetime('now'))",
+        "INSERT INTO audit_log (id, timestamp, action_type, entity_type, entity_id, details, agent_initiated, risk_level, created_at)
+         VALUES (?1, datetime('now'), ?2, ?3, ?4, ?5, 1, 'medium', datetime('now'))",
         rusqlite::params![
             uuid::Uuid::new_v4().to_string(),
             action,
@@ -745,6 +751,42 @@ fn log_mcp_action(conn: &rusqlite::Connection, action: &str, entity_type: &str, 
             details
         ],
     );
+}
+
+fn check_governance_approval(
+    conn: &rusqlite::Connection,
+    action_type: ActionType,
+    action_name: &str,
+    action_config: &str,
+) -> Result<Option<String>, RpcError> {
+    let autonomy_context = AutonomyContext {
+        integration_id: None,
+        skill_id: None,
+    };
+
+    let risk_score = calculate_risk(action_type, DestinationType::Internal, ContentRisk::Normal);
+
+    let decision = AutonomyController::evaluate_action(conn, &autonomy_context, risk_score.risk_level)
+        .map_err(|e| RpcError::internal_error(&e))?;
+
+    if decision.requires_approval {
+        let approval_id = governance_approval::queue_for_approval(
+            conn,
+            action_name,
+            action_config,
+            Some("mcp"),
+            None,
+            decision.risk_level,
+            decision.autonomy_mode,
+            Some(&decision.reason),
+            None,
+        )
+        .map_err(|e| RpcError::internal_error(&e))?;
+
+        return Ok(Some(approval_id));
+    }
+
+    Ok(None)
 }
 
 fn tool_create_task(args: Value) -> Result<Value, RpcError> {
@@ -761,6 +803,16 @@ fn tool_create_task(args: Value) -> Result<Value, RpcError> {
         .get("title")
         .and_then(|v| v.as_str())
         .ok_or_else(|| RpcError::invalid_params("missing title"))?;
+
+    let action_config = serde_json::to_string(&args).unwrap_or_default();
+    if let Some(approval_id) = check_governance_approval(&conn, ActionType::Create, "mcp:create_task", &action_config)? {
+        return Ok(json!({
+            "success": false,
+            "queued_for_approval": true,
+            "approval_id": approval_id,
+            "message": "Action requires approval. Check the Governance panel."
+        }));
+    }
 
     let input = CreateTaskInput {
         project_id: project_id.to_string(),
@@ -788,6 +840,17 @@ fn tool_create_task(args: Value) -> Result<Value, RpcError> {
 
     log_mcp_action(&conn, "mcp_create_task", "task", &task.id, &format!("Created task: {}", title));
 
+    let after_state = serde_json::to_string(&task).ok();
+    let _ = undo::capture_action_state(
+        &conn,
+        "create",
+        "task",
+        &task.id,
+        None,
+        after_state.as_deref(),
+        None,
+    );
+
     Ok(json!({
         "success": true,
         "task": task
@@ -803,6 +866,19 @@ fn tool_update_task(args: Value) -> Result<Value, RpcError> {
         .get("task_id")
         .and_then(|v| v.as_str())
         .ok_or_else(|| RpcError::invalid_params("missing task_id"))?;
+
+    let action_config = serde_json::to_string(&args).unwrap_or_default();
+    if let Some(approval_id) = check_governance_approval(&conn, ActionType::Update, "mcp:update_task", &action_config)? {
+        return Ok(json!({
+            "success": false,
+            "queued_for_approval": true,
+            "approval_id": approval_id,
+            "message": "Action requires approval. Check the Governance panel."
+        }));
+    }
+
+    let before_task = repositories::tasks::get_task(&conn, task_id).ok();
+    let before_state = before_task.as_ref().and_then(|t| serde_json::to_string(t).ok());
 
     let input = UpdateTaskInput {
         id: task_id.to_string(),
@@ -825,6 +901,17 @@ fn tool_update_task(args: Value) -> Result<Value, RpcError> {
         .map_err(|e| RpcError::internal_error(&e))?;
 
     log_mcp_action(&conn, "mcp_update_task", "task", &task.id, "Updated task via MCP");
+
+    let after_state = serde_json::to_string(&task).ok();
+    let _ = undo::capture_action_state(
+        &conn,
+        "update",
+        "task",
+        &task.id,
+        before_state.as_deref(),
+        after_state.as_deref(),
+        None,
+    );
 
     Ok(json!({
         "success": true,
@@ -865,6 +952,17 @@ fn tool_create_meeting_note(args: Value) -> Result<Value, RpcError> {
 
     log_mcp_action(&conn, "mcp_create_meeting", "meeting", &id, &format!("Created meeting note: {}", title));
 
+    let after_state = meeting.as_ref().and_then(|m| serde_json::to_string(m).ok());
+    let _ = undo::capture_action_state(
+        &conn,
+        "create",
+        "meeting",
+        &id,
+        None,
+        after_state.as_deref(),
+        None,
+    );
+
     Ok(json!({
         "success": true,
         "meeting": meeting
@@ -880,6 +978,16 @@ fn tool_run_skill(args: Value) -> Result<Value, RpcError> {
         .get("skill_id")
         .and_then(|v| v.as_str())
         .ok_or_else(|| RpcError::invalid_params("missing skill_id"))?;
+
+    let action_config = serde_json::to_string(&args).unwrap_or_default();
+    if let Some(approval_id) = check_governance_approval(&conn, ActionType::Update, "mcp:run_skill", &action_config)? {
+        return Ok(json!({
+            "success": false,
+            "queued_for_approval": true,
+            "approval_id": approval_id,
+            "message": "Action requires approval. Check the Governance panel."
+        }));
+    }
 
     // Check skill exists
     let skill_exists: bool = conn

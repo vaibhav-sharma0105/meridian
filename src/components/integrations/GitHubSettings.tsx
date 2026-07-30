@@ -17,6 +17,7 @@ import {
   useSyncIntegration,
   useCachedItems,
 } from "@/hooks/useIntegrations";
+import { AutonomySelect } from "@/components/governance/AutonomySettings";
 import type { Integration } from "@/lib/tauri";
 import toast from "react-hot-toast";
 
@@ -32,6 +33,9 @@ export function GitHubSettings({ integration, onClose }: GitHubSettingsProps) {
   );
   const [syncInterval, setSyncInterval] = useState(
     integration?.sync_interval_minutes ?? 15
+  );
+  const [autonomyMode, setAutonomyMode] = useState<string | null>(
+    integration?.autonomy_mode ?? null
   );
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -51,6 +55,7 @@ export function GitHubSettings({ integration, onClose }: GitHubSettingsProps) {
           repositories: selectedRepos,
         },
         sync_interval_minutes: syncInterval,
+        autonomy_mode: autonomyMode ?? undefined,
       });
       toast.success("GitHub settings saved");
     } catch (e) {
@@ -158,6 +163,19 @@ export function GitHubSettings({ integration, onClose }: GitHubSettingsProps) {
               <option value={60}>Every hour</option>
               <option value={0}>Manual only</option>
             </select>
+          </div>
+
+          {/* Autonomy Mode */}
+          <div>
+            <AutonomySelect
+              value={autonomyMode}
+              onChange={setAutonomyMode}
+              label="Autonomy Mode"
+              inheritLabel="Inherit from global settings"
+            />
+            <p className="mt-1 text-xs text-zinc-500">
+              Controls when GitHub actions require approval
+            </p>
           </div>
 
           {/* Repository Selection */}

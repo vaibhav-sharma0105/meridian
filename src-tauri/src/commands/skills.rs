@@ -91,6 +91,7 @@ pub async fn toggle_skill_enabled(
         context_config: None,
         action_config: None,
         approval_mode: None,
+        autonomy_mode: None,
         enabled: Some(enabled),
         shared: None,
         category: None,
