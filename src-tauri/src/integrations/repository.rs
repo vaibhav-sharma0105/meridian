@@ -257,11 +257,13 @@ pub fn get_cached_items(
     external_type: Option<&str>,
 ) -> Result<Vec<IntegrationCache>, String> {
     let query = if external_type.is_some() {
-        "SELECT id, integration_id, external_type, external_id, external_url, data, synced_at
+        "SELECT id, integration_id, external_type, external_id, external_url, data, synced_at,
+                attention_score, attention_reason, evaluated_at, archived_at, expires_at
          FROM integration_cache WHERE integration_id = ?1 AND external_type = ?2
          ORDER BY synced_at DESC"
     } else {
-        "SELECT id, integration_id, external_type, external_id, external_url, data, synced_at
+        "SELECT id, integration_id, external_type, external_id, external_url, data, synced_at,
+                attention_score, attention_reason, evaluated_at, archived_at, expires_at
          FROM integration_cache WHERE integration_id = ?1
          ORDER BY synced_at DESC"
     };
@@ -288,6 +290,11 @@ fn map_cache_row(row: &rusqlite::Row) -> rusqlite::Result<IntegrationCache> {
         external_url: row.get(4)?,
         data: serde_json::from_str(&data_str).unwrap_or(serde_json::Value::Null),
         synced_at: row.get(6)?,
+        attention_score: row.get(7)?,
+        attention_reason: row.get(8)?,
+        evaluated_at: row.get(9)?,
+        archived_at: row.get(10)?,
+        expires_at: row.get(11)?,
     })
 }
 
@@ -419,6 +426,40 @@ pub fn delete_links_for_local(
     )
     .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+pub fn get_cache_items_with_attention(conn: &Connection) -> Result<Vec<IntegrationCache>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, integration_id, external_type, external_id, external_url, data, synced_at,
+                    attention_score, attention_reason, evaluated_at, archived_at, expires_at
+             FROM integration_cache
+             WHERE attention_score IS NOT NULL AND archived_at IS NULL
+             ORDER BY attention_score DESC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map([], |row| {
+            let data_str: String = row.get(5)?;
+            Ok(IntegrationCache {
+                id: row.get(0)?,
+                integration_id: row.get(1)?,
+                external_type: row.get(2)?,
+                external_id: row.get(3)?,
+                external_url: row.get(4)?,
+                data: serde_json::from_str(&data_str).unwrap_or_default(),
+                synced_at: row.get(6)?,
+                attention_score: row.get(7)?,
+                attention_reason: row.get(8)?,
+                evaluated_at: row.get(9)?,
+                archived_at: row.get(10)?,
+                expires_at: row.get(11)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

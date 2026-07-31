@@ -14,6 +14,7 @@ use crate::skills::{
 };
 use crate::suggestions::models::CreateSuggestionInput;
 use crate::suggestions::repository as suggestions_repo;
+use crate::attention::repository as attention_repo;
 use crate::vectors::qdrant::{get_collection_name_with_dimension, QdrantClient, VectorPayload};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
@@ -284,6 +285,33 @@ pub fn process_job_sync(
         "check_approval_timeouts" => process_check_approval_timeouts_job(conn, &job.id),
         "aggregate_governance_metrics" => process_aggregate_governance_metrics_job(conn, &job.id),
         "detect_anomalies" => process_detect_anomalies_job(conn, &job.id),
+        "sync_team_roster" => {
+            let payload: SyncTeamRosterPayload = match &job.payload {
+                Some(p) => match serde_json::from_str(p) {
+                    Ok(parsed) => parsed,
+                    Err(e) => {
+                        return JobResult {
+                            success: false,
+                            chunks_embedded: None,
+                            error: Some(format!("Invalid team roster job payload: {}", e)),
+                        };
+                    }
+                },
+                None => {
+                    return JobResult {
+                        success: false,
+                        chunks_embedded: None,
+                        error: Some("Missing team roster job payload".to_string()),
+                    };
+                }
+            };
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current()
+                    .block_on(process_sync_team_roster_job(conn, &job.id, &payload))
+            })
+        }
+        "poll_team_syncs" => process_poll_team_syncs_job(conn, &job.id),
+        "compute_attention_items" => process_compute_attention_items_job(conn, &job.id),
         _ => JobResult {
             success: false,
             chunks_embedded: None,
@@ -2207,6 +2235,164 @@ pub fn init_team_sync_jobs(conn: &Connection) {
         .unwrap_or_default();
     if pending_syncs.is_empty() {
         schedule_next_team_sync(conn);
+    }
+}
+
+// ─── Attention Computation ───────────────────────────────────────────────────
+
+pub fn process_compute_attention_items_job(conn: &Connection, job_id: &str) -> JobResult {
+    if let Err(e) = jobs_repo::update_job_status(conn, job_id, "running", None, None) {
+        return JobResult {
+            success: false,
+            chunks_embedded: None,
+            error: Some(format!("Failed to update job status: {}", e)),
+        };
+    }
+
+    let mut created = 0;
+
+    // 1. Check for overdue tasks (critical if >3 days, warning if 1-3 days)
+    let empty_filters = crate::models::task::TaskFilters::default();
+    if let Ok(tasks) = tasks_repo::get_all_tasks(conn, &empty_filters) {
+        let now = chrono::Utc::now();
+        for task in &tasks {
+            if task.status == "done" || task.archived_at.is_some() {
+                continue;
+            }
+            if let Some(due_date) = &task.due_date {
+                if let Ok(due) = chrono::DateTime::parse_from_rfc3339(due_date) {
+                    let due_utc = due.with_timezone(&chrono::Utc);
+                    let days_overdue = (now - due_utc).num_days();
+                    if days_overdue > 3 {
+                        if attention_repo::upsert_attention_item(
+                            conn,
+                            "task",
+                            &task.id,
+                            "critical",
+                            "overdue_critical",
+                            Some(&format!("Overdue by {} days", days_overdue)),
+                            None,
+                        ).is_ok() {
+                            created += 1;
+                        }
+                    } else if days_overdue >= 1 {
+                        if attention_repo::upsert_attention_item(
+                            conn,
+                            "task",
+                            &task.id,
+                            "warning",
+                            "overdue",
+                            Some(&format!("Overdue by {} days", days_overdue)),
+                            None,
+                        ).is_ok() {
+                            created += 1;
+                        }
+                    }
+                }
+            }
+
+            // Check for stale tasks (in_progress with no update for 7+ days)
+            if task.status == "in_progress" {
+                if let Ok(updated) = chrono::DateTime::parse_from_rfc3339(&task.updated_at) {
+                    let updated_utc = updated.with_timezone(&chrono::Utc);
+                    let days_stale = (now - updated_utc).num_days();
+                    if days_stale >= 7 {
+                        if attention_repo::upsert_attention_item(
+                            conn,
+                            "task",
+                            &task.id,
+                            "warning",
+                            "stale",
+                            Some(&format!("No updates for {} days", days_stale)),
+                            None,
+                        ).is_ok() {
+                            created += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Check for pending approvals
+    if let Ok(approvals) = gov_repo::get_pending_approvals(conn, Some("pending"), None) {
+        for approval in &approvals {
+            if attention_repo::upsert_attention_item(
+                conn,
+                "approval",
+                &approval.id,
+                "warning",
+                "pending",
+                Some(&format!("Pending: {}", approval.action_type)),
+                None,
+            ).is_ok() {
+                created += 1;
+            }
+        }
+    }
+
+    // 3. Check integration cache for items with attention_score
+    // (These are populated by filter skills during sync)
+    if let Ok(cache_items) = integration_repo::get_cache_items_with_attention(conn) {
+        for item in &cache_items {
+            if let (Some(score), Some(reason)) = (item.attention_score, &item.attention_reason) {
+                if score > 0.5 {
+                    let severity = if score > 0.8 { "warning" } else { "info" };
+                    if attention_repo::upsert_attention_item(
+                        conn,
+                        "integration_cache",
+                        &item.id,
+                        severity,
+                        "commit_match",
+                        Some(reason),
+                        None,
+                    ).is_ok() {
+                        created += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    schedule_next_attention_refresh(conn);
+
+    JobResult {
+        success: true,
+        chunks_embedded: Some(created),
+        error: None,
+    }
+}
+
+fn get_app_setting(conn: &Connection, key: &str) -> Option<String> {
+    conn.query_row(
+        "SELECT value FROM app_settings WHERE key = ?1",
+        [key],
+        |row| row.get(0),
+    )
+    .ok()
+}
+
+fn schedule_next_attention_refresh(conn: &Connection) {
+    // Default 5 minutes, configurable via app_settings
+    let interval_minutes: i64 = get_app_setting(conn, "attention_refresh_minutes")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(5);
+
+    let next_run = chrono::Utc::now() + chrono::Duration::minutes(interval_minutes);
+    let _ = jobs_repo::create_job_scheduled(
+        conn,
+        "compute_attention_items",
+        None,
+        2,
+        &next_run.to_rfc3339(),
+    );
+}
+
+pub fn init_attention_jobs(conn: &Connection) {
+    let pending = jobs_repo::get_pending_jobs_by_type(conn, "compute_attention_items")
+        .unwrap_or_default();
+    if pending.is_empty() {
+        schedule_next_attention_refresh(conn);
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::daemon::jobs::{init_skill_jobs, process_job_sync, JobContext, JobResult};
+use crate::daemon::jobs::{init_skill_jobs, init_attention_jobs, process_job_sync, JobContext, JobResult};
 use crate::db::repositories::jobs as jobs_repo;
 use crate::vectors::qdrant::QdrantClient;
 use rusqlite::Connection;
@@ -50,6 +50,7 @@ impl Worker {
 
         // Initialize skill polling jobs on startup
         init_skill_jobs(conn);
+        init_attention_jobs(conn);
 
         let qdrant = QdrantClient::new(self.config.qdrant_url.as_deref());
 
