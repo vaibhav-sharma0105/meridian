@@ -1,4 +1,5 @@
 pub mod ai;
+pub mod attention;
 pub mod audit;
 pub mod connections;
 pub mod daemon;

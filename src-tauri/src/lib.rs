@@ -297,6 +297,10 @@ pub fn run() {
             commands::sync::import_all_data,
             commands::sync::pick_export_save_path,
             commands::sync::pick_import_file_path,
+            // Attention
+            commands::attention::get_attention_items,
+            commands::attention::get_attention_count,
+            commands::attention::dismiss_attention_item,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
