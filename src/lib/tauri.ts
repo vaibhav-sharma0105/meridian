@@ -1980,3 +1980,33 @@ export const pickExportSavePath = (defaultName: string) =>
 
 export const pickImportFilePath = () =>
   invoke<string | null>("pick_import_file_path");
+
+// ─── Attention Items ─────────────────────────────────────────────────────────
+
+export interface AttentionItem {
+  id: string;
+  source_type: string;
+  source_id: string;
+  severity: "critical" | "warning" | "info";
+  category: string;
+  reason_text: string | null;
+  matched_skill_id: string | null;
+  computed_at: string;
+  dismissed_at: string | null;
+}
+
+export interface AttentionFilters {
+  severity?: string;
+  source_type?: string;
+  category?: string;
+  include_dismissed?: boolean;
+}
+
+export const getAttentionItems = (filters?: AttentionFilters) =>
+  invoke<AttentionItem[]>("get_attention_items", { filters });
+
+export const getAttentionCount = () =>
+  invoke<[number, number]>("get_attention_count", {});
+
+export const dismissAttentionItem = (id: string) =>
+  invoke<void>("dismiss_attention_item", { id });
