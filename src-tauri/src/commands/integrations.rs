@@ -10,7 +10,7 @@ use crate::integrations::models::{
     CreateIntegrationInput, CreateLinkInput, Integration, IntegrationCache, IntegrationLink,
     OAuthState, SyncState, UpdateIntegrationInput,
 };
-use crate::integrations::repository;
+use crate::integrations::{mapping, repository};
 use crate::integrations::{get_provider, IntegrationProvider};
 use crate::AppState;
 
@@ -455,4 +455,44 @@ pub fn agent_integration_write(
         approval_id: None,
         result: None,
     })
+}
+
+// ─── Project Mapping Commands ────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn create_project_mapping(
+    integration_id: String,
+    external_key: String,
+    project_id: String,
+    state: State<'_, AppState>,
+) -> Result<mapping::IntegrationProjectMapping, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    mapping::create_mapping(&conn, &integration_id, &external_key, &project_id)
+}
+
+#[tauri::command]
+pub async fn get_project_mappings(
+    project_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<mapping::IntegrationProjectMapping>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    mapping::get_mappings_for_project(&conn, &project_id)
+}
+
+#[tauri::command]
+pub async fn get_integration_mappings(
+    integration_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<mapping::IntegrationProjectMapping>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    mapping::get_mappings_for_integration(&conn, &integration_id)
+}
+
+#[tauri::command]
+pub async fn delete_project_mapping(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    mapping::delete_mapping(&conn, &id)
 }
