@@ -18,6 +18,7 @@ import EmptyState from "@/components/shared/EmptyState";
 import { useTaskStore } from "@/stores/taskStore";
 import { SkillsPage } from "@/components/skills/SkillsPage";
 import { GovernancePage } from "@/components/governance/GovernancePage";
+import { MyActivityDashboard } from "@/components/activity";
 
 const VIEW_ICONS = {
   list: LayoutList,
@@ -50,6 +51,11 @@ export default function MainCanvas() {
   // Governance view is global (no project needed)
   if (activeView === "governance") {
     return <GovernancePage />;
+  }
+
+  // Activity view is global (no project needed)
+  if (activeView === "activity") {
+    return <MyActivityDashboard />;
   }
 
   if (!activeProjectId && activeView !== "tasks") {

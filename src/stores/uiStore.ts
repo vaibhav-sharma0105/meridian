@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 type Theme = "light" | "dark" | "system";
 type ViewMode = "list" | "kanban" | "table";
-type ActiveView = "tasks" | "meetings" | "documents" | "analytics" | "chat" | "skills" | "governance";
+type ActiveView = "tasks" | "meetings" | "documents" | "analytics" | "chat" | "skills" | "governance" | "activity";
 
 interface UIStore {
   theme: Theme;
