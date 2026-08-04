@@ -496,3 +496,32 @@ pub async fn delete_project_mapping(
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     mapping::delete_mapping(&conn, &id)
 }
+
+#[tauri::command]
+pub async fn get_integration_cache_for_project(
+    project_id: String,
+    integration_type: Option<String>,
+    item_type: Option<String>,
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<Vec<IntegrationCache>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    repository::get_cached_items_for_project(
+        &conn,
+        &project_id,
+        integration_type.as_deref(),
+        item_type.as_deref(),
+        limit,
+    )
+}
+
+#[tauri::command]
+pub async fn search_cached_integration_items(
+    query: String,
+    project_id: Option<String>,
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<Vec<IntegrationCache>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    repository::search_integration_cache(&conn, &query, project_id.as_deref(), limit)
+}

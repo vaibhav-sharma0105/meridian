@@ -451,6 +451,100 @@ pub fn delete_expired_archives(conn: &Connection, archive_retention_days: i64) -
     Ok(count as u64)
 }
 
+pub fn get_cached_items_for_project(
+    conn: &Connection,
+    project_id: &str,
+    integration_type: Option<&str>,
+    item_type: Option<&str>,
+    limit: Option<usize>,
+) -> Result<Vec<IntegrationCache>, String> {
+    let limit = limit.unwrap_or(100) as i64;
+
+    let base_sql = "SELECT ic.id, ic.integration_id, ic.external_type, ic.external_id, ic.external_url,
+                           ic.data, ic.synced_at, ic.attention_score, ic.attention_reason,
+                           ic.evaluated_at, ic.archived_at, ic.expires_at
+                    FROM integration_cache ic
+                    JOIN integration_project_mapping ipm ON ipm.integration_id = ic.integration_id
+                    JOIN integrations i ON i.id = ic.integration_id
+                    WHERE ipm.project_id = ?1 AND ic.archived_at IS NULL";
+
+    let sql = match (integration_type, item_type) {
+        (Some(_), Some(_)) => format!("{} AND i.type = ?2 AND ic.external_type = ?3 ORDER BY ic.synced_at DESC LIMIT ?4", base_sql),
+        (Some(_), None) => format!("{} AND i.type = ?2 ORDER BY ic.synced_at DESC LIMIT ?3", base_sql),
+        (None, Some(_)) => format!("{} AND ic.external_type = ?2 ORDER BY ic.synced_at DESC LIMIT ?3", base_sql),
+        (None, None) => format!("{} ORDER BY ic.synced_at DESC LIMIT ?2", base_sql),
+    };
+
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+
+    let rows = match (integration_type, item_type) {
+        (Some(it), Some(et)) => stmt.query_map(params![project_id, it, et, limit], map_cache_row_full),
+        (Some(it), None) => stmt.query_map(params![project_id, it, limit], map_cache_row_full),
+        (None, Some(et)) => stmt.query_map(params![project_id, et, limit], map_cache_row_full),
+        (None, None) => stmt.query_map(params![project_id, limit], map_cache_row_full),
+    }
+    .map_err(|e| e.to_string())?;
+
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+pub fn search_integration_cache(
+    conn: &Connection,
+    query: &str,
+    project_id: Option<&str>,
+    limit: Option<usize>,
+) -> Result<Vec<IntegrationCache>, String> {
+    let limit = limit.unwrap_or(20) as i64;
+    let search_pattern = format!("%{}%", query);
+
+    let (sql, use_project) = if project_id.is_some() {
+        ("SELECT ic.id, ic.integration_id, ic.external_type, ic.external_id, ic.external_url,
+                 ic.data, ic.synced_at, ic.attention_score, ic.attention_reason,
+                 ic.evaluated_at, ic.archived_at, ic.expires_at
+          FROM integration_cache ic
+          JOIN integration_project_mapping ipm ON ipm.integration_id = ic.integration_id
+          WHERE ipm.project_id = ?1 AND ic.archived_at IS NULL
+          AND (ic.data LIKE ?2 OR ic.external_id LIKE ?2)
+          ORDER BY ic.synced_at DESC LIMIT ?3".to_string(), true)
+    } else {
+        ("SELECT id, integration_id, external_type, external_id, external_url,
+                 data, synced_at, attention_score, attention_reason,
+                 evaluated_at, archived_at, expires_at
+          FROM integration_cache
+          WHERE archived_at IS NULL AND (data LIKE ?1 OR external_id LIKE ?1)
+          ORDER BY synced_at DESC LIMIT ?2".to_string(), false)
+    };
+
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+
+    let rows = if use_project {
+        stmt.query_map(params![project_id.unwrap(), search_pattern, limit], map_cache_row_full)
+    } else {
+        stmt.query_map(params![search_pattern, limit], map_cache_row_full)
+    }
+    .map_err(|e| e.to_string())?;
+
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+fn map_cache_row_full(row: &rusqlite::Row) -> rusqlite::Result<IntegrationCache> {
+    let data_str: String = row.get(5)?;
+    Ok(IntegrationCache {
+        id: row.get(0)?,
+        integration_id: row.get(1)?,
+        external_type: row.get(2)?,
+        external_id: row.get(3)?,
+        external_url: row.get(4)?,
+        data: serde_json::from_str(&data_str).unwrap_or_default(),
+        synced_at: row.get(6)?,
+        attention_score: row.get(7)?,
+        attention_reason: row.get(8)?,
+        evaluated_at: row.get(9)?,
+        archived_at: row.get(10)?,
+        expires_at: row.get(11)?,
+    })
+}
+
 pub fn get_cache_items_with_attention(conn: &Connection) -> Result<Vec<IntegrationCache>, String> {
     let mut stmt = conn
         .prepare(

@@ -263,6 +263,8 @@ pub fn run() {
             commands::integrations::get_project_mappings,
             commands::integrations::get_integration_mappings,
             commands::integrations::delete_project_mapping,
+            commands::integrations::get_integration_cache_for_project,
+            commands::integrations::search_cached_integration_items,
             // Governance
             commands::governance::evaluate_action,
             commands::governance::get_autonomy_setting,
