@@ -428,6 +428,29 @@ pub fn delete_links_for_local(
     Ok(())
 }
 
+pub fn archive_old_cache_items(conn: &Connection, days: i64) -> Result<u64, String> {
+    let now = chrono::Utc::now().to_rfc3339();
+    let count = conn
+        .execute(
+            "UPDATE integration_cache SET archived_at = ?1
+             WHERE archived_at IS NULL AND synced_at < datetime('now', ?2)",
+            params![now, format!("-{} days", days)],
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(count as u64)
+}
+
+pub fn delete_expired_archives(conn: &Connection, archive_retention_days: i64) -> Result<u64, String> {
+    let count = conn
+        .execute(
+            "DELETE FROM integration_cache
+             WHERE archived_at IS NOT NULL AND archived_at < datetime('now', ?1)",
+            params![format!("-{} days", archive_retention_days)],
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(count as u64)
+}
+
 pub fn get_cache_items_with_attention(conn: &Connection) -> Result<Vec<IntegrationCache>, String> {
     let mut stmt = conn
         .prepare(

@@ -312,6 +312,7 @@ pub fn process_job_sync(
         }
         "poll_team_syncs" => process_poll_team_syncs_job(conn, &job.id),
         "compute_attention_items" => process_compute_attention_items_job(conn, &job.id),
+        "cleanup_integration_cache" => process_cleanup_integration_cache_job(conn, &job.id),
         _ => JobResult {
             success: false,
             chunks_embedded: None,
@@ -2393,6 +2394,78 @@ pub fn init_attention_jobs(conn: &Connection) {
         .unwrap_or_default();
     if pending.is_empty() {
         schedule_next_attention_refresh(conn);
+    }
+}
+
+// ─── Cache Cleanup ───────────────────────────────────────────────────────────
+
+pub fn process_cleanup_integration_cache_job(conn: &Connection, job_id: &str) -> JobResult {
+    if let Err(e) = jobs_repo::update_job_status(conn, job_id, "running", None, None) {
+        return JobResult {
+            success: false,
+            chunks_embedded: None,
+            error: Some(format!("Failed to update job status: {}", e)),
+        };
+    }
+
+    let retention_days: i64 = get_app_setting(conn, "cache_retention_days")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(30);
+
+    let archived = match integration_repo::archive_old_cache_items(conn, retention_days) {
+        Ok(count) => count,
+        Err(e) => {
+            return JobResult {
+                success: false,
+                chunks_embedded: None,
+                error: Some(format!("Failed to archive old cache items: {}", e)),
+            };
+        }
+    };
+
+    let deleted = match integration_repo::delete_expired_archives(conn, 90) {
+        Ok(count) => count,
+        Err(e) => {
+            return JobResult {
+                success: false,
+                chunks_embedded: None,
+                error: Some(format!("Failed to delete expired archives: {}", e)),
+            };
+        }
+    };
+
+    schedule_next_cache_cleanup(conn);
+
+    JobResult {
+        success: true,
+        chunks_embedded: Some((archived + deleted) as usize),
+        error: None,
+    }
+}
+
+fn schedule_next_cache_cleanup(conn: &Connection) {
+    // Run cache cleanup daily at 3 AM UTC
+    let now = chrono::Utc::now();
+    let tomorrow = (now + chrono::Duration::days(1))
+        .date_naive()
+        .and_hms_opt(3, 0, 0)
+        .unwrap();
+    let next_run =
+        chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(tomorrow, chrono::Utc);
+    let _ = jobs_repo::create_job_scheduled(
+        conn,
+        "cleanup_integration_cache",
+        None,
+        1,
+        &next_run.to_rfc3339(),
+    );
+}
+
+pub fn init_cache_cleanup_jobs(conn: &Connection) {
+    let pending = jobs_repo::get_pending_jobs_by_type(conn, "cleanup_integration_cache")
+        .unwrap_or_default();
+    if pending.is_empty() {
+        schedule_next_cache_cleanup(conn);
     }
 }
 
