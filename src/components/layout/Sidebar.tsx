@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Bell, Settings, Settings2, Plus, LayoutList, Zap, Shield,
+  Bell, Settings, Settings2, Plus, LayoutList, Zap, Shield, Activity,
   Sun, Moon, Monitor, Link2, Sparkles, ChevronDown, ChevronRight, ArchiveRestore,
 } from "lucide-react";
 import { useProjectStore } from "@/stores/projectStore";
@@ -11,6 +11,7 @@ import { useNotificationStore } from "@/stores/notificationStore";
 import { useProjects } from "@/hooks/useProjects";
 import { usePendingImports } from "@/hooks/usePendingImports";
 import { usePendingApprovalCount } from "@/hooks/useGovernance";
+import { useAttentionCount } from "@/hooks/useAttention";
 import ProjectCreate from "@/components/projects/ProjectCreate";
 import ProjectSettings from "@/components/projects/ProjectSettings";
 import { setAppSetting, getArchivedProjects, unarchiveProject } from "@/lib/tauri";
@@ -35,6 +36,8 @@ export default function Sidebar() {
   const { unreadCount } = useNotificationStore();
   const { pendingCount } = usePendingImports();
   const { data: pendingApprovalCount = 0 } = usePendingApprovalCount();
+  const { data: attentionCount } = useAttentionCount();
+  const attentionBadge = attentionCount ? attentionCount[0] + attentionCount[1] : 0;
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [settingsProject, setSettingsProject] = useState<Project | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -80,6 +83,14 @@ export default function Sidebar() {
           label={t("nav.allTasks")}
           active={activeProjectId === null && activeView === "tasks"}
           onClick={() => { setActiveProject(null); setActiveView("tasks"); }}
+        />
+        <NavItem
+          icon={<Activity className="w-[17px] h-[17px]" />}
+          label="My Activity"
+          active={activeView === "activity"}
+          onClick={() => { setActiveProject(null); setActiveView("activity"); }}
+          badge={attentionBadge > 0 ? attentionBadge : undefined}
+          testId="sidebar-activity"
         />
         <NavItem
           icon={<Zap className="w-[17px] h-[17px]" />}

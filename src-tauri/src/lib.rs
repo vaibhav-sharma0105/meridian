@@ -1,4 +1,5 @@
 pub mod ai;
+pub mod attention;
 pub mod audit;
 pub mod commands;
 pub mod connectors;
@@ -258,6 +259,10 @@ pub fn run() {
             commands::integrations::get_slack_socket_status,
             commands::integrations::detect_slack_action_items,
             commands::integrations::agent_integration_write,
+            commands::integrations::create_project_mapping,
+            commands::integrations::get_project_mappings,
+            commands::integrations::get_integration_mappings,
+            commands::integrations::delete_project_mapping,
             // Governance
             commands::governance::evaluate_action,
             commands::governance::get_autonomy_setting,
@@ -296,6 +301,10 @@ pub fn run() {
             commands::sync::import_all_data,
             commands::sync::pick_export_save_path,
             commands::sync::pick_import_file_path,
+            // Attention
+            commands::attention::get_attention_items,
+            commands::attention::get_attention_count,
+            commands::attention::dismiss_attention_item,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

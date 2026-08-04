@@ -2,6 +2,7 @@ pub mod framework;
 pub mod github;
 pub mod google;
 pub mod jira;
+pub mod mapping;
 pub mod models;
 pub mod repository;
 pub mod slack;

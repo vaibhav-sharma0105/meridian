@@ -62,6 +62,11 @@ pub struct IntegrationCache {
     pub external_url: Option<String>,
     pub data: serde_json::Value,
     pub synced_at: String,
+    pub attention_score: Option<f64>,
+    pub attention_reason: Option<String>,
+    pub evaluated_at: Option<String>,
+    pub archived_at: Option<String>,
+    pub expires_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
