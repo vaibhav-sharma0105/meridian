@@ -2010,3 +2010,29 @@ export const getAttentionCount = () =>
 
 export const dismissAttentionItem = (id: string) =>
   invoke<void>("dismiss_attention_item", { id });
+
+// ─── Integration Browser ─────────────────────────────────────────────────────
+
+export const getIntegrationCacheForProject = (
+  projectId: string,
+  integrationType?: string,
+  itemType?: string,
+  limit?: number
+) =>
+  invoke<IntegrationCache[]>("get_integration_cache_for_project", {
+    project_id: projectId,
+    integration_type: integrationType,
+    item_type: itemType,
+    limit,
+  });
+
+export const searchCachedIntegrationItems = (
+  query: string,
+  projectId?: string,
+  limit?: number
+) =>
+  invoke<IntegrationCache[]>("search_cached_integration_items", {
+    query,
+    project_id: projectId,
+    limit,
+  });

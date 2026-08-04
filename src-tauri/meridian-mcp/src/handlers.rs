@@ -343,6 +343,81 @@ fn handle_tools_list() -> Result<Value, RpcError> {
                 "required": ["skill_id"]
             }),
         },
+        // Integration visibility tools (Phase 8)
+        ToolDefinition {
+            name: "list_integration_items".to_string(),
+            description: "List cached items from connected integrations (GitHub issues/PRs, Jira issues, Slack messages). Returns recent synced data.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "project_id": {
+                        "type": "string",
+                        "description": "Filter by project ID (via project mapping)"
+                    },
+                    "integration_type": {
+                        "type": "string",
+                        "enum": ["github", "jira", "slack"],
+                        "description": "Filter by integration type"
+                    },
+                    "item_type": {
+                        "type": "string",
+                        "enum": ["issue", "pr", "commit", "thread", "message"],
+                        "description": "Filter by item type"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results (default: 50)"
+                    }
+                },
+                "required": []
+            }),
+        },
+        ToolDefinition {
+            name: "search_integration_items".to_string(),
+            description: "Search integration cache by text query. Searches titles, descriptions, and content.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Search query"
+                    },
+                    "project_id": {
+                        "type": "string",
+                        "description": "Optional project ID to scope search"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results (default: 20)"
+                    }
+                },
+                "required": ["query"]
+            }),
+        },
+        ToolDefinition {
+            name: "get_attention_items".to_string(),
+            description: "Get items that need user attention - unresolved issues, stale tasks, pending reviews from all integrations.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "severity": {
+                        "type": "string",
+                        "enum": ["critical", "warning", "info"],
+                        "description": "Filter by severity level"
+                    },
+                    "source": {
+                        "type": "string",
+                        "enum": ["github", "jira", "slack", "internal"],
+                        "description": "Filter by source"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results (default: 20)"
+                    }
+                },
+                "required": []
+            }),
+        },
     ];
 
     Ok(json!({ "tools": tools }))
@@ -367,6 +442,10 @@ fn handle_tools_call(params: Option<Value>) -> Result<Value, RpcError> {
         "list_meetings" => tool_list_meetings(args),
         "get_meeting" => tool_get_meeting(args),
         "get_task_context" => tool_get_task_context(args),
+        // Integration visibility tools (Phase 8)
+        "list_integration_items" => tool_list_integration_items(args),
+        "search_integration_items" => tool_search_integration_items(args),
+        "get_attention_items" => tool_get_attention_items(args),
         // Write tools with permission checks
         "create_task" => tool_create_task(args),
         "update_task" => tool_update_task(args),
@@ -1027,6 +1106,177 @@ fn tool_run_skill(args: Value) -> Result<Value, RpcError> {
         "run_id": run_id,
         "status": "pending",
         "message": "Skill queued for execution"
+    }))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Integration Visibility Tools (Phase 8)
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn tool_list_integration_items(args: Value) -> Result<Value, RpcError> {
+    let conn = get_connection()?;
+
+    let project_id = args.get("project_id").and_then(|v| v.as_str());
+    let integration_type = args.get("integration_type").and_then(|v| v.as_str());
+    let item_type = args.get("item_type").and_then(|v| v.as_str());
+    let limit = args.get("limit").and_then(|v| v.as_i64()).unwrap_or(50) as usize;
+
+    let items = if let Some(pid) = project_id {
+        meridian_lib::integrations::repository::get_cached_items_for_project(
+            &conn,
+            pid,
+            integration_type,
+            item_type,
+            Some(limit),
+        )
+        .map_err(|e| RpcError::internal_error(&e))?
+    } else {
+        let mut sql = "SELECT id, integration_id, external_type, external_id, external_url, data, synced_at, attention_score, attention_reason, evaluated_at, archived_at, expires_at FROM integration_cache WHERE archived_at IS NULL".to_string();
+        let mut params: Vec<String> = Vec::new();
+
+        if let Some(t) = integration_type {
+            sql.push_str(" AND integration_id IN (SELECT id FROM integrations WHERE type = ?)");
+            params.push(t.to_string());
+        }
+        if let Some(t) = item_type {
+            sql.push_str(" AND external_type = ?");
+            params.push(t.to_string());
+        }
+        sql.push_str(" ORDER BY synced_at DESC LIMIT 100");
+
+        let mut stmt = conn.prepare(&sql).map_err(|e| RpcError::internal_error(&e.to_string()))?;
+
+        let params_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
+        let rows = stmt.query_map(params_refs.as_slice(), |row| map_cache_row(row))
+            .map_err(|e| RpcError::internal_error(&e.to_string()))?;
+
+        let all_items: Vec<_> = rows.filter_map(Result::ok).collect();
+        all_items.into_iter().take(limit).collect()
+    };
+
+    let light_items: Vec<Value> = items
+        .iter()
+        .map(|item| {
+            let title = item.data.get("title")
+                .or_else(|| item.data.get("message"))
+                .or_else(|| item.data.get("subject"))
+                .and_then(|v| v.as_str())
+                .unwrap_or(&item.external_id);
+            json!({
+                "id": item.id,
+                "type": item.external_type,
+                "title": title,
+                "url": item.external_url,
+                "synced_at": item.synced_at,
+                "attention_score": item.attention_score,
+                "attention_reason": item.attention_reason
+            })
+        })
+        .collect();
+
+    Ok(json!({
+        "items": light_items,
+        "count": light_items.len()
+    }))
+}
+
+fn map_cache_row(row: &rusqlite::Row) -> rusqlite::Result<meridian_lib::integrations::models::IntegrationCache> {
+    Ok(meridian_lib::integrations::models::IntegrationCache {
+        id: row.get(0)?,
+        integration_id: row.get(1)?,
+        external_type: row.get(2)?,
+        external_id: row.get(3)?,
+        external_url: row.get(4)?,
+        data: serde_json::from_str(&row.get::<_, String>(5)?).unwrap_or(serde_json::json!({})),
+        synced_at: row.get(6)?,
+        attention_score: row.get(7)?,
+        attention_reason: row.get(8)?,
+        evaluated_at: row.get(9)?,
+        archived_at: row.get(10)?,
+        expires_at: row.get(11)?,
+    })
+}
+
+fn tool_search_integration_items(args: Value) -> Result<Value, RpcError> {
+    let conn = get_connection()?;
+
+    let query = args
+        .get("query")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| RpcError::invalid_params("missing query"))?;
+
+    let project_id = args.get("project_id").and_then(|v| v.as_str());
+    let limit = args.get("limit").and_then(|v| v.as_i64()).unwrap_or(20) as usize;
+
+    let items = meridian_lib::integrations::repository::search_integration_cache(
+        &conn,
+        query,
+        project_id,
+        Some(limit),
+    )
+    .map_err(|e| RpcError::internal_error(&e))?;
+
+    let light_items: Vec<Value> = items
+        .iter()
+        .map(|item| {
+            let title = item.data.get("title")
+                .or_else(|| item.data.get("message"))
+                .or_else(|| item.data.get("subject"))
+                .and_then(|v| v.as_str())
+                .unwrap_or(&item.external_id);
+            json!({
+                "id": item.id,
+                "type": item.external_type,
+                "title": title,
+                "url": item.external_url,
+                "synced_at": item.synced_at
+            })
+        })
+        .collect();
+
+    Ok(json!({
+        "items": light_items,
+        "count": light_items.len(),
+        "query": query
+    }))
+}
+
+fn tool_get_attention_items(args: Value) -> Result<Value, RpcError> {
+    let conn = get_connection()?;
+
+    let severity = args.get("severity").and_then(|v| v.as_str());
+    let source = args.get("source").and_then(|v| v.as_str());
+    let limit = args.get("limit").and_then(|v| v.as_i64()).unwrap_or(20) as usize;
+
+    let filters = meridian_lib::attention::models::AttentionFilters {
+        severity: severity.map(String::from),
+        source_type: source.map(String::from),
+        category: None,
+        include_dismissed: Some(false),
+    };
+
+    let items = meridian_lib::attention::repository::list_attention_items(&conn, &filters)
+        .map_err(|e| RpcError::internal_error(&e))?;
+
+    let light_items: Vec<Value> = items
+        .iter()
+        .take(limit)
+        .map(|item| {
+            json!({
+                "id": item.id,
+                "source_type": item.source_type,
+                "source_id": item.source_id,
+                "severity": item.severity,
+                "category": item.category,
+                "reason": item.reason_text,
+                "computed_at": item.computed_at
+            })
+        })
+        .collect();
+
+    Ok(json!({
+        "items": light_items,
+        "count": light_items.len()
     }))
 }
 

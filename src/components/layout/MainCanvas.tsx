@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LayoutList, Columns, Table, Plus, FileText, Upload, BarChart2, MessageSquare, Archive } from "lucide-react";
+import { LayoutList, Columns, Table, Plus, FileText, Upload, BarChart2, MessageSquare, Archive, Link2 } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore } from "@/stores/projectStore";
 import TaskListView from "@/components/tasks/TaskListView";
@@ -19,6 +19,7 @@ import { useTaskStore } from "@/stores/taskStore";
 import { SkillsPage } from "@/components/skills/SkillsPage";
 import { GovernancePage } from "@/components/governance/GovernancePage";
 import { MyActivityDashboard } from "@/components/activity";
+import { IntegrationBrowser } from "@/components/integrations/IntegrationBrowser";
 
 const VIEW_ICONS = {
   list: LayoutList,
@@ -39,6 +40,7 @@ export default function MainCanvas() {
     { id: "tasks", label: t("tasks.title"), icon: LayoutList },
     { id: "meetings", label: t("meetings.title"), icon: FileText },
     { id: "documents", label: t("documents.title"), icon: Upload },
+    { id: "integrations", label: "Integrations", icon: Link2 },
     { id: "analytics", label: t("analytics.title"), icon: BarChart2 },
     { id: "chat", label: t("ai.title"), icon: MessageSquare },
   ] as const;
@@ -236,6 +238,7 @@ export default function MainCanvas() {
 
         {activeView === "documents" && <DocFolder projectId={activeProjectId} />}
         {activeView === "analytics" && <ProjectDashboard projectId={activeProjectId} />}
+        {activeView === "integrations" && <IntegrationBrowser />}
         {activeView === "chat" && (
           <div className="h-full">
             <AIChatPanel projectId={activeProjectId} fullPage />

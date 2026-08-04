@@ -11,3 +11,6 @@ export { NotificationSettings } from "./NotificationSettings";
 export { LinkPicker } from "./LinkPicker";
 export { SlackDraftsPanel } from "./SlackDraftsPanel";
 export { BackgroundJobsPanel } from "./BackgroundJobsPanel";
+export { IntegrationBrowser } from "./IntegrationBrowser";
+export { IntegrationItemRow } from "./IntegrationItemRow";
+export { IntegrationItemDetail } from "./IntegrationItemDetail";

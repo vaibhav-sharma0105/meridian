@@ -1,5 +1,6 @@
 use crate::ai::{embeddings, extractor, litellm::LiteLLMClient, ollama::OllamaClient, search as hybrid_search};
 use crate::db::repositories::{ai_settings as ai_repo, meetings as mtg_repo, projects as proj_repo, tasks as task_repo};
+use crate::integrations::repository as integ_repo;
 use crate::models::ai_settings::{AiSettings, AiSettingsInput, ModelInfo};
 use crate::models::document::SearchResult;
 use crate::vectors::qdrant::QdrantClient;
@@ -307,7 +308,7 @@ pub async fn chat_with_project(
     app_handle: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
-    let (settings, api_key, project, open_tasks, done_tasks, meetings, doc_results) = {
+    let (settings, api_key, project, open_tasks, done_tasks, meetings, doc_results, integration_items) = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         let settings = ai_repo::get_active_settings(&conn)?
             .ok_or_else(|| "No AI provider configured".to_string())?;
@@ -346,18 +347,23 @@ pub async fn chat_with_project(
             }
         }).collect();
 
-        (settings, api_key, project, open_tasks, done_tasks, meetings, doc_results)
+        // Get integration cache items for the project
+        let integration_items = integ_repo::get_cached_items_for_project(&conn, &project_id, None, None, Some(20))
+            .unwrap_or_default();
+
+        (settings, api_key, project, open_tasks, done_tasks, meetings, doc_results, integration_items)
     };
 
     let litellm = get_litellm_client(&settings, &api_key);
 
-    // Build context
-    let context = extractor::build_project_context(
+    // Build context with integration data
+    let context = extractor::build_project_context_with_integrations(
         &project.name,
         &open_tasks,
         &done_tasks,
         &meetings,
         &doc_results,
+        &integration_items,
     );
 
     // Build system prompt

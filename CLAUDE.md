@@ -809,10 +809,30 @@ Phase 8 makes integration data (GitHub, Jira, Slack) accessible to users via My 
 
 **Key files (Frontend):**
 - `src/hooks/useAttention.ts` — React Query hooks for attention items
+- `src/hooks/useIntegrationBrowser.ts` — React Query hooks for integration cache browsing
 - `src/components/activity/MyActivityDashboard.tsx` — main dashboard view
 - `src/components/activity/AttentionItem.tsx` — single attention item row
 - `src/components/activity/AttentionFilters.tsx` — filter dropdown
-- `src/stores/uiStore.ts` — `activeView: "activity"` added
+- `src/components/integrations/IntegrationBrowser.tsx` — project-scoped integration item browser
+- `src/components/integrations/IntegrationItemRow.tsx` — expandable integration item row
+- `src/components/integrations/IntegrationItemDetail.tsx` — expanded item detail view
+- `src/stores/uiStore.ts` — `activeView: "activity" | "integrations"` added
+
+**Integration Browser:**
+- Project-level tab showing cached GitHub issues/PRs, Jira issues, Slack threads
+- Filter by source (github/jira/slack) and item type (issue/pr/commit/thread/message)
+- Text search across cached items
+- Expandable rows showing title, description, labels, state, files changed
+
+**AI Chat Integration Context:**
+- `chat_with_project` now includes integration cache data in AI context
+- `build_project_context_with_integrations()` in `extractor.rs` appends up to 20 integration items
+- Items formatted with type label, title, URL, and description preview
+
+**MCP Tools (Phase 8):**
+- `list_integration_items` — List cached items with optional project/type/limit filters
+- `search_integration_items` — Text search across integration cache
+- `get_attention_items` — Get items needing attention by severity/source
 
 **App Settings:**
 - `cache_retention_days`: 30 (auto-archive cache items older than this)
@@ -823,11 +843,8 @@ Phase 8 makes integration data (GitHub, Jira, Slack) accessible to users via My 
 
 | Item | Status | What's Missing |
 |------|--------|-----------------|
-| **Integration Browser UI** | NOT IMPL | Project-scoped UI to browse cached GitHub/Jira/Slack items with expandable details |
-| **AI Chat Integration Context** | NOT IMPL | Relevance-scored integration data injection into AI chat system prompt |
 | **Filter Skills** | NOT IMPL | Skills with `action: filter` to match commits against user-defined criteria |
-| **MCP Integration Tools** | NOT IMPL | `query_integrations`, `get_my_activity`, `get_linked_items` for meridian-mcp |
-| **E2E Tests** | NOT IMPL | Playwright tests for My Activity dashboard |
+| **E2E Tests** | NOT IMPL | Playwright tests for My Activity dashboard and Integration Browser |
 
 ---
 
