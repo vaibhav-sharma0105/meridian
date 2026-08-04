@@ -775,6 +775,60 @@ Multi-factor scoring for task assignment suggestions:
 | **AssigneePicker in inline/filter editors** | NOT IMPL (by choice) | AssigneePicker is mounted in `TaskEditModal` only, per product decision — `TaskInlineEditor` and `TaskFilters` still use the plain `AssigneeChipInput`. Expand deliberately if those surfaces need suggestions too, not by default. |
 | **Expertise auto-learning threshold policy** | Implemented with a fixed default | `EXPERTISE_PROMOTION_THRESHOLD = 3` (`team/repository.rs`) — a keyword is promoted after 3 completions. If this needs to be configurable per-user, that's new scope, not a bug. |
 
+### 19. Integration Visibility (Phase 8)
+
+Phase 8 makes integration data (GitHub, Jira, Slack) accessible to users via My Activity dashboard and to AI chat.
+
+**My Activity Dashboard:**
+- Sidebar entry "My Activity" with badge showing critical+warning count
+- Shows pre-computed attention items grouped by severity (Critical, Needs Attention, Info)
+- Items come from: overdue tasks, stale tasks, pending approvals, integration cache matches
+- Filters by source type (task/approval/github/jira/slack) and severity
+
+**Attention Items:**
+- Pre-computed in `attention_items` table, refreshed every 5 minutes by daemon
+- Upsert pattern: `UNIQUE(source_type, source_id, category)` prevents duplicates
+- Dismissable per-item with `dismissed_at` timestamp
+
+**Integration Project Mapping:**
+- `integration_project_mapping` table maps external repos/projects to Meridian projects
+- Required because integrations are account-level but users need project-scoped views
+- Key: `(integration_id, external_key)` → `project_id`
+
+**Cache Management:**
+- `integration_cache` extended with: `attention_score`, `attention_reason`, `evaluated_at`, `archived_at`, `expires_at`
+- Retention: 30 days default (`cache_retention_days` setting), archived items 90 days
+- `cleanup_integration_cache` daemon job runs daily at 3 AM UTC
+
+**Key files (Backend):**
+- `src-tauri/src/attention/` — models, repository for attention items
+- `src-tauri/src/commands/attention.rs` — get_attention_items, get_attention_count, dismiss_attention_item
+- `src-tauri/src/integrations/mapping.rs` — project mapping CRUD
+- `src-tauri/src/daemon/jobs.rs` — `compute_attention_items`, `cleanup_integration_cache` jobs
+- `src-tauri/src/db/migrations/v018_integration_visibility.rs` — schema
+
+**Key files (Frontend):**
+- `src/hooks/useAttention.ts` — React Query hooks for attention items
+- `src/components/activity/MyActivityDashboard.tsx` — main dashboard view
+- `src/components/activity/AttentionItem.tsx` — single attention item row
+- `src/components/activity/AttentionFilters.tsx` — filter dropdown
+- `src/stores/uiStore.ts` — `activeView: "activity"` added
+
+**App Settings:**
+- `cache_retention_days`: 30 (auto-archive cache items older than this)
+- `attention_refresh_minutes`: 5 (daemon refresh interval)
+- `ai_integration_context_tokens`: 4000 (token budget for AI chat, future use)
+
+**Phase 8: Known Gaps / Future Work**
+
+| Item | Status | What's Missing |
+|------|--------|-----------------|
+| **Integration Browser UI** | NOT IMPL | Project-scoped UI to browse cached GitHub/Jira/Slack items with expandable details |
+| **AI Chat Integration Context** | NOT IMPL | Relevance-scored integration data injection into AI chat system prompt |
+| **Filter Skills** | NOT IMPL | Skills with `action: filter` to match commits against user-defined criteria |
+| **MCP Integration Tools** | NOT IMPL | `query_integrations`, `get_my_activity`, `get_linked_items` for meridian-mcp |
+| **E2E Tests** | NOT IMPL | Playwright tests for My Activity dashboard |
+
 ---
 
 ## Design System
