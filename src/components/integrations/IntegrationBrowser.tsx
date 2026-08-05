@@ -1,11 +1,13 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Search, Filter } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { useProjectStore } from "@/stores/projectStore";
 import {
   useIntegrationCache,
   useIntegrationSearch,
 } from "@/hooks/useIntegrationBrowser";
 import { IntegrationItemRow } from "./IntegrationItemRow";
+import { listIntegrations } from "@/lib/tauri";
 
 const itemTypes = ["all", "issue", "pr", "commit", "thread", "message"];
 
@@ -17,6 +19,23 @@ export function IntegrationBrowser() {
   const [selectedItemType, setSelectedItemType] = useState("all");
 
   const isSearching = searchQuery.length >= 2;
+
+  // Fetch integrations to get sync intervals
+  const integrationsQuery = useQuery({
+    queryKey: ["integrations"],
+    queryFn: listIntegrations,
+  });
+
+  // Build a map of integration_id -> sync_interval_minutes
+  const syncIntervalMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    if (integrationsQuery.data) {
+      for (const integration of integrationsQuery.data) {
+        map[integration.id] = integration.sync_interval_minutes;
+      }
+    }
+    return map;
+  }, [integrationsQuery.data]);
 
   const cacheQuery = useIntegrationCache(
     activeProjectId || "",
@@ -94,7 +113,11 @@ export function IntegrationBrowser() {
           </div>
         ) : (
           items.map((item) => (
-            <IntegrationItemRow key={item.id} item={item} />
+            <IntegrationItemRow
+              key={item.id}
+              item={item}
+              syncIntervalMinutes={syncIntervalMap[item.integration_id] || 15}
+            />
           ))
         )}
       </div>

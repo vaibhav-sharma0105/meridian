@@ -1389,6 +1389,7 @@ export interface Integration {
   config: IntegrationConfig;
   permissions?: IntegrationPermissions;
   autonomy_mode: string;
+  linking_workflow: "lazy" | "ai_suggested" | "manual";
   status: string;
   last_sync?: string;
   sync_interval_minutes: number;
@@ -1406,6 +1407,11 @@ export interface IntegrationCache {
   external_url?: string;
   data: unknown;
   synced_at: string;
+  attention_score?: number;
+  attention_reason?: string;
+  evaluated_at?: string;
+  archived_at?: string;
+  expires_at?: string;
 }
 
 export interface IntegrationLink {
@@ -1436,6 +1442,7 @@ export interface CreateIntegrationInput {
   config: IntegrationConfig;
   permissions?: IntegrationPermissions;
   autonomy_mode?: string;
+  linking_workflow?: "lazy" | "ai_suggested" | "manual";
   sync_interval_minutes?: number;
 }
 
@@ -1445,6 +1452,7 @@ export interface UpdateIntegrationInput {
   config?: IntegrationConfig;
   permissions?: IntegrationPermissions;
   autonomy_mode?: string;
+  linking_workflow?: "lazy" | "ai_suggested" | "manual";
   status?: string;
   sync_interval_minutes?: number;
   error_message?: string;

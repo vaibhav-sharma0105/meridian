@@ -185,6 +185,7 @@ pub async fn handle_oauth_callback(
             admin: false,
         }),
         autonomy_mode: Some("manual".to_string()),
+        linking_workflow: Some("lazy".to_string()),
         sync_interval_minutes: Some(15),
     };
 

@@ -9,7 +9,7 @@ use super::models::{
 pub fn list_integrations(conn: &Connection) -> Result<Vec<Integration>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, type, name, config, permissions, autonomy_mode, status,
+            "SELECT id, type, name, config, permissions, autonomy_mode, linking_workflow, status,
                     last_sync, sync_interval_minutes, webhook_token, error_message,
                     created_at, updated_at
              FROM integrations
@@ -29,13 +29,14 @@ pub fn list_integrations(conn: &Connection) -> Result<Vec<Integration>, String> 
                 permissions: permissions_str
                     .and_then(|s| serde_json::from_str(&s).ok()),
                 autonomy_mode: row.get(5)?,
-                status: row.get(6)?,
-                last_sync: row.get(7)?,
-                sync_interval_minutes: row.get(8)?,
-                webhook_token: row.get(9)?,
-                error_message: row.get(10)?,
-                created_at: row.get(11)?,
-                updated_at: row.get(12)?,
+                linking_workflow: row.get::<_, Option<String>>(6)?.unwrap_or_else(|| "lazy".to_string()),
+                status: row.get(7)?,
+                last_sync: row.get(8)?,
+                sync_interval_minutes: row.get(9)?,
+                webhook_token: row.get(10)?,
+                error_message: row.get(11)?,
+                created_at: row.get(12)?,
+                updated_at: row.get(13)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -46,7 +47,7 @@ pub fn list_integrations(conn: &Connection) -> Result<Vec<Integration>, String> 
 pub fn get_integration(conn: &Connection, id: &str) -> Result<Option<Integration>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, type, name, config, permissions, autonomy_mode, status,
+            "SELECT id, type, name, config, permissions, autonomy_mode, linking_workflow, status,
                     last_sync, sync_interval_minutes, webhook_token, error_message,
                     created_at, updated_at
              FROM integrations WHERE id = ?1",
@@ -63,13 +64,14 @@ pub fn get_integration(conn: &Connection, id: &str) -> Result<Option<Integration
             config: serde_json::from_str(&config_str).unwrap_or_default(),
             permissions: permissions_str.and_then(|s| serde_json::from_str(&s).ok()),
             autonomy_mode: row.get(5)?,
-            status: row.get(6)?,
-            last_sync: row.get(7)?,
-            sync_interval_minutes: row.get(8)?,
-            webhook_token: row.get(9)?,
-            error_message: row.get(10)?,
-            created_at: row.get(11)?,
-            updated_at: row.get(12)?,
+            linking_workflow: row.get::<_, Option<String>>(6)?.unwrap_or_else(|| "lazy".to_string()),
+            status: row.get(7)?,
+            last_sync: row.get(8)?,
+            sync_interval_minutes: row.get(9)?,
+            webhook_token: row.get(10)?,
+            error_message: row.get(11)?,
+            created_at: row.get(12)?,
+            updated_at: row.get(13)?,
         })
     });
 
@@ -83,7 +85,7 @@ pub fn get_integration(conn: &Connection, id: &str) -> Result<Option<Integration
 pub fn get_integration_by_type(conn: &Connection, integration_type: &str) -> Result<Option<Integration>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, type, name, config, permissions, autonomy_mode, status,
+            "SELECT id, type, name, config, permissions, autonomy_mode, linking_workflow, status,
                     last_sync, sync_interval_minutes, webhook_token, error_message,
                     created_at, updated_at
              FROM integrations WHERE type = ?1 LIMIT 1",
@@ -100,13 +102,14 @@ pub fn get_integration_by_type(conn: &Connection, integration_type: &str) -> Res
             config: serde_json::from_str(&config_str).unwrap_or_default(),
             permissions: permissions_str.and_then(|s| serde_json::from_str(&s).ok()),
             autonomy_mode: row.get(5)?,
-            status: row.get(6)?,
-            last_sync: row.get(7)?,
-            sync_interval_minutes: row.get(8)?,
-            webhook_token: row.get(9)?,
-            error_message: row.get(10)?,
-            created_at: row.get(11)?,
-            updated_at: row.get(12)?,
+            linking_workflow: row.get::<_, Option<String>>(6)?.unwrap_or_else(|| "lazy".to_string()),
+            status: row.get(7)?,
+            last_sync: row.get(8)?,
+            sync_interval_minutes: row.get(9)?,
+            webhook_token: row.get(10)?,
+            error_message: row.get(11)?,
+            created_at: row.get(12)?,
+            updated_at: row.get(13)?,
         })
     });
 
@@ -129,12 +132,13 @@ pub fn create_integration(conn: &Connection, input: CreateIntegrationInput) -> R
         .transpose()
         .map_err(|e| e.to_string())?;
     let autonomy_mode = input.autonomy_mode.unwrap_or_else(|| "manual".to_string());
+    let linking_workflow = input.linking_workflow.unwrap_or_else(|| "lazy".to_string());
     let sync_interval = input.sync_interval_minutes.unwrap_or(15);
 
     conn.execute(
-        "INSERT INTO integrations (id, type, name, config, permissions, autonomy_mode,
+        "INSERT INTO integrations (id, type, name, config, permissions, autonomy_mode, linking_workflow,
                                    status, sync_interval_minutes, webhook_token, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'disconnected', ?7, ?8, ?9, ?9)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'disconnected', ?8, ?9, ?10, ?10)",
         params![
             id,
             input.integration_type,
@@ -142,6 +146,7 @@ pub fn create_integration(conn: &Connection, input: CreateIntegrationInput) -> R
             config_json,
             permissions_json,
             autonomy_mode,
+            linking_workflow,
             sync_interval,
             webhook_token,
             now,
@@ -160,6 +165,7 @@ pub fn update_integration(conn: &Connection, input: UpdateIntegrationInput) -> R
     let config = input.config.unwrap_or(existing.config);
     let permissions = input.permissions.or(existing.permissions);
     let autonomy_mode = input.autonomy_mode.unwrap_or(existing.autonomy_mode);
+    let linking_workflow = input.linking_workflow.unwrap_or(existing.linking_workflow);
     let status = input.status.unwrap_or(existing.status);
     let sync_interval = input.sync_interval_minutes.unwrap_or(existing.sync_interval_minutes);
     let error_message = input.error_message.or(existing.error_message);
@@ -174,8 +180,8 @@ pub fn update_integration(conn: &Connection, input: UpdateIntegrationInput) -> R
 
     conn.execute(
         "UPDATE integrations
-         SET name = ?2, config = ?3, permissions = ?4, autonomy_mode = ?5,
-             status = ?6, sync_interval_minutes = ?7, error_message = ?8, updated_at = ?9
+         SET name = ?2, config = ?3, permissions = ?4, autonomy_mode = ?5, linking_workflow = ?6,
+             status = ?7, sync_interval_minutes = ?8, error_message = ?9, updated_at = ?10
          WHERE id = ?1",
         params![
             input.id,
@@ -183,6 +189,7 @@ pub fn update_integration(conn: &Connection, input: UpdateIntegrationInput) -> R
             config_json,
             permissions_json,
             autonomy_mode,
+            linking_workflow,
             status,
             sync_interval,
             error_message,
@@ -657,6 +664,7 @@ mod tests {
             config: IntegrationConfig::default(),
             permissions: None,
             autonomy_mode: Some("supervised".to_string()),
+            linking_workflow: None,
             sync_interval_minutes: Some(15),
         };
 
@@ -682,6 +690,7 @@ mod tests {
             config: IntegrationConfig::default(),
             permissions: None,
             autonomy_mode: None,
+            linking_workflow: None,
             sync_interval_minutes: None,
         };
         let input2 = CreateIntegrationInput {
@@ -690,6 +699,7 @@ mod tests {
             config: IntegrationConfig::default(),
             permissions: None,
             autonomy_mode: None,
+            linking_workflow: None,
             sync_interval_minutes: None,
         };
 
@@ -710,6 +720,7 @@ mod tests {
             config: IntegrationConfig::default(),
             permissions: None,
             autonomy_mode: None,
+            linking_workflow: None,
             sync_interval_minutes: None,
         };
         let integration = create_integration(&conn, input).expect("Failed to create integration");
@@ -735,6 +746,7 @@ mod tests {
             config: IntegrationConfig::default(),
             permissions: None,
             autonomy_mode: None,
+            linking_workflow: None,
             sync_interval_minutes: None,
         };
         let integration = create_integration(&conn, input).expect("Failed to create integration");
@@ -756,6 +768,7 @@ mod tests {
             config: IntegrationConfig::default(),
             permissions: None,
             autonomy_mode: None,
+            linking_workflow: None,
             sync_interval_minutes: None,
         };
         let integration = create_integration(&conn, int_input).expect("Failed to create integration");
@@ -789,6 +802,7 @@ mod tests {
             config: IntegrationConfig::default(),
             permissions: None,
             autonomy_mode: None,
+            linking_workflow: None,
             sync_interval_minutes: None,
         };
         let integration = create_integration(&conn, int_input).expect("Failed to create integration");
@@ -820,6 +834,7 @@ mod tests {
             config: IntegrationConfig::default(),
             permissions: None,
             autonomy_mode: None,
+            linking_workflow: None,
             sync_interval_minutes: None,
         };
         let integration = create_integration(&conn, int_input).expect("Failed to create integration");

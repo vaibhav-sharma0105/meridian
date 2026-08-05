@@ -9,6 +9,7 @@ pub struct Integration {
     pub config: IntegrationConfig,
     pub permissions: Option<IntegrationPermissions>,
     pub autonomy_mode: String,
+    pub linking_workflow: String,
     pub status: String,
     pub last_sync: Option<String>,
     pub sync_interval_minutes: i32,
@@ -89,6 +90,7 @@ pub struct CreateIntegrationInput {
     pub config: IntegrationConfig,
     pub permissions: Option<IntegrationPermissions>,
     pub autonomy_mode: Option<String>,
+    pub linking_workflow: Option<String>,
     pub sync_interval_minutes: Option<i32>,
 }
 
@@ -100,6 +102,7 @@ pub struct UpdateIntegrationInput {
     pub config: Option<IntegrationConfig>,
     pub permissions: Option<IntegrationPermissions>,
     pub autonomy_mode: Option<String>,
+    pub linking_workflow: Option<String>,
     pub status: Option<String>,
     pub sync_interval_minutes: Option<i32>,
     pub error_message: Option<String>,

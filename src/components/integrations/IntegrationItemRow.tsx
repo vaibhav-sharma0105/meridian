@@ -5,9 +5,11 @@ import {
   ExternalLink,
   GitPullRequest,
   AlertCircle,
+  AlertTriangle,
   GitCommit,
   MessageSquare,
   FileText,
+  Clock,
 } from "lucide-react";
 import type { IntegrationCache } from "@/lib/tauri";
 import { IntegrationItemDetail } from "./IntegrationItemDetail";
@@ -24,9 +26,10 @@ const typeIcons: Record<string, React.ElementType> = {
 
 interface Props {
   item: IntegrationCache;
+  syncIntervalMinutes?: number;
 }
 
-export function IntegrationItemRow({ item }: Props) {
+export function IntegrationItemRow({ item, syncIntervalMinutes = 15 }: Props) {
   const [expanded, setExpanded] = useState(false);
   const Icon = typeIcons[item.external_type] || typeIcons.default;
   const data =
@@ -34,17 +37,30 @@ export function IntegrationItemRow({ item }: Props) {
 
   const title = data.title || data.message || data.subject || item.external_id;
 
-  const timeAgo = (dateStr: string) => {
+  const getTimeInfo = (dateStr: string) => {
     const date = new Date(dateStr);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 60) return `${diffMins}m ago`;
     const diffHrs = Math.floor(diffMins / 60);
-    if (diffHrs < 24) return `${diffHrs}h ago`;
     const diffDays = Math.floor(diffHrs / 24);
-    return `${diffDays}d ago`;
+
+    let text: string;
+    if (diffMins < 60) {
+      text = `${diffMins}m ago`;
+    } else if (diffHrs < 24) {
+      text = `${diffHrs}h ago`;
+    } else {
+      text = `${diffDays}d ago`;
+    }
+
+    // Item is stale if older than 2x the sync interval
+    const isStale = diffMins > syncIntervalMinutes * 2;
+
+    return { text, isStale, diffMins };
   };
+
+  const timeInfo = getTimeInfo(item.synced_at);
 
   return (
     <div className="border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden">
@@ -61,8 +77,23 @@ export function IntegrationItemRow({ item }: Props) {
         <span className="flex-1 text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">
           {title}
         </span>
-        <span className="text-xs text-zinc-400 flex-shrink-0">
-          {timeAgo(item.synced_at)}
+        <span
+          className={`text-xs flex items-center gap-1 flex-shrink-0 ${
+            timeInfo.isStale
+              ? "text-amber-500 dark:text-amber-400"
+              : "text-zinc-400"
+          }`}
+          title={
+            timeInfo.isStale
+              ? `Data may be outdated (last synced ${timeInfo.text})`
+              : `Last synced ${timeInfo.text}`
+          }
+        >
+          {timeInfo.isStale && (
+            <AlertTriangle className="w-3 h-3" />
+          )}
+          <Clock className="w-3 h-3" />
+          {timeInfo.text}
         </span>
         {item.external_url && (
           <a

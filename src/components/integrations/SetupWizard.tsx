@@ -466,6 +466,7 @@ export function SetupWizard({ integrationType, isMcp, onClose, onComplete }: Set
   const [clientSecret, setClientSecret] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
+  const [linkingWorkflow, setLinkingWorkflow] = useState<"lazy" | "ai_suggested" | "manual">("lazy");
 
   // Hooks
   const startOAuth = useStartOAuth();
@@ -552,6 +553,7 @@ export function SetupWizard({ integrationType, isMcp, onClose, onComplete }: Set
           api_token: apiKey || undefined,
           base_url: baseUrl || undefined,
         },
+        linking_workflow: linkingWorkflow,
       });
 
       completeOAuth();
@@ -732,6 +734,72 @@ export function SetupWizard({ integrationType, isMcp, onClose, onComplete }: Set
                   </div>
                 </>
               )}
+
+              {/* Linking Workflow Selection */}
+              <div className="mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-700">
+                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                  Project Linking Workflow
+                </label>
+                <div className="space-y-2">
+                  <label className="flex items-start gap-3 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                    <input
+                      type="radio"
+                      name="linkingWorkflow"
+                      value="lazy"
+                      checked={linkingWorkflow === "lazy"}
+                      onChange={() => setLinkingWorkflow("lazy")}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                        Lazy (Recommended)
+                      </div>
+                      <div className="text-xs text-zinc-500">
+                        Ask when needed — Meridian will prompt you to link when it encounters relevant items
+                      </div>
+                    </div>
+                  </label>
+                  <label className="flex items-start gap-3 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                    <input
+                      type="radio"
+                      name="linkingWorkflow"
+                      value="ai_suggested"
+                      checked={linkingWorkflow === "ai_suggested"}
+                      onChange={() => setLinkingWorkflow("ai_suggested")}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                        AI-Suggested
+                      </div>
+                      <div className="text-xs text-zinc-500">
+                        AI automatically suggests project links based on content; you approve each suggestion
+                      </div>
+                    </div>
+                  </label>
+                  <label className="flex items-start gap-3 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                    <input
+                      type="radio"
+                      name="linkingWorkflow"
+                      value="manual"
+                      checked={linkingWorkflow === "manual"}
+                      onChange={() => setLinkingWorkflow("manual")}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                        Manual
+                      </div>
+                      <div className="text-xs text-zinc-500">
+                        You explicitly link each repository/project to Meridian projects
+                      </div>
+                    </div>
+                  </label>
+                </div>
+                <p className="text-xs text-zinc-400 mt-2 italic">
+                  Change anytime in Settings → Integrations
+                </p>
+              </div>
             </div>
           )}
 

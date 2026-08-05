@@ -308,7 +308,7 @@ pub async fn chat_with_project(
     app_handle: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
-    let (settings, api_key, project, open_tasks, done_tasks, meetings, doc_results, integration_items) = {
+    let (settings, api_key, project, open_tasks, done_tasks, meetings, doc_results, integration_items, token_budget) = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         let settings = ai_repo::get_active_settings(&conn)?
             .ok_or_else(|| "No AI provider configured".to_string())?;
@@ -347,24 +347,49 @@ pub async fn chat_with_project(
             }
         }).collect();
 
-        // Get integration cache items for the project
-        let integration_items = integ_repo::get_cached_items_for_project(&conn, &project_id, None, None, Some(20))
+        // Get integration cache items for the project (fetch more for relevance scoring)
+        let integration_items = integ_repo::get_cached_items_for_project(&conn, &project_id, None, None, Some(100))
             .unwrap_or_default();
 
-        (settings, api_key, project, open_tasks, done_tasks, meetings, doc_results, integration_items)
+        // Get token budget setting (default 4000)
+        let token_budget: usize = conn
+            .query_row(
+                "SELECT value FROM app_settings WHERE key = 'ai_integration_context_tokens'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(4000);
+
+        (settings, api_key, project, open_tasks, done_tasks, meetings, doc_results, integration_items, token_budget)
     };
 
     let litellm = get_litellm_client(&settings, &api_key);
 
-    // Build context with integration data
-    let context = extractor::build_project_context_with_integrations(
+    // Build base context (without integration data)
+    let base_context = extractor::build_project_context(
         &project.name,
         &open_tasks,
         &done_tasks,
         &meetings,
         &doc_results,
-        &integration_items,
     );
+
+    // Build integration context with token budget and relevance scoring
+    let integration_context = extractor::build_integration_context_with_budget(
+        &integration_items,
+        token_budget,
+        Some(&message), // Use user message as query for relevance scoring
+        None, // TODO: Pass current user ID when available
+    );
+
+    // Combine contexts
+    let context = if integration_context.is_empty() {
+        base_context
+    } else {
+        format!("{}\n\n{}", base_context, integration_context)
+    };
 
     // Build system prompt
     let base_system_prompt = if let Some(tid) = &template_id {
