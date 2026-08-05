@@ -365,6 +365,28 @@ export function buildTauriMockScript(overrides: Record<string, unknown> = {}) {
     sync_team_from_slack: { added: 2, updated: 0, total: 2 },
     sync_team_from_google: { added: 1, updated: 0, total: 1 },
     record_assignee_selection: null,
+    // Attention Items (Phase 8)
+    get_attention_items: [
+      { id: "att-1", source_type: "task", source_id: "task-1", severity: "critical", category: "overdue", reason_text: "Fix the login bug - 5 days overdue", matched_skill_id: null, computed_at: new Date().toISOString(), dismissed_at: null },
+      { id: "att-2", source_type: "github", source_id: "gh-pr-123", severity: "warning", category: "pending_review", reason_text: "PR awaiting review for 3 days", matched_skill_id: null, computed_at: new Date().toISOString(), dismissed_at: null },
+      { id: "att-3", source_type: "slack", source_id: "slack-thread-456", severity: "info", category: "mention", reason_text: "You were mentioned in a thread", matched_skill_id: null, computed_at: new Date().toISOString(), dismissed_at: null },
+    ],
+    get_attention_count: [2, 1],
+    dismiss_attention_item: null,
+    // Integration Cache (Phase 8)
+    get_integration_cache_for_project: [
+      { id: "cache-1", integration_id: "int-1", external_type: "issue", external_id: "123", external_url: "https://github.com/test/repo/issues/123", data: { title: "Bug: Login fails on Safari", description: "Users report login issues on Safari browser", state: "open", labels: ["bug", "priority-high"] }, synced_at: new Date().toISOString(), attention_score: 0.8, attention_reason: "High priority bug", evaluated_at: new Date().toISOString(), archived_at: null, expires_at: null },
+      { id: "cache-2", integration_id: "int-1", external_type: "pr", external_id: "456", external_url: "https://github.com/test/repo/pull/456", data: { title: "feat: Add OAuth support", body: "This PR adds OAuth 2.0 support for third-party login", state: "open", files: ["src/auth.ts", "src/oauth.ts"] }, synced_at: new Date().toISOString(), attention_score: 0.5, attention_reason: null, evaluated_at: new Date().toISOString(), archived_at: null, expires_at: null },
+      { id: "cache-3", integration_id: "int-2", external_type: "thread", external_id: "thread-789", external_url: "https://slack.com/archives/C123/p789", data: { message: "Sprint planning for next week", subject: "Planning" }, synced_at: new Date().toISOString(), attention_score: null, attention_reason: null, evaluated_at: null, archived_at: null, expires_at: null },
+    ],
+    search_cached_integration_items: [
+      { id: "cache-1", integration_id: "int-1", external_type: "issue", external_id: "123", external_url: "https://github.com/test/repo/issues/123", data: { title: "Bug: Login fails on Safari", description: "Users report login issues on Safari browser", state: "open", labels: ["bug"] }, synced_at: new Date().toISOString(), attention_score: 0.8, attention_reason: "High priority bug", evaluated_at: new Date().toISOString(), archived_at: null, expires_at: null },
+    ],
+    // Project Mapping (Phase 8)
+    create_project_mapping: { id: "mapping-1", integration_id: "int-1", external_key: "test/repo", project_id: "proj-1", created_at: new Date().toISOString() },
+    get_project_mappings: [{ id: "mapping-1", integration_id: "int-1", external_key: "test/repo", project_id: "proj-1", created_at: new Date().toISOString() }],
+    get_integration_mappings: [{ id: "mapping-1", integration_id: "int-1", external_key: "test/repo", project_id: "proj-1", created_at: new Date().toISOString() }],
+    delete_project_mapping: null,
     // Sync (Export/Import)
     pick_export_save_path: "/tmp/meridian-export-2026-01-01.zip",
     pick_import_file_path: "/tmp/meridian-export-2026-01-01.zip",

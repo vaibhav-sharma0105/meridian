@@ -67,6 +67,7 @@ pub enum ActionType {
     CreateTasks,
     Analyze,
     Custom,
+    Filter,
 }
 
 impl ActionType {
@@ -77,6 +78,7 @@ impl ActionType {
             ActionType::CreateTasks => "create_tasks",
             ActionType::Analyze => "analyze",
             ActionType::Custom => "custom",
+            ActionType::Filter => "filter",
         }
     }
 }
@@ -90,6 +92,29 @@ pub struct ActionConfig {
     pub channel: Option<String>,        // for draft_message: "email", "slack"
     pub recipient: Option<String>,
     pub has_side_effects: Option<bool>,
+    // Filter action fields (Phase 8)
+    pub filter_source: Option<String>,          // "github", "jira", "slack", or "all"
+    pub filter_item_type: Option<String>,       // "commit", "pr", "issue", etc.
+    pub filter_patterns: Option<Vec<String>>,   // regex patterns to match
+    pub filter_keywords: Option<Vec<String>>,   // keywords to match (OR)
+    pub filter_exclude: Option<Vec<String>>,    // patterns to exclude
+    pub filter_min_score: Option<f64>,          // minimum attention score (0.0-1.0)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FilterResult {
+    pub matched_count: usize,
+    pub items: Vec<FilteredItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FilteredItem {
+    pub cache_id: String,
+    pub item_type: String,
+    pub title: String,
+    pub url: Option<String>,
+    pub matched_patterns: Vec<String>,
+    pub attention_score: Option<f64>,
 }
 
 // ─── Approval Mode ───────────────────────────────────────────────────────────

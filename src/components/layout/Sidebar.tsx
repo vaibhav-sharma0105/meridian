@@ -129,6 +129,7 @@ export default function Sidebar() {
           return (
             <div
               key={project.id}
+              data-testid="project-item"
               className={`group flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-all duration-150 cursor-pointer ${
                 isActive
                   ? "bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 shadow-[inset_2px_0_0_0_#6366f1] font-medium"

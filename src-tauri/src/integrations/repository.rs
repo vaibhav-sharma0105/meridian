@@ -579,6 +579,65 @@ pub fn get_cache_items_with_attention(conn: &Connection) -> Result<Vec<Integrati
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
 
+pub fn get_all_cached_items(
+    conn: &Connection,
+    source_filter: Option<&str>,
+    type_filter: Option<&str>,
+    limit: Option<usize>,
+) -> Result<Vec<IntegrationCache>, String> {
+    let mut sql = String::from(
+        "SELECT ic.id, ic.integration_id, ic.external_type, ic.external_id, ic.external_url, ic.data, ic.synced_at,
+                ic.attention_score, ic.attention_reason, ic.evaluated_at, ic.archived_at, ic.expires_at
+         FROM integration_cache ic
+         JOIN integrations i ON ic.integration_id = i.id
+         WHERE ic.archived_at IS NULL",
+    );
+
+    let mut params: Vec<String> = Vec::new();
+
+    if let Some(source) = source_filter {
+        sql.push_str(" AND i.type = ?");
+        params.push(source.to_string());
+    }
+
+    if let Some(item_type) = type_filter {
+        sql.push_str(" AND ic.external_type = ?");
+        params.push(item_type.to_string());
+    }
+
+    sql.push_str(" ORDER BY ic.synced_at DESC");
+
+    if let Some(lim) = limit {
+        sql.push_str(&format!(" LIMIT {}", lim));
+    }
+
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+
+    let params_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
+
+    let rows = stmt
+        .query_map(params_refs.as_slice(), |row| {
+            let data_str: String = row.get(5)?;
+            Ok(IntegrationCache {
+                id: row.get(0)?,
+                integration_id: row.get(1)?,
+                external_type: row.get(2)?,
+                external_id: row.get(3)?,
+                external_url: row.get(4)?,
+                data: serde_json::from_str(&data_str).unwrap_or_default(),
+                synced_at: row.get(6)?,
+                attention_score: row.get(7)?,
+                attention_reason: row.get(8)?,
+                evaluated_at: row.get(9)?,
+                archived_at: row.get(10)?,
+                expires_at: row.get(11)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

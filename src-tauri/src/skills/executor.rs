@@ -1,3 +1,4 @@
+use regex::Regex;
 use rusqlite::Connection;
 use serde_json::{json, Value};
 use std::time::Instant;
@@ -13,8 +14,10 @@ use crate::governance::{
     autonomy::{AutonomyContext, AutonomyController},
     risk::{self, ActionType, ContentRisk, DestinationType},
 };
+use crate::integrations::repository as integ_repo;
 use crate::models::task::TaskFilters;
 use crate::skills::{
+    models::{FilterResult, FilteredItem},
     repository as skills_repo, ActionConfig, ApprovalMode, ContextConfig, Skill, SkillRun,
 };
 
@@ -224,7 +227,7 @@ pub fn evaluate_skill_action_governance(
     };
 
     let action_type = match action_config.action_type.as_deref() {
-        Some("summarize") | Some("analyze") => ActionType::Read,
+        Some("summarize") | Some("analyze") | Some("filter") => ActionType::Read,
         Some("create_tasks") => ActionType::Create,
         Some("draft_message") => ActionType::ExternalSend,
         Some("custom") => {
@@ -313,6 +316,7 @@ pub fn execute_skill(
         "draft_message" => execute_draft(conn, &context, &action_config),
         "create_tasks" => execute_create_tasks(conn, &context, &action_config),
         "analyze" => execute_analyze(conn, &context, &action_config),
+        "filter" => execute_filter(conn, &context, &action_config),
         "custom" => {
             let ctx_config = skill.get_context_config().unwrap_or_default();
             execute_custom(conn, &context, &action_config, &ctx_config)
@@ -368,6 +372,7 @@ pub async fn execute_skill_async(
         "draft_message" => execute_draft_ai(&client, &context, &action_config).await,
         "create_tasks" => execute_create_tasks_ai(&client, &context, &action_config).await,
         "analyze" => execute_analyze_ai(&client, &context, &action_config).await,
+        "filter" => execute_filter(conn, &context, &action_config),
         "custom" => {
             let ctx_config = skill.get_context_config().unwrap_or_default();
             execute_custom_ai(&client, &context, &action_config, &ctx_config).await
@@ -499,6 +504,116 @@ fn execute_custom(
         }
     }
     execute_custom_fallback(context, context_config)
+}
+
+// --- Filter execution (Phase 8) ---
+
+fn execute_filter(
+    conn: &Connection,
+    _context: &ExecutionContext,
+    config: &ActionConfig,
+) -> Result<(String, Option<Value>), String> {
+    let source = config.filter_source.as_deref();
+    let item_type = config.filter_item_type.as_deref();
+    let patterns = config.filter_patterns.as_ref();
+    let keywords = config.filter_keywords.as_ref();
+    let excludes = config.filter_exclude.as_ref();
+    let min_score = config.filter_min_score;
+
+    // Get all cache items (optionally filtered by source)
+    let items = integ_repo::get_all_cached_items(conn, source, item_type, Some(500))
+        .map_err(|e| format!("Failed to get cached items: {}", e))?;
+
+    let mut matched_items: Vec<FilteredItem> = Vec::new();
+
+    // Compile regex patterns
+    let compiled_patterns: Vec<(Regex, String)> = patterns
+        .map(|p| {
+            p.iter()
+                .filter_map(|pat| Regex::new(pat).ok().map(|r| (r, pat.clone())))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let compiled_excludes: Vec<Regex> = excludes
+        .map(|e| e.iter().filter_map(|pat| Regex::new(pat).ok()).collect())
+        .unwrap_or_default();
+
+    for item in items {
+        // Get searchable text from item
+        let title = item.data.get("title")
+            .or_else(|| item.data.get("message"))
+            .or_else(|| item.data.get("subject"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        let description = item.data.get("description")
+            .or_else(|| item.data.get("body"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        let searchable = format!("{} {}", title, description).to_lowercase();
+
+        // Check min score filter
+        if let Some(min) = min_score {
+            if item.attention_score.unwrap_or(0.0) < min {
+                continue;
+            }
+        }
+
+        // Check excludes
+        let mut excluded = false;
+        for exc in &compiled_excludes {
+            if exc.is_match(&searchable) {
+                excluded = true;
+                break;
+            }
+        }
+        if excluded {
+            continue;
+        }
+
+        // Check patterns and keywords
+        let mut matches: Vec<String> = Vec::new();
+
+        for (regex, pattern) in &compiled_patterns {
+            if regex.is_match(&searchable) {
+                matches.push(pattern.clone());
+            }
+        }
+
+        if let Some(kws) = keywords {
+            for kw in kws {
+                if searchable.contains(&kw.to_lowercase()) {
+                    matches.push(format!("keyword:{}", kw));
+                }
+            }
+        }
+
+        // If no patterns/keywords specified, include all (after exclusions)
+        let should_include = matches.is_empty() && patterns.is_none() && keywords.is_none();
+
+        if !matches.is_empty() || should_include {
+            matched_items.push(FilteredItem {
+                cache_id: item.id,
+                item_type: item.external_type,
+                title: title.to_string(),
+                url: item.external_url,
+                matched_patterns: matches,
+                attention_score: item.attention_score,
+            });
+        }
+    }
+
+    let result = FilterResult {
+        matched_count: matched_items.len(),
+        items: matched_items,
+    };
+
+    let output = serde_json::to_string_pretty(&result)
+        .unwrap_or_else(|_| format!("Matched {} items", result.matched_count));
+
+    Ok((output, Some(json!(result))))
 }
 
 // --- Fallback implementations (no AI) ---
