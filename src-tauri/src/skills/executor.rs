@@ -835,6 +835,223 @@ pub fn fail_skill_run(conn: &Connection, run_id: &str, error: &str) -> Result<()
     skills_repo::set_run_error(conn, run_id, error)
 }
 
+// ─── Multi-Skill Execution ───────────────────────────────────────────────────
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SkillMatch {
+    pub skill_id: String,
+    pub skill_name: String,
+    pub confidence: f64,
+    pub match_reason: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct MultiSkillPlan {
+    pub skills: Vec<SkillMatch>,
+    pub execution_order: Vec<String>,
+    pub chained: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct MultiSkillResult {
+    pub results: Vec<SkillExecutionResult>,
+    pub combined_output: Option<String>,
+    pub total_duration_ms: i64,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SkillExecutionResult {
+    pub skill_id: String,
+    pub skill_name: String,
+    pub status: String,
+    pub output: Option<String>,
+    pub error: Option<String>,
+    pub duration_ms: i64,
+}
+
+pub fn match_skills_to_query(
+    conn: &Connection,
+    query: &str,
+    min_confidence: f64,
+) -> Result<Vec<SkillMatch>, String> {
+    let filters = crate::skills::SkillFilters {
+        enabled: Some(true),
+        ..Default::default()
+    };
+
+    let skills = skills_repo::list_skills(conn, &filters)?;
+    let query_lower = query.to_lowercase();
+    let query_words: Vec<&str> = query_lower.split_whitespace().collect();
+
+    let mut matches: Vec<SkillMatch> = Vec::new();
+
+    for skill in skills {
+        let mut score = 0.0;
+        let mut reasons = Vec::new();
+
+        // Name match
+        let name_lower = skill.name.to_lowercase();
+        if name_lower.contains(&query_lower) || query_lower.contains(&name_lower) {
+            score += 0.4;
+            reasons.push("name match");
+        }
+
+        // Description match
+        if let Some(ref desc) = skill.description {
+            let desc_lower = desc.to_lowercase();
+            let word_matches = query_words.iter()
+                .filter(|w| w.len() > 3 && desc_lower.contains(*w))
+                .count();
+            if word_matches > 0 {
+                score += 0.1 * word_matches as f64;
+                reasons.push("description match");
+            }
+        }
+
+        // Category match
+        if let Some(ref cat) = skill.category {
+            if query_lower.contains(&cat.to_lowercase()) {
+                score += 0.2;
+                reasons.push("category match");
+            }
+        }
+
+        // Tags match
+        let tags = skill.get_tags();
+        for tag in &tags {
+            if query_lower.contains(&tag.to_lowercase()) {
+                score += 0.15;
+                reasons.push("tag match");
+                break;
+            }
+        }
+
+        // Action type keyword match
+        if let Some(action_config) = skill.get_action_config() {
+            if let Some(action_type) = action_config.action_type {
+                let action_keywords = match action_type.as_str() {
+                    "summarize" => vec!["summary", "summarize", "overview", "recap"],
+                    "draft_message" => vec!["draft", "write", "compose", "message", "email"],
+                    "create_tasks" => vec!["task", "tasks", "todo", "create", "action"],
+                    "analyze" => vec!["analyze", "analysis", "review", "examine"],
+                    _ => vec![],
+                };
+                if action_keywords.iter().any(|kw| query_lower.contains(kw)) {
+                    score += 0.25;
+                    reasons.push("action type match");
+                }
+            }
+        }
+
+        score = score.min(1.0);
+
+        if score >= min_confidence {
+            matches.push(SkillMatch {
+                skill_id: skill.id,
+                skill_name: skill.name,
+                confidence: score,
+                match_reason: reasons.join(", "),
+            });
+        }
+    }
+
+    // Sort by confidence descending
+    matches.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+
+    Ok(matches)
+}
+
+pub fn resolve_skill_dependencies(skills: &[SkillMatch]) -> Vec<String> {
+    // Simple topological sort - for now just return in confidence order
+    // Future: Parse depends_on field from skill configs
+    skills.iter().map(|s| s.skill_id.clone()).collect()
+}
+
+pub async fn execute_skill_chain(
+    conn: &Connection,
+    client: &LiteLLMClient,
+    skill_ids: &[String],
+    initial_context: Option<&str>,
+) -> Result<MultiSkillResult, String> {
+    let start = Instant::now();
+    let mut results = Vec::new();
+    let mut combined_outputs = Vec::new();
+    let mut current_context = initial_context.map(String::from);
+
+    for skill_id in skill_ids {
+        let skill = skills_repo::get_skill(conn, skill_id)?;
+        let skill_start = Instant::now();
+
+        // Build context with previous output if chaining
+        let mut exec_context = build_context(conn, &skill)?;
+
+        // Add previous output to context if available
+        if let Some(ref prev_output) = current_context {
+            exec_context.documents.push(json!({
+                "type": "previous_skill_output",
+                "content": prev_output,
+            }));
+        }
+
+        // Execute skill
+        let action_config = skill.get_action_config().unwrap_or_default();
+        let action_type = action_config.action_type.as_deref().unwrap_or("summarize");
+
+        let result = match action_type {
+            "summarize" => crate::skills::execute_summarize_ai(client, &exec_context, &action_config).await,
+            "draft_message" => crate::skills::execute_draft_ai(client, &exec_context, &action_config).await,
+            "create_tasks" => crate::skills::execute_create_tasks_ai(client, &exec_context, &action_config).await,
+            "analyze" => crate::skills::execute_analyze_ai(client, &exec_context, &action_config).await,
+            "custom" => {
+                let ctx_config = skill.get_context_config().unwrap_or_default();
+                crate::skills::execute_custom_ai(client, &exec_context, &action_config, &ctx_config).await
+            }
+            _ => Err(format!("Unknown action type: {}", action_type)),
+        };
+
+        let duration_ms = skill_start.elapsed().as_millis() as i64;
+
+        match result {
+            Ok((output, _pending)) => {
+                current_context = Some(output.clone());
+                combined_outputs.push(format!("## {}\n\n{}", skill.name, output));
+
+                results.push(SkillExecutionResult {
+                    skill_id: skill.id.clone(),
+                    skill_name: skill.name.clone(),
+                    status: "completed".to_string(),
+                    output: Some(output),
+                    error: None,
+                    duration_ms,
+                });
+            }
+            Err(e) => {
+                results.push(SkillExecutionResult {
+                    skill_id: skill.id.clone(),
+                    skill_name: skill.name.clone(),
+                    status: "failed".to_string(),
+                    output: None,
+                    error: Some(e.clone()),
+                    duration_ms,
+                });
+                // Continue with next skill even if one fails
+            }
+        }
+    }
+
+    let total_duration_ms = start.elapsed().as_millis() as i64;
+
+    Ok(MultiSkillResult {
+        results,
+        combined_output: if combined_outputs.is_empty() {
+            None
+        } else {
+            Some(combined_outputs.join("\n\n---\n\n"))
+        },
+        total_duration_ms,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

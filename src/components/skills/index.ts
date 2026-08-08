@@ -6,3 +6,7 @@ export { SkillEditorModal } from "./SkillEditorModal";
 export { SkillHistoryPanel } from "./SkillHistoryPanel";
 export { SkillApprovalModal } from "./SkillApprovalModal";
 export { ChatToSkillPreview } from "./ChatToSkillPreview";
+export { SkillImportWizard } from "./SkillImportWizard";
+export { SkillTrustSettings } from "./SkillTrustSettings";
+export { FilePreviewCard } from "./FilePreviewCard";
+export { SyncDiffView } from "./SyncDiffView";

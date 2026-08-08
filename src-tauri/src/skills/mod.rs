@@ -1,5 +1,6 @@
 pub mod approval;
 pub mod builtin;
+pub mod chat_extract;
 pub mod cron;
 pub mod dispatcher;
 pub mod events;
@@ -7,6 +8,8 @@ pub mod executor;
 pub mod folders;
 pub mod models;
 pub mod repository;
+pub mod sandbox;
+pub mod sync;
 
 pub use approval::*;
 pub use builtin::*;
@@ -17,3 +20,5 @@ pub use executor::*;
 pub use folders::*;
 pub use models::*;
 pub use repository::*;
+pub use sandbox::*;
+pub use sync::*;

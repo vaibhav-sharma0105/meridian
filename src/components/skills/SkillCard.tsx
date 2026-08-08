@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Play,
   MoreHorizontal,
@@ -10,16 +10,24 @@ import {
   Edit,
   BarChart2,
   Download,
+  RefreshCw,
+  Shield,
+  ShieldCheck,
+  ShieldAlert,
+  GitBranch,
+  ArrowUpCircle,
 } from "lucide-react";
 import type { Skill } from "@/lib/tauri";
 import { exportSkillToDirectory } from "@/lib/tauri";
 import { skillToSkillFile } from "@/lib/skill-format";
-import { useToggleSkillEnabled, useRunSkillManually, useDeleteSkill, useCloneSkill } from "@/hooks/useSkills";
+import { useToggleSkillEnabled, useRunSkillManually, useDeleteSkill, useCloneSkill, useCheckSkillUpdates } from "@/hooks/useSkills";
 
 interface SkillCardProps {
   skill: Skill;
   onEdit: (skill: Skill) => void;
   onViewHistory: (skill: Skill) => void;
+  onSync?: (skill: Skill) => void;
+  onManageTrust?: (skill: Skill) => void;
 }
 
 const triggerIcons: Record<string, typeof Clock> = {
@@ -34,12 +42,28 @@ const triggerLabels: Record<string, string> = {
   manual: "Manual",
 };
 
-export function SkillCard({ skill, onEdit, onViewHistory }: SkillCardProps) {
+export function SkillCard({ skill, onEdit, onViewHistory, onSync, onManageTrust }: SkillCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [hasUpdates, setHasUpdates] = useState<boolean | null>(null);
   const toggleEnabled = useToggleSkillEnabled();
   const runManually = useRunSkillManually();
   const deleteSkill = useDeleteSkill();
   const cloneSkill = useCloneSkill();
+  const checkUpdates = useCheckSkillUpdates();
+
+  const isSynced = !!skill.sync_source;
+  const trustState = skill.trust_state || "untrusted";
+
+  // Check for updates on synced skills
+  useEffect(() => {
+    if (isSynced && hasUpdates === null) {
+      checkUpdates.mutateAsync(skill.id)
+        .then((result) => {
+          setHasUpdates(result.status === "update_available" || result.status === "conflict");
+        })
+        .catch(() => setHasUpdates(false));
+    }
+  }, [skill.id, isSynced]);
 
   const TriggerIcon = triggerIcons[skill.trigger_type] || Hand;
   const triggerLabel = triggerLabels[skill.trigger_type] || skill.trigger_type;
@@ -94,6 +118,30 @@ export function SkillCard({ skill, onEdit, onViewHistory }: SkillCardProps) {
             {skill.shared && (
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
                 Shared
+              </span>
+            )}
+            {isSynced && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center gap-0.5">
+                <GitBranch className="w-2.5 h-2.5" />
+                Synced
+              </span>
+            )}
+            {trustState === "trusted" && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 flex items-center gap-0.5">
+                <ShieldCheck className="w-2.5 h-2.5" />
+                Trusted
+              </span>
+            )}
+            {trustState === "untrusted" && isSynced && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 flex items-center gap-0.5">
+                <ShieldAlert className="w-2.5 h-2.5" />
+                Untrusted
+              </span>
+            )}
+            {hasUpdates && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 flex items-center gap-0.5">
+                <ArrowUpCircle className="w-2.5 h-2.5" />
+                Update available
               </span>
             )}
           </div>
@@ -200,6 +248,30 @@ export function SkillCard({ skill, onEdit, onViewHistory }: SkillCardProps) {
                     <Download className="w-3.5 h-3.5" />
                     Export
                   </button>
+                  {isSynced && onSync && (
+                    <button
+                      onClick={() => {
+                        onSync(skill);
+                        setMenuOpen(false);
+                      }}
+                      className="w-full px-3 py-1.5 text-left text-[13px] hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center gap-2"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      Check for Updates
+                    </button>
+                  )}
+                  {isSynced && onManageTrust && (
+                    <button
+                      onClick={() => {
+                        onManageTrust(skill);
+                        setMenuOpen(false);
+                      }}
+                      className="w-full px-3 py-1.5 text-left text-[13px] hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center gap-2"
+                    >
+                      <Shield className="w-3.5 h-3.5" />
+                      Manage Trust
+                    </button>
+                  )}
                   {!skill.is_builtin && (
                     <>
                       <hr className="my-1 border-zinc-200 dark:border-zinc-700" />

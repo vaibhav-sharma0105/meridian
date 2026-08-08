@@ -1,4 +1,4 @@
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, Row};
 use uuid::Uuid;
 
 use super::models::{
@@ -7,6 +7,45 @@ use super::models::{
 };
 
 // ─── Skill CRUD ──────────────────────────────────────────────────────────────
+
+const SKILL_SELECT_COLUMNS: &str = "id, name, description, trigger_type, trigger_config, context_config, action_config,
+         approval_mode, autonomy_mode, enabled, shared, owner_id, category, icon, tags, next_run_at, cloned_from_id,
+         is_builtin, sync_source, sync_path, sync_commit, last_sync_check, content_hash,
+         trust_state, trust_granted_at, network_mode, network_allowlist, created_at, updated_at";
+
+fn skill_from_row(row: &Row) -> rusqlite::Result<Skill> {
+    Ok(Skill {
+        id: row.get(0)?,
+        name: row.get(1)?,
+        description: row.get(2)?,
+        trigger_type: row.get(3)?,
+        trigger_config: row.get(4)?,
+        context_config: row.get(5)?,
+        action_config: row.get(6)?,
+        approval_mode: row.get(7)?,
+        autonomy_mode: row.get(8)?,
+        enabled: row.get::<_, i32>(9)? != 0,
+        shared: row.get::<_, i32>(10)? != 0,
+        owner_id: row.get(11)?,
+        category: row.get(12)?,
+        icon: row.get(13)?,
+        tags: row.get(14)?,
+        next_run_at: row.get(15)?,
+        cloned_from_id: row.get(16)?,
+        is_builtin: row.get::<_, i32>(17)? != 0,
+        sync_source: row.get(18)?,
+        sync_path: row.get(19)?,
+        sync_commit: row.get(20)?,
+        last_sync_check: row.get(21)?,
+        content_hash: row.get(22)?,
+        trust_state: row.get(23)?,
+        trust_granted_at: row.get(24)?,
+        network_mode: row.get(25)?,
+        network_allowlist: row.get(26)?,
+        created_at: row.get(27)?,
+        updated_at: row.get(28)?,
+    })
+}
 
 pub fn create_skill(conn: &Connection, input: &CreateSkillInput) -> Result<Skill, String> {
     let id = Uuid::new_v4().to_string();
@@ -59,45 +98,15 @@ pub fn create_skill(conn: &Connection, input: &CreateSkillInput) -> Result<Skill
 
 pub fn get_skill(conn: &Connection, id: &str) -> Result<Skill, String> {
     conn.query_row(
-        "SELECT id, name, description, trigger_type, trigger_config, context_config, action_config,
-         approval_mode, autonomy_mode, enabled, shared, owner_id, category, icon, tags, next_run_at, cloned_from_id,
-         is_builtin, created_at, updated_at
-         FROM skills WHERE id = ?1",
+        &format!("SELECT {} FROM skills WHERE id = ?1", SKILL_SELECT_COLUMNS),
         params![id],
-        |row| {
-            Ok(Skill {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                description: row.get(2)?,
-                trigger_type: row.get(3)?,
-                trigger_config: row.get(4)?,
-                context_config: row.get(5)?,
-                action_config: row.get(6)?,
-                approval_mode: row.get(7)?,
-                autonomy_mode: row.get(8)?,
-                enabled: row.get::<_, i32>(9)? != 0,
-                shared: row.get::<_, i32>(10)? != 0,
-                owner_id: row.get(11)?,
-                category: row.get(12)?,
-                icon: row.get(13)?,
-                tags: row.get(14)?,
-                next_run_at: row.get(15)?,
-                cloned_from_id: row.get(16)?,
-                is_builtin: row.get::<_, i32>(17)? != 0,
-                created_at: row.get(18)?,
-                updated_at: row.get(19)?,
-            })
-        },
+        skill_from_row,
     )
     .map_err(|e| format!("Skill not found: {}", e))
 }
 
 pub fn list_skills(conn: &Connection, filters: &SkillFilters) -> Result<Vec<Skill>, String> {
-    let mut sql = String::from(
-        "SELECT id, name, description, trigger_type, trigger_config, context_config, action_config,
-         approval_mode, autonomy_mode, enabled, shared, owner_id, category, icon, tags, next_run_at, cloned_from_id,
-         is_builtin, created_at, updated_at FROM skills WHERE 1=1",
-    );
+    let mut sql = format!("SELECT {} FROM skills WHERE 1=1", SKILL_SELECT_COLUMNS);
     let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
 
     if let Some(enabled) = filters.enabled {
@@ -133,30 +142,7 @@ pub fn list_skills(conn: &Connection, filters: &SkillFilters) -> Result<Vec<Skil
 
     let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
     let skills = stmt
-        .query_map(params_refs.as_slice(), |row| {
-            Ok(Skill {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                description: row.get(2)?,
-                trigger_type: row.get(3)?,
-                trigger_config: row.get(4)?,
-                context_config: row.get(5)?,
-                action_config: row.get(6)?,
-                approval_mode: row.get(7)?,
-                autonomy_mode: row.get(8)?,
-                enabled: row.get::<_, i32>(9)? != 0,
-                shared: row.get::<_, i32>(10)? != 0,
-                owner_id: row.get(11)?,
-                category: row.get(12)?,
-                icon: row.get(13)?,
-                tags: row.get(14)?,
-                next_run_at: row.get(15)?,
-                cloned_from_id: row.get(16)?,
-                is_builtin: row.get::<_, i32>(17)? != 0,
-                created_at: row.get(18)?,
-                updated_at: row.get(19)?,
-            })
-        })
+        .query_map(params_refs.as_slice(), skill_from_row)
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
@@ -258,41 +244,14 @@ pub fn delete_skill(conn: &Connection, id: &str) -> Result<(), String> {
 
 pub fn get_due_scheduled_skills(conn: &Connection) -> Result<Vec<Skill>, String> {
     let now = chrono::Utc::now().to_rfc3339();
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, name, description, trigger_type, trigger_config, context_config, action_config,
-             approval_mode, autonomy_mode, enabled, shared, owner_id, category, icon, tags, next_run_at, cloned_from_id,
-             is_builtin, created_at, updated_at
-             FROM skills
-             WHERE trigger_type = 'schedule' AND enabled = 1 AND next_run_at <= ?1",
-        )
-        .map_err(|e| e.to_string())?;
+    let sql = format!(
+        "SELECT {} FROM skills WHERE trigger_type = 'schedule' AND enabled = 1 AND next_run_at <= ?1",
+        SKILL_SELECT_COLUMNS
+    );
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
 
     let skills = stmt
-        .query_map(params![now], |row| {
-            Ok(Skill {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                description: row.get(2)?,
-                trigger_type: row.get(3)?,
-                trigger_config: row.get(4)?,
-                context_config: row.get(5)?,
-                action_config: row.get(6)?,
-                approval_mode: row.get(7)?,
-                autonomy_mode: row.get(8)?,
-                enabled: row.get::<_, i32>(9)? != 0,
-                shared: row.get::<_, i32>(10)? != 0,
-                owner_id: row.get(11)?,
-                category: row.get(12)?,
-                icon: row.get(13)?,
-                tags: row.get(14)?,
-                next_run_at: row.get(15)?,
-                cloned_from_id: row.get(16)?,
-                is_builtin: row.get::<_, i32>(17)? != 0,
-                created_at: row.get(18)?,
-                updated_at: row.get(19)?,
-            })
-        })
+        .query_map(params![now], skill_from_row)
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
@@ -301,41 +260,14 @@ pub fn get_due_scheduled_skills(conn: &Connection) -> Result<Vec<Skill>, String>
 }
 
 pub fn get_skills_for_event(conn: &Connection, event_type: &str) -> Result<Vec<Skill>, String> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, name, description, trigger_type, trigger_config, context_config, action_config,
-             approval_mode, autonomy_mode, enabled, shared, owner_id, category, icon, tags, next_run_at, cloned_from_id,
-             is_builtin, created_at, updated_at
-             FROM skills
-             WHERE trigger_type = 'event' AND enabled = 1",
-        )
-        .map_err(|e| e.to_string())?;
+    let sql = format!(
+        "SELECT {} FROM skills WHERE trigger_type = 'event' AND enabled = 1",
+        SKILL_SELECT_COLUMNS
+    );
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
 
     let all_skills = stmt
-        .query_map([], |row| {
-            Ok(Skill {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                description: row.get(2)?,
-                trigger_type: row.get(3)?,
-                trigger_config: row.get(4)?,
-                context_config: row.get(5)?,
-                action_config: row.get(6)?,
-                approval_mode: row.get(7)?,
-                autonomy_mode: row.get(8)?,
-                enabled: row.get::<_, i32>(9)? != 0,
-                shared: row.get::<_, i32>(10)? != 0,
-                owner_id: row.get(11)?,
-                category: row.get(12)?,
-                icon: row.get(13)?,
-                tags: row.get(14)?,
-                next_run_at: row.get(15)?,
-                cloned_from_id: row.get(16)?,
-                is_builtin: row.get::<_, i32>(17)? != 0,
-                created_at: row.get(18)?,
-                updated_at: row.get(19)?,
-            })
-        })
+        .query_map([], skill_from_row)
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
@@ -607,6 +539,176 @@ pub fn get_skill_stats(conn: &Connection, skill_id: &str) -> Result<SkillStats, 
     })
 }
 
+// ─── Trust Management ────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SkillTrustInfo {
+    pub skill_id: String,
+    pub trust_state: String,
+    pub trust_granted_at: Option<String>,
+    pub network_mode: String,
+    pub network_allowlist: Option<Vec<String>>,
+    pub content_hash: Option<String>,
+}
+
+pub fn get_trust_info(conn: &Connection, skill_id: &str) -> Result<SkillTrustInfo, String> {
+    let result: (Option<String>, Option<String>, Option<String>, Option<String>, Option<String>) = conn
+        .query_row(
+            "SELECT trust_state, trust_granted_at, network_mode, network_allowlist, content_hash
+             FROM skills WHERE id = ?1",
+            params![skill_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+        )
+        .map_err(|e| format!("Skill not found: {}", e))?;
+
+    let allowlist: Option<Vec<String>> = result.3.and_then(|s| serde_json::from_str(&s).ok());
+
+    Ok(SkillTrustInfo {
+        skill_id: skill_id.to_string(),
+        trust_state: result.0.unwrap_or_else(|| "untrusted".to_string()),
+        trust_granted_at: result.1,
+        network_mode: result.2.unwrap_or_else(|| "none".to_string()),
+        network_allowlist: allowlist,
+        content_hash: result.4,
+    })
+}
+
+pub fn grant_trust(
+    conn: &Connection,
+    skill_id: &str,
+    network_mode: Option<&str>,
+    network_allowlist: Option<&[String]>,
+) -> Result<(), String> {
+    let now = chrono::Utc::now().to_rfc3339();
+    let mode = network_mode.unwrap_or("none");
+    let allowlist_json = network_allowlist.map(|list| serde_json::to_string(list).unwrap_or_default());
+
+    conn.execute(
+        "UPDATE skills SET
+            trust_state = 'trusted',
+            trust_granted_at = ?2,
+            network_mode = ?3,
+            network_allowlist = ?4,
+            updated_at = ?2
+         WHERE id = ?1",
+        params![skill_id, now, mode, allowlist_json],
+    )
+    .map_err(|e| format!("Failed to grant trust: {}", e))?;
+
+    Ok(())
+}
+
+pub fn revoke_trust(conn: &Connection, skill_id: &str, reason: Option<&str>) -> Result<(), String> {
+    let now = chrono::Utc::now().to_rfc3339();
+
+    conn.execute(
+        "UPDATE skills SET
+            trust_state = 'revoked',
+            trust_granted_at = NULL,
+            updated_at = ?2
+         WHERE id = ?1",
+        params![skill_id, now],
+    )
+    .map_err(|e| format!("Failed to revoke trust: {}", e))?;
+
+    // Record revocation reason in audit log if provided
+    if let Some(_reason) = reason {
+        // TODO: Add to audit log
+    }
+
+    Ok(())
+}
+
+pub fn check_and_auto_revoke(conn: &Connection, skill_id: &str, new_content_hash: &str) -> Result<bool, String> {
+    let trust_info = get_trust_info(conn, skill_id)?;
+
+    // Only check trusted skills
+    if trust_info.trust_state != "trusted" {
+        return Ok(false);
+    }
+
+    // Check if content hash changed
+    if let Some(old_hash) = trust_info.content_hash {
+        if old_hash != new_content_hash {
+            // Content changed, auto-revoke trust
+            revoke_trust(conn, skill_id, Some("content_changed"))?;
+
+            // Update the content hash
+            let now = chrono::Utc::now().to_rfc3339();
+            conn.execute(
+                "UPDATE skills SET content_hash = ?2, updated_at = ?3 WHERE id = ?1",
+                params![skill_id, new_content_hash, now],
+            )
+            .map_err(|e| e.to_string())?;
+
+            return Ok(true); // Trust was revoked
+        }
+    }
+
+    Ok(false) // No revocation needed
+}
+
+pub fn is_trusted(conn: &Connection, skill_id: &str) -> Result<bool, String> {
+    let state: Option<String> = conn
+        .query_row(
+            "SELECT trust_state FROM skills WHERE id = ?1",
+            params![skill_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| format!("Skill not found: {}", e))?;
+
+    Ok(state.as_deref() == Some("trusted"))
+}
+
+pub fn update_network_permissions(
+    conn: &Connection,
+    skill_id: &str,
+    network_mode: &str,
+    allowlist: Option<&[String]>,
+) -> Result<(), String> {
+    let now = chrono::Utc::now().to_rfc3339();
+    let allowlist_json = allowlist.map(|list| serde_json::to_string(list).unwrap_or_default());
+
+    // Changing network mode to 'full' from something else requires re-trust
+    let current_mode: Option<String> = conn
+        .query_row(
+            "SELECT network_mode FROM skills WHERE id = ?1",
+            params![skill_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let current = current_mode.as_deref().unwrap_or("none");
+    let is_escalation = current != "full" && network_mode == "full";
+
+    if is_escalation {
+        // Auto-revoke trust on network escalation
+        conn.execute(
+            "UPDATE skills SET
+                network_mode = ?2,
+                network_allowlist = ?3,
+                trust_state = 'untrusted',
+                trust_granted_at = NULL,
+                updated_at = ?4
+             WHERE id = ?1",
+            params![skill_id, network_mode, allowlist_json, now],
+        )
+        .map_err(|e| e.to_string())?;
+    } else {
+        conn.execute(
+            "UPDATE skills SET
+                network_mode = ?2,
+                network_allowlist = ?3,
+                updated_at = ?4
+             WHERE id = ?1",
+            params![skill_id, network_mode, allowlist_json, now],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -633,6 +735,15 @@ mod tests {
                 tags TEXT,
                 next_run_at TEXT,
                 cloned_from_id TEXT,
+                sync_source TEXT,
+                sync_path TEXT,
+                sync_commit TEXT,
+                last_sync_check TEXT,
+                content_hash TEXT,
+                trust_state TEXT DEFAULT 'untrusted',
+                trust_granted_at TEXT,
+                network_mode TEXT DEFAULT 'none',
+                network_allowlist TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );

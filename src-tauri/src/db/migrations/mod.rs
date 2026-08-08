@@ -17,6 +17,7 @@ pub mod v016_team_sync;
 pub mod v017_expertise_learning;
 pub mod v018_integration_visibility;
 pub mod v019_phase8_completion;
+pub mod v020_skills_automation;
 
 pub struct Migration {
     pub version: i32,
@@ -100,6 +101,10 @@ pub fn get_all_migrations() -> Vec<Migration> {
         Migration {
             version: 19,
             sql: v019_phase8_completion::SQL,
+        },
+        Migration {
+            version: 20,
+            sql: v020_skills_automation::SQL,
         },
     ]
 }

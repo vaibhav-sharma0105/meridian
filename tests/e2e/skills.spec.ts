@@ -11,6 +11,7 @@ const MOCK_SKILLS = [
     context_config: JSON.stringify({ system_prompt: "# Instructions\n\nSummarize the week's progress using {{tasks}} and {{meetings}}." }),
     action_config: JSON.stringify({ action_type: "summarize" }),
     approval_mode: "notify",
+    autonomy_mode: null,
     enabled: true,
     shared: false,
     owner_id: null,
@@ -20,6 +21,16 @@ const MOCK_SKILLS = [
     next_run_at: "2026-07-21T09:00:00Z",
     cloned_from_id: null,
     is_builtin: true,
+    // Phase 9 fields
+    sync_source: null,
+    sync_path: null,
+    sync_commit: null,
+    last_sync_check: null,
+    content_hash: null,
+    trust_state: null,
+    trust_granted_at: null,
+    network_mode: null,
+    network_allowlist: null,
     created_at: "2026-07-01T00:00:00Z",
     updated_at: "2026-07-01T00:00:00Z",
   },
@@ -32,6 +43,7 @@ const MOCK_SKILLS = [
     context_config: null,
     action_config: JSON.stringify({ action_type: "draft_message" }),
     approval_mode: "approve_first",
+    autonomy_mode: null,
     enabled: true,
     shared: false,
     owner_id: null,
@@ -41,8 +53,50 @@ const MOCK_SKILLS = [
     next_run_at: null,
     cloned_from_id: null,
     is_builtin: false,
+    // Phase 9 fields
+    sync_source: null,
+    sync_path: null,
+    sync_commit: null,
+    last_sync_check: null,
+    content_hash: null,
+    trust_state: null,
+    trust_granted_at: null,
+    network_mode: null,
+    network_allowlist: null,
     created_at: "2026-07-02T00:00:00Z",
     updated_at: "2026-07-02T00:00:00Z",
+  },
+  {
+    id: "skill-3",
+    name: "GitHub Watcher",
+    description: "Watch GitHub for new PRs",
+    trigger_type: "schedule",
+    trigger_config: JSON.stringify({ cron: "0 */6 * * *" }),
+    context_config: null,
+    action_config: JSON.stringify({ action_type: "analyze" }),
+    approval_mode: "notify",
+    autonomy_mode: null,
+    enabled: true,
+    shared: false,
+    owner_id: null,
+    category: "custom",
+    icon: null,
+    tags: JSON.stringify(["github", "sync"]),
+    next_run_at: "2026-07-21T12:00:00Z",
+    cloned_from_id: null,
+    is_builtin: false,
+    // Phase 9 fields - synced skill
+    sync_source: "github:example/skills-repo",
+    sync_path: ".claude/skills/github-watcher",
+    sync_commit: "abc123",
+    last_sync_check: "2026-07-20T12:00:00Z",
+    content_hash: "def456",
+    trust_state: "trusted",
+    trust_granted_at: "2026-07-15T10:00:00Z",
+    network_mode: "allowlist",
+    network_allowlist: JSON.stringify(["api.github.com"]),
+    created_at: "2026-07-10T00:00:00Z",
+    updated_at: "2026-07-15T10:00:00Z",
   },
 ];
 
@@ -387,5 +441,66 @@ test.describe("Skills - YAML+MD Editor", () => {
       .click();
 
     await expect(page.getByText("Delete")).toBeVisible();
+  });
+});
+
+test.describe("Skills - Phase 9: Sync & Trust", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(
+      buildTauriMockScript({
+        get_projects: MOCK_PROJECTS,
+        list_skills: MOCK_SKILLS,
+        get_skill_runs: MOCK_SKILL_RUNS,
+        get_skill_stats: {
+          total_runs: 10,
+          completed_runs: 8,
+          failed_runs: 2,
+          success_rate: 0.8,
+          avg_duration_ms: 2500,
+          last_run_at: "2026-07-14T09:00:02Z",
+        },
+        check_skill_updates: { status: "up_to_date" },
+        list_integrations: [],
+      })
+    );
+    await page.goto("/");
+    await page.waitForSelector("text=Meridian", { timeout: 15000 });
+    await page.getByText("Skills", { exact: true }).first().click();
+  });
+
+  test("synced skill shows Synced badge", async ({ page }) => {
+    // Third skill (GitHub Watcher) is synced
+    await expect(page.getByText("Synced").first()).toBeVisible();
+  });
+
+  test("trusted skill shows Trusted badge", async ({ page }) => {
+    // Third skill (GitHub Watcher) is trusted
+    await expect(page.getByText("Trusted").first()).toBeVisible();
+  });
+
+  test("synced skill menu shows Check for Updates option", async ({ page }) => {
+    // Third skill (GitHub Watcher) is synced
+    await page.locator(".space-y-3 > div").nth(2)
+      .locator("button")
+      .filter({ has: page.locator("svg") })
+      .last()
+      .click();
+
+    await expect(page.getByText("Check for Updates")).toBeVisible();
+  });
+
+  test("synced skill menu shows Manage Trust option", async ({ page }) => {
+    // Third skill (GitHub Watcher) is synced
+    await page.locator(".space-y-3 > div").nth(2)
+      .locator("button")
+      .filter({ has: page.locator("svg") })
+      .last()
+      .click();
+
+    await expect(page.getByText("Manage Trust")).toBeVisible();
+  });
+
+  test("Import from GitHub button is visible", async ({ page }) => {
+    await expect(page.getByRole("button", { name: /import from github/i })).toBeVisible();
   });
 });

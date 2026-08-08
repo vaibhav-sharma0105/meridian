@@ -1140,6 +1140,18 @@ export interface Skill {
   next_run_at: string | null;
   cloned_from_id: string | null;
   is_builtin: boolean;
+  // Phase 9: Sync fields
+  sync_source: string | null;
+  sync_path: string | null;
+  sync_commit: string | null;
+  last_sync_check: string | null;
+  content_hash: string | null;
+  // Phase 9: Trust fields
+  trust_state: string | null;
+  trust_granted_at: string | null;
+  network_mode: string | null;
+  network_allowlist: string | null;
+  // Timestamps
   created_at: string;
   updated_at: string;
 }
@@ -1347,6 +1359,69 @@ export const toggleFolderSkillEnabled = (folderName: string, enabled: boolean) =
 
 export const executeSkillScript = (folderName: string, scriptPath: string) =>
   invoke<string>("execute_skill_script", { folderName, scriptPath });
+
+// ─── Skills: GitHub Sync & Trust (Phase 9) ────────────────────────────────────
+
+export interface ImportableSkill {
+  name: string;
+  path: string;
+  description: string | null;
+}
+
+export interface SyncResult {
+  skill_id: string;
+  status: string;
+  new_content: string | null;
+  diff_preview: string | null;
+}
+
+export interface SkillTrustState {
+  skill_id: string;
+  trust_state: string;
+  trust_granted_at: string | null;
+  network_mode: string;
+  network_allowlist: string[];
+}
+
+export interface SandboxedExecutionResult {
+  success: boolean;
+  stdout: string;
+  stderr: string;
+  exit_code: number | null;
+  run_id: string;
+}
+
+export const listImportableSkills = (integrationId: string, owner: string, repo: string) =>
+  invoke<ImportableSkill[]>("list_importable_skills", { integrationId, owner, repo });
+
+export const importSkillFromRepo = (
+  integrationId: string,
+  skillPath: string,
+  localName?: string
+) => invoke<Skill>("import_skill_from_repo", { integrationId, skillPath, localName });
+
+export const checkSkillUpdates = (skillId: string) =>
+  invoke<{ status: string; new_commit?: string }>("check_skill_updates", { skillId });
+
+export const syncSkill = (
+  skillId: string,
+  strategy: "keep_local" | "use_remote" | "manual"
+) => invoke<SyncResult>("sync_skill", { skillId, strategy });
+
+export const grantSkillTrust = (
+  skillId: string,
+  networkMode: "none" | "allowlist" | "full",
+  allowlist?: string[]
+) => invoke<void>("grant_skill_trust", { skillId, networkMode, allowlist });
+
+export const revokeSkillTrust = (skillId: string) =>
+  invoke<void>("revoke_skill_trust", { skillId });
+
+export const getSkillTrustState = (skillId: string) =>
+  invoke<SkillTrustState>("get_skill_trust_state", { skillId });
+
+export const executeSkillSandboxed = (skillId: string, scriptPath: string, inputs?: Record<string, unknown>) =>
+  invoke<SandboxedExecutionResult>("execute_skill_sandboxed", { skillId, scriptPath, inputs });
 
 // ─── Integrations ─────────────────────────────────────────────────────────────
 

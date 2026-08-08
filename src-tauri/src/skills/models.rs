@@ -177,6 +177,18 @@ pub struct Skill {
     pub next_run_at: Option<String>,
     pub cloned_from_id: Option<String>,
     pub is_builtin: bool,
+    // Phase 9: Sync fields
+    pub sync_source: Option<String>,        // e.g., "github:owner/repo"
+    pub sync_path: Option<String>,          // Path in repo
+    pub sync_commit: Option<String>,        // Last synced commit SHA
+    pub last_sync_check: Option<String>,    // ISO timestamp
+    pub content_hash: Option<String>,       // SHA256 of skill content
+    // Phase 9: Trust fields
+    pub trust_state: Option<String>,        // "untrusted", "trusted", "revoked"
+    pub trust_granted_at: Option<String>,   // ISO timestamp
+    pub network_mode: Option<String>,       // "none", "allowlist", "full"
+    pub network_allowlist: Option<String>,  // JSON array of hosts
+    // Timestamps
     pub created_at: String,
     pub updated_at: String,
 }

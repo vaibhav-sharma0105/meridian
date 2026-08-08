@@ -161,3 +161,114 @@ export function useResetBuiltinSkills() {
     },
   });
 }
+
+// ─── Phase 9: GitHub Sync & Trust ─────────────────────────────────────────────
+
+export function useListImportableSkills() {
+  return useMutation({
+    mutationFn: ({ integrationId, owner, repo }: { integrationId: string; owner: string; repo: string }) =>
+      api.listImportableSkills(integrationId, owner, repo),
+  });
+}
+
+export function useImportSkillFromRepo() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      integrationId,
+      skillPath,
+      localName,
+    }: {
+      integrationId: string;
+      skillPath: string;
+      localName?: string;
+    }) => api.importSkillFromRepo(integrationId, skillPath, localName),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["skills"] });
+    },
+  });
+}
+
+export function useCheckSkillUpdates() {
+  return useMutation({
+    mutationFn: (skillId: string) => api.checkSkillUpdates(skillId),
+  });
+}
+
+export function useSyncSkill() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      skillId,
+      strategy,
+    }: {
+      skillId: string;
+      strategy: "keep_local" | "use_remote" | "manual";
+    }) => api.syncSkill(skillId, strategy),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ["skill", result.skill_id] });
+      qc.invalidateQueries({ queryKey: ["skills"] });
+    },
+  });
+}
+
+export function useGrantSkillTrust() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      skillId,
+      networkMode,
+      allowlist,
+    }: {
+      skillId: string;
+      networkMode: "none" | "allowlist" | "full";
+      allowlist?: string[];
+    }) => api.grantSkillTrust(skillId, networkMode, allowlist),
+    onSuccess: (_, { skillId }) => {
+      qc.invalidateQueries({ queryKey: ["skill", skillId] });
+      qc.invalidateQueries({ queryKey: ["skill-trust", skillId] });
+    },
+  });
+}
+
+export function useRevokeSkillTrust() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (skillId: string) => api.revokeSkillTrust(skillId),
+    onSuccess: (_, skillId) => {
+      qc.invalidateQueries({ queryKey: ["skill", skillId] });
+      qc.invalidateQueries({ queryKey: ["skill-trust", skillId] });
+    },
+  });
+}
+
+export function useSkillTrustState(skillId: string | null) {
+  return useQuery({
+    queryKey: ["skill-trust", skillId],
+    queryFn: () => (skillId ? api.getSkillTrustState(skillId) : null),
+    enabled: !!skillId,
+  });
+}
+
+export function useExecuteSkillSandboxed() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      skillId,
+      scriptPath,
+      inputs,
+    }: {
+      skillId: string;
+      scriptPath: string;
+      inputs?: Record<string, unknown>;
+    }) => api.executeSkillSandboxed(skillId, scriptPath, inputs),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ["skill-runs"] });
+    },
+  });
+}

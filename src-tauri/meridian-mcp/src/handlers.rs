@@ -343,6 +343,71 @@ fn handle_tools_list() -> Result<Value, RpcError> {
                 "required": ["skill_id"]
             }),
         },
+        ToolDefinition {
+            name: "queue_skill".to_string(),
+            description: "Queue a skill for async execution and return immediately. Use get_skill_result to poll for completion.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "skill_id": {
+                        "type": "string",
+                        "description": "The skill ID to queue"
+                    },
+                    "inputs": {
+                        "type": "object",
+                        "description": "Optional inputs to pass to the skill"
+                    },
+                    "priority": {
+                        "type": "integer",
+                        "description": "Execution priority (1-10, higher = more urgent)"
+                    }
+                },
+                "required": ["skill_id"]
+            }),
+        },
+        ToolDefinition {
+            name: "get_skill_result".to_string(),
+            description: "Get the result of a queued skill execution by run ID.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "run_id": {
+                        "type": "string",
+                        "description": "The skill run ID returned from queue_skill"
+                    }
+                },
+                "required": ["run_id"]
+            }),
+        },
+        ToolDefinition {
+            name: "bulk_create_tasks".to_string(),
+            description: "Create multiple tasks at once. Requires MCP write permission.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "project_id": {
+                        "type": "string",
+                        "description": "The project ID"
+                    },
+                    "tasks": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "title": { "type": "string" },
+                                "description": { "type": "string" },
+                                "assignee": { "type": "string" },
+                                "due_date": { "type": "string" },
+                                "priority": { "type": "integer" }
+                            },
+                            "required": ["title"]
+                        },
+                        "description": "Array of tasks to create"
+                    }
+                },
+                "required": ["project_id", "tasks"]
+            }),
+        },
         // Integration visibility tools (Phase 8)
         ToolDefinition {
             name: "list_integration_items".to_string(),
@@ -451,6 +516,9 @@ fn handle_tools_call(params: Option<Value>) -> Result<Value, RpcError> {
         "update_task" => tool_update_task(args),
         "create_meeting_note" => tool_create_meeting_note(args),
         "run_skill" => tool_run_skill(args),
+        "queue_skill" => tool_queue_skill(args),
+        "get_skill_result" => tool_get_skill_result(args),
+        "bulk_create_tasks" => tool_bulk_create_tasks(args),
         _ => Err(RpcError::invalid_params(&format!("unknown tool: {}", name))),
     }?;
 
@@ -1106,6 +1174,188 @@ fn tool_run_skill(args: Value) -> Result<Value, RpcError> {
         "run_id": run_id,
         "status": "pending",
         "message": "Skill queued for execution"
+    }))
+}
+
+fn tool_queue_skill(args: Value) -> Result<Value, RpcError> {
+    check_rate_limit()?;
+    let conn = get_connection()?;
+    check_permission(&conn, "run_skill")?;
+
+    let skill_id = args
+        .get("skill_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| RpcError::invalid_params("missing skill_id"))?;
+
+    let inputs = args.get("inputs").cloned().unwrap_or(json!({}));
+    let priority = args.get("priority").and_then(|v| v.as_i64()).unwrap_or(5);
+
+    // Check skill exists
+    let skill_name: Option<String> = conn
+        .query_row(
+            "SELECT name FROM skills WHERE id = ?1 AND enabled = 1",
+            [skill_id],
+            |row| row.get(0),
+        )
+        .ok();
+
+    if skill_name.is_none() {
+        return Err(RpcError::invalid_params("skill not found or disabled"));
+    }
+
+    // Create a skill run entry
+    let run_id = uuid::Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO skill_runs (id, skill_id, status, trigger_type, trigger_context, created_at)
+         VALUES (?1, ?2, 'pending', 'mcp', ?3, datetime('now'))",
+        rusqlite::params![run_id, skill_id, json!({"source": "mcp_queue", "inputs": inputs}).to_string()],
+    )
+    .map_err(|e| RpcError::internal_error(&e.to_string()))?;
+
+    // Insert into skill_queue for async processing
+    let queue_id = uuid::Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO skill_queue (id, skill_id, run_id, inputs, priority, status, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, 'pending', datetime('now'))",
+        rusqlite::params![queue_id, skill_id, run_id, inputs.to_string(), priority],
+    )
+    .map_err(|e| RpcError::internal_error(&e.to_string()))?;
+
+    log_mcp_action(&conn, "mcp_queue_skill", "skill", skill_id, &format!("Queued: {}", run_id));
+
+    Ok(json!({
+        "success": true,
+        "run_id": run_id,
+        "queue_id": queue_id,
+        "skill_name": skill_name,
+        "status": "pending",
+        "message": "Skill queued for async execution. Use get_skill_result to check status."
+    }))
+}
+
+fn tool_get_skill_result(args: Value) -> Result<Value, RpcError> {
+    let conn = get_connection()?;
+
+    let run_id = args
+        .get("run_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| RpcError::invalid_params("missing run_id"))?;
+
+    let result: Result<(String, String, Option<String>, Option<String>, Option<String>, Option<i64>), _> = conn
+        .query_row(
+            "SELECT sr.status, s.name, sr.output, sr.error, sr.completed_at, sr.duration_ms
+             FROM skill_runs sr
+             JOIN skills s ON sr.skill_id = s.id
+             WHERE sr.id = ?1",
+            [run_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?)),
+        );
+
+    match result {
+        Ok((status, skill_name, output, error, completed_at, duration_ms)) => {
+            Ok(json!({
+                "run_id": run_id,
+                "skill_name": skill_name,
+                "status": status,
+                "output": output,
+                "error": error,
+                "completed_at": completed_at,
+                "duration_ms": duration_ms,
+                "is_complete": status == "completed" || status == "failed"
+            }))
+        }
+        Err(_) => Err(RpcError::invalid_params("skill run not found")),
+    }
+}
+
+fn tool_bulk_create_tasks(args: Value) -> Result<Value, RpcError> {
+    check_rate_limit()?;
+    let conn = get_connection()?;
+    check_permission(&conn, "create_task")?;
+
+    let project_id = args
+        .get("project_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| RpcError::invalid_params("missing project_id"))?;
+
+    let tasks = args
+        .get("tasks")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| RpcError::invalid_params("missing or invalid tasks array"))?;
+
+    if tasks.is_empty() {
+        return Err(RpcError::invalid_params("tasks array is empty"));
+    }
+
+    if tasks.len() > 50 {
+        return Err(RpcError::invalid_params("maximum 50 tasks per request"));
+    }
+
+    // Governance check
+    let action_config = serde_json::to_string(&args).unwrap_or_default();
+    if let Some(approval_id) = check_governance_approval(&conn, ActionType::Create, "mcp:bulk_create_tasks", &action_config)? {
+        return Ok(json!({
+            "success": false,
+            "queued_for_approval": true,
+            "approval_id": approval_id,
+            "message": "Bulk task creation requires approval. Check the Governance panel."
+        }));
+    }
+
+    let mut created_tasks = Vec::new();
+    let mut errors = Vec::new();
+
+    for (idx, task_input) in tasks.iter().enumerate() {
+        let title = task_input.get("title").and_then(|v| v.as_str());
+
+        if title.is_none() {
+            errors.push(json!({
+                "index": idx,
+                "error": "missing title"
+            }));
+            continue;
+        }
+
+        let input = CreateTaskInput {
+            project_id: project_id.to_string(),
+            meeting_id: None,
+            title: title.unwrap().to_string(),
+            description: task_input.get("description").and_then(|v| v.as_str()).map(String::from),
+            assignee: task_input.get("assignee").and_then(|v| v.as_str()).map(String::from),
+            due_date: task_input.get("due_date").and_then(|v| v.as_str()).map(String::from),
+            priority: task_input.get("priority").and_then(|v| v.as_i64()).map(|p| p as i32),
+            source: Some("mcp_bulk".to_string()),
+            source_id: None,
+        };
+
+        match repositories::tasks::create_task(&conn, &input) {
+            Ok(task) => created_tasks.push(json!({
+                "id": task.id,
+                "title": task.title,
+                "index": idx
+            })),
+            Err(e) => errors.push(json!({
+                "index": idx,
+                "title": title,
+                "error": e
+            })),
+        }
+    }
+
+    log_mcp_action(
+        &conn,
+        "mcp_bulk_create_tasks",
+        "project",
+        project_id,
+        &format!("Created {} tasks, {} errors", created_tasks.len(), errors.len()),
+    );
+
+    Ok(json!({
+        "success": errors.is_empty(),
+        "created_count": created_tasks.len(),
+        "error_count": errors.len(),
+        "created_tasks": created_tasks,
+        "errors": errors
     }))
 }
 

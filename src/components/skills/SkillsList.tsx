@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Plus, Search, Upload, AlertTriangle, Loader2 } from "lucide-react";
+import { Plus, Search, Upload, AlertTriangle, Loader2, Download } from "lucide-react";
 import type { Skill, SkillFolder } from "@/lib/tauri";
 import { pickFolderDialog, installSkillFolder, listSkillFolders } from "@/lib/tauri";
 import { useSkills } from "@/hooks/useSkills";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SkillCard } from "./SkillCard";
 import { SkillFolderCard } from "./SkillFolderCard";
+import { SkillImportWizard } from "./SkillImportWizard";
 import EmptyState from "@/components/shared/EmptyState";
 
 const CATEGORIES = [
@@ -20,12 +21,16 @@ interface SkillsListProps {
   onCreateSkill: () => void;
   onEditSkill: (skill: Skill) => void;
   onViewHistory: (skill: Skill) => void;
+  onSyncSkill?: (skill: Skill) => void;
+  onManageTrust?: (skill: Skill) => void;
 }
 
 export function SkillsList({
   onCreateSkill,
   onEditSkill,
   onViewHistory,
+  onSyncSkill,
+  onManageTrust,
 }: SkillsListProps) {
   const [category, setCategory] = useState<string | null>(null);
   const [showBuiltIn, setShowBuiltIn] = useState(true);
@@ -33,6 +38,7 @@ export function SkillsList({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [scriptWarning, setScriptWarning] = useState<{ path: string; hasScripts: boolean } | null>(null);
+  const [showImportWizard, setShowImportWizard] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: skills = [], isLoading } = useSkills({
@@ -133,6 +139,14 @@ export function SkillsList({
           </button>
 
           <button
+            onClick={() => setShowImportWizard(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            Import from GitHub
+          </button>
+
+          <button
             onClick={onCreateSkill}
             className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] bg-indigo-500 hover:bg-indigo-600 text-white rounded-md transition-colors"
           >
@@ -202,6 +216,8 @@ export function SkillsList({
                 skill={skill}
                 onEdit={onEditSkill}
                 onViewHistory={onViewHistory}
+                onSync={onSyncSkill}
+                onManageTrust={onManageTrust}
               />
             ))}
             {filteredFolders.map((folder) => (
@@ -245,6 +261,15 @@ export function SkillsList({
           </div>
         </div>
       )}
+
+      {/* Import from GitHub wizard */}
+      <SkillImportWizard
+        open={showImportWizard}
+        onClose={() => setShowImportWizard(false)}
+        onImported={() => {
+          queryClient.invalidateQueries({ queryKey: ["skills"] });
+        }}
+      />
     </div>
   );
 }

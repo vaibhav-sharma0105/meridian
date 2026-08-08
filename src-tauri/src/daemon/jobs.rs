@@ -313,6 +313,7 @@ pub fn process_job_sync(
         "poll_team_syncs" => process_poll_team_syncs_job(conn, &job.id),
         "compute_attention_items" => process_compute_attention_items_job(conn, &job.id),
         "cleanup_integration_cache" => process_cleanup_integration_cache_job(conn, &job.id),
+        "process_skill_queue" => process_skill_queue_job(conn, &job.id),
         _ => JobResult {
             success: false,
             chunks_embedded: None,
@@ -2466,6 +2467,118 @@ pub fn init_cache_cleanup_jobs(conn: &Connection) {
         .unwrap_or_default();
     if pending.is_empty() {
         schedule_next_cache_cleanup(conn);
+    }
+}
+
+// ─── Skill Queue Processing ─────────────────────────────────────────────────
+
+pub fn process_skill_queue_job(conn: &Connection, job_id: &str) -> JobResult {
+    if let Err(e) = jobs_repo::update_job_status(conn, job_id, "running", None, None) {
+        return JobResult {
+            success: false,
+            chunks_embedded: None,
+            error: Some(format!("Failed to update job status: {}", e)),
+        };
+    }
+
+    // Get pending items from skill_queue ordered by priority
+    let pending_items: Vec<(String, String, String, Option<String>)> = conn
+        .prepare(
+            "SELECT id, skill_id, run_id, inputs FROM skill_queue
+             WHERE status = 'pending'
+             ORDER BY priority DESC, created_at ASC
+             LIMIT 10"
+        )
+        .and_then(|mut stmt| {
+            stmt.query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                ))
+            })
+            .and_then(|rows| rows.collect::<Result<Vec<_>, _>>())
+        })
+        .unwrap_or_default();
+
+    if pending_items.is_empty() {
+        // No pending items, schedule next check
+        schedule_next_skill_queue_check(conn);
+        return JobResult {
+            success: true,
+            chunks_embedded: Some(0),
+            error: None,
+        };
+    }
+
+    let mut processed = 0;
+    let mut errors = Vec::new();
+
+    for (queue_id, skill_id, run_id, _inputs) in pending_items {
+        // Mark as processing
+        let now = chrono::Utc::now().to_rfc3339();
+        let _ = conn.execute(
+            "UPDATE skill_queue SET status = 'processing', started_at = ?2 WHERE id = ?1",
+            rusqlite::params![queue_id, now],
+        );
+
+        // Create an execute_skill job for the daemon to process
+        let payload = serde_json::json!({
+            "skill_id": skill_id,
+            "run_id": run_id,
+        });
+
+        match jobs_repo::create_job(conn, "execute_skill", Some(&payload.to_string()), 5) {
+            Ok(_) => {
+                // Mark queue item as completed
+                let _ = conn.execute(
+                    "UPDATE skill_queue SET status = 'dispatched', completed_at = ?2 WHERE id = ?1",
+                    rusqlite::params![queue_id, chrono::Utc::now().to_rfc3339()],
+                );
+                processed += 1;
+            }
+            Err(e) => {
+                // Mark queue item as failed
+                let _ = conn.execute(
+                    "UPDATE skill_queue SET status = 'failed', error = ?2 WHERE id = ?1",
+                    rusqlite::params![queue_id, e.to_string()],
+                );
+                errors.push(format!("Queue item {}: {}", queue_id, e));
+            }
+        }
+    }
+
+    schedule_next_skill_queue_check(conn);
+
+    JobResult {
+        success: errors.is_empty(),
+        chunks_embedded: Some(processed),
+        error: if errors.is_empty() {
+            None
+        } else {
+            Some(errors.join("; "))
+        },
+    }
+}
+
+fn schedule_next_skill_queue_check(conn: &Connection) {
+    // Check skill queue every 30 seconds
+    let next_run = chrono::Utc::now() + chrono::Duration::seconds(30);
+    let _ = jobs_repo::create_job_scheduled(
+        conn,
+        "process_skill_queue",
+        None,
+        3,
+        &next_run.to_rfc3339(),
+    );
+}
+
+pub fn init_skill_queue_jobs(conn: &Connection) {
+    let pending = jobs_repo::get_pending_jobs_by_type(conn, "process_skill_queue")
+        .unwrap_or_default();
+    if pending.is_empty() {
+        schedule_next_skill_queue_check(conn);
     }
 }
 
