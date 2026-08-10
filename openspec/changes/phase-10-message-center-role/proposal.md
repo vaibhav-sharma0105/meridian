@@ -6,7 +6,7 @@ Skill execution results, integration digests, and important AI chat responses cu
 
 - **Message Center**: Dedicated sidebar view for skill results, integration digests, and pinned AI chat highlights
 - **Notification Integration**: Notifications show "View full result" link that opens Message Center
-- **Time-Based Retention**: Configurable retention (N days, default 30) for message center content
+- **Dual Retention Model**: AI context limited to recent N days (default 30); Message Center persists indefinitely for user browsing
 - **Role Inference**: Learn user role from patterns (task creation vs receiving, meeting running vs attending, PR authoring vs reviewing)
 - **Role Confirmation**: One-time prompt after ~1 week of usage to confirm inferred role
 - **Role Drift**: Continuous adaptation with periodic check-in when significant behavior shift detected
@@ -47,10 +47,30 @@ Skill execution results, integration digests, and important AI chat responses cu
 - AI chat responses > 500 words → suggest pinning with one-click option
 - Skill results marked `important: true` in skill config → auto-pinned
 
+### Dual Retention Model
+
+Message Center has two distinct retention concepts:
+
+| Concept | Scope | Default | Purpose |
+|---------|-------|---------|---------|
+| **AI Context Window** | Messages included in AI prompts | 30 days | Bound context to avoid noise and token bloat |
+| **Message Center Persistence** | Messages visible in UI/DB | Indefinite | Allow users to reference old results anytime |
+| **File Storage** | Files in `created_files/` | Follows message | Files persist as long as referencing message exists |
+
+**User-Configurable Options:**
+- `ai_context_days`: How far back AI considers messages (7 / 30 / 90 days)
+- `message_retention`: How long messages persist in Message Center (90 days / 1 year / forever)
+- `archive_old_files`: Option to move files older than N days to compressed archive (saves space, still accessible)
+
+**Cleanup Rules:**
+- Messages older than `message_retention` are soft-deleted (recoverable for 30 days, then hard-deleted)
+- Files only deleted when ALL referencing messages are hard-deleted
+- User can manually delete any message immediately (with confirmation for file cleanup)
+
 ### Storage Strategy
 - **References not copies**: Message Center stores reference to files, not duplicates; files live in `created_files/`
-- **File cleanup**: When message expires (retention exceeded), associated files in `created_files/` also cleaned up unless referenced by another message
-- **Size monitoring**: Show storage used by Message Center in settings; warn if > 500MB
+- **Lazy file cleanup**: Files only removed when no message references them AND user confirms or auto-cleanup threshold exceeded
+- **Size monitoring**: Show storage used by Message Center in settings; warn if > 500MB; suggest archival if > 1GB
 
 ### Role Inference Model
 
@@ -82,7 +102,7 @@ Skill execution results, integration digests, and important AI chat responses cu
 
 ## Impact
 
-- **Database**: New `message_center` table with content, type, retention metadata, `auto_pinned` flag; extend `pattern_observations` with time-of-day data; add `user_profile` table for role scores and productivity patterns
+- **Database**: New `message_center` table with content, type, `auto_pinned` flag, `deleted_at` (soft-delete), `ai_visible_until` (AI context cutoff); extend `pattern_observations` with time-of-day data; add `user_profile` table for role scores, productivity patterns, and retention preferences
 - **Backend**: New `src-tauri/src/messages/` module with routing rules and auto-pin logic; role inference engine with weighted scoring; productivity aggregation daemon job; file cleanup on message expiration
 - **Frontend**: MessageCenter sidebar view with search/filter; RoleConfirmation prompt component with manual selection; ProductivityInsights in settings; storage usage indicator
 - **MCP**: Add `create_report`, `get_reports`, `draft_message` tools
