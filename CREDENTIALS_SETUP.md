@@ -68,7 +68,7 @@ Click **Save** and ensure the app shows as **Active** under your app list.
 3. Fill in the details:
    - **Application name**: `Meridian`
    - **Homepage URL**: `http://localhost:1420`
-   - **Authorization callback URL**: `http://127.0.0.1:19280/callback`
+   - **Authorization callback URL**: `http://localhost:8765/oauth/callback`
 4. Click **Register application**
 
 ### Step 2 — Copy credentials

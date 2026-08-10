@@ -11,6 +11,8 @@ const JIRA_API_URL: &str = "https://api.atlassian.com/ex/jira";
 
 pub struct JiraProvider {
     client: Client,
+    pub client_id_override: Option<String>,
+    pub client_secret_override: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -74,19 +76,31 @@ impl JiraProvider {
     pub fn new() -> Self {
         Self {
             client: Client::new(),
+            client_id_override: None,
+            client_secret_override: None,
+        }
+    }
+
+    pub fn with_credentials(client_id: String, client_secret: String) -> Self {
+        Self {
+            client: Client::new(),
+            client_id_override: Some(client_id),
+            client_secret_override: Some(client_secret),
         }
     }
 
     fn get_client_id(&self) -> String {
-        std::env::var("JIRA_CLIENT_ID")
-            .or_else(|_| std::env::var("MERIDIAN_JIRA_CLIENT_ID"))
-            .unwrap_or_else(|_| "placeholder_jira_client_id".to_string())
+        self.client_id_override.clone()
+            .or_else(|| std::env::var("JIRA_CLIENT_ID").ok())
+            .or_else(|| std::env::var("MERIDIAN_JIRA_CLIENT_ID").ok())
+            .unwrap_or_else(|| "placeholder_jira_client_id".to_string())
     }
 
     fn get_client_secret(&self) -> String {
-        std::env::var("JIRA_CLIENT_SECRET")
-            .or_else(|_| std::env::var("MERIDIAN_JIRA_CLIENT_SECRET"))
-            .unwrap_or_else(|_| "placeholder_jira_client_secret".to_string())
+        self.client_secret_override.clone()
+            .or_else(|| std::env::var("JIRA_CLIENT_SECRET").ok())
+            .or_else(|| std::env::var("MERIDIAN_JIRA_CLIENT_SECRET").ok())
+            .unwrap_or_else(|| "placeholder_jira_client_secret".to_string())
     }
 
     async fn get_cloud_id(&self, access_token: &str) -> Result<String, String> {
@@ -163,6 +177,7 @@ impl Default for JiraProvider {
         Self::new()
     }
 }
+
 
 #[async_trait]
 impl IntegrationProvider for JiraProvider {

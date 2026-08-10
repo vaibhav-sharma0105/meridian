@@ -116,10 +116,14 @@ export function useStartOAuth() {
     mutationFn: ({
       integrationType,
       redirectUri,
+      clientId,
+      clientSecret,
     }: {
       integrationType: string;
       redirectUri: string;
-    }) => api.startOAuthFlow(integrationType, redirectUri),
+      clientId?: string;
+      clientSecret?: string;
+    }) => api.startOAuthFlow(integrationType, redirectUri, clientId, clientSecret),
   });
 }
 

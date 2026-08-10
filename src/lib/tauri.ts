@@ -1569,11 +1569,24 @@ export const updateIntegration = (input: UpdateIntegrationInput) =>
 export const deleteIntegration = (id: string) =>
   invoke<void>("delete_integration", { id });
 
-export const startOAuthFlow = (integrationType: string, redirectUri: string) =>
-  invoke<string>("start_oauth_flow", { integrationType, redirectUri });
+export const startOAuthFlow = (
+  integrationType: string,
+  redirectUri: string,
+  clientId?: string,
+  clientSecret?: string,
+) =>
+  invoke<string>("start_oauth_flow", { integrationType, redirectUri, clientId, clientSecret });
 
 export const handleOAuthCallback = (oauthState: string, code: string) =>
   invoke<Integration>("handle_oauth_callback", { oauthState, code });
+
+export type OAuthCallbackPayload =
+  | { success: true; code: string; state: string }
+  | { success: false; error: string };
+
+export const onOAuthCallbackReceived = (
+  callback: (payload: OAuthCallbackPayload) => void
+) => listen<OAuthCallbackPayload>("oauth_callback_received", (e) => callback(e.payload));
 
 export const refreshIntegrationToken = (id: string) =>
   invoke<Integration>("refresh_integration_token", { id });

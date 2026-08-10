@@ -11,6 +11,8 @@ const GITHUB_API_URL: &str = "https://api.github.com";
 
 pub struct GitHubProvider {
     client: Client,
+    pub client_id_override: Option<String>,
+    pub client_secret_override: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -47,19 +49,31 @@ impl GitHubProvider {
     pub fn new() -> Self {
         Self {
             client: Client::new(),
+            client_id_override: None,
+            client_secret_override: None,
+        }
+    }
+
+    pub fn with_credentials(client_id: String, client_secret: String) -> Self {
+        Self {
+            client: Client::new(),
+            client_id_override: Some(client_id),
+            client_secret_override: Some(client_secret),
         }
     }
 
     fn get_client_id(&self) -> String {
-        std::env::var("GITHUB_CLIENT_ID")
-            .or_else(|_| std::env::var("MERIDIAN_GITHUB_CLIENT_ID"))
-            .unwrap_or_else(|_| "placeholder_github_client_id".to_string())
+        self.client_id_override.clone()
+            .or_else(|| std::env::var("GITHUB_CLIENT_ID").ok())
+            .or_else(|| std::env::var("MERIDIAN_GITHUB_CLIENT_ID").ok())
+            .unwrap_or_else(|| "placeholder_github_client_id".to_string())
     }
 
     fn get_client_secret(&self) -> String {
-        std::env::var("GITHUB_CLIENT_SECRET")
-            .or_else(|_| std::env::var("MERIDIAN_GITHUB_CLIENT_SECRET"))
-            .unwrap_or_else(|_| "placeholder_github_client_secret".to_string())
+        self.client_secret_override.clone()
+            .or_else(|| std::env::var("GITHUB_CLIENT_SECRET").ok())
+            .or_else(|| std::env::var("MERIDIAN_GITHUB_CLIENT_SECRET").ok())
+            .unwrap_or_else(|| "placeholder_github_client_secret".to_string())
     }
 
     async fn fetch_assigned_issues(

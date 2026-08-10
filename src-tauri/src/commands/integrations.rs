@@ -112,26 +112,50 @@ pub fn delete_integration(state: State<AppState>, id: String) -> Result<(), Stri
 }
 
 #[tauri::command]
-pub fn start_oauth_flow(
+pub async fn start_oauth_flow(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
     integration_type: String,
     redirect_uri: String,
+    client_id: Option<String>,
+    client_secret: Option<String>,
 ) -> Result<String, String> {
-    let provider = get_provider(&integration_type)
-        .ok_or_else(|| format!("Unknown integration type: {}", integration_type))?;
+    // Build provider with user-supplied credentials when available so the
+    // auth URL contains the real client_id instead of the env-var placeholder.
+    let provider: Box<dyn crate::integrations::IntegrationProvider> =
+        match (integration_type.as_str(), client_id.clone(), client_secret.clone()) {
+            ("github", Some(id), Some(secret)) =>
+                Box::new(crate::integrations::github::GitHubProvider::with_credentials(id, secret)),
+            ("jira", Some(id), Some(secret)) =>
+                Box::new(crate::integrations::jira::JiraProvider::with_credentials(id, secret)),
+            _ => get_provider(&integration_type)
+                .ok_or_else(|| format!("Unknown integration type: {}", integration_type))?,
+        };
 
-    let state = OAuthHelper::generate_state();
-    let (auth_url, code_verifier) = provider.auth_url(&state, &redirect_uri)?;
+    let oauth_state_str = OAuthHelper::generate_state();
+    let (auth_url, code_verifier) = provider.auth_url(&oauth_state_str, &redirect_uri)?;
 
     let oauth_state = OAuthState {
         integration_type,
-        state: state.clone(),
+        state: oauth_state_str.clone(),
         code_verifier,
         redirect_uri,
+        client_id,
+        client_secret,
         created_at: chrono::Utc::now().to_rfc3339(),
     };
 
     OAuthHelper::store_oauth_state(oauth_state);
     OAuthHelper::cleanup_expired_states();
+
+    // Start the local OAuth callback server so GitHub can redirect back to us.
+    // The route handler emits an `oauth_callback_received` event; the frontend
+    // then calls handle_oauth_callback to complete token exchange.
+    let server = crate::integrations::webhook::WebhookServer::new(8765);
+    server
+        .start(std::collections::HashMap::new(), None, app)
+        .await
+        .map_err(|e| format!("Failed to start OAuth callback server: {}", e))?;
 
     Ok(auth_url)
 }
@@ -145,8 +169,15 @@ pub async fn handle_oauth_callback(
     let stored_state = OAuthHelper::remove_oauth_state(&oauth_state)
         .ok_or("Invalid or expired OAuth state")?;
 
-    let provider = get_provider(&stored_state.integration_type)
-        .ok_or_else(|| format!("Unknown integration type: {}", stored_state.integration_type))?;
+    let provider: Box<dyn crate::integrations::IntegrationProvider> =
+        match (stored_state.integration_type.as_str(), stored_state.client_id.clone(), stored_state.client_secret.clone()) {
+            ("github", Some(id), Some(secret)) =>
+                Box::new(crate::integrations::github::GitHubProvider::with_credentials(id, secret)),
+            ("jira", Some(id), Some(secret)) =>
+                Box::new(crate::integrations::jira::JiraProvider::with_credentials(id, secret)),
+            _ => get_provider(&stored_state.integration_type)
+                .ok_or_else(|| format!("Unknown integration type: {}", stored_state.integration_type))?,
+        };
 
     let token_response = provider
         .exchange_token(

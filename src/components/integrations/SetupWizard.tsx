@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { useStartOAuth, useHandleOAuthCallback, useCreateIntegration } from "@/hooks/useIntegrations";
 import { useIntegrationStore } from "@/stores/integrationStore";
-import { openUrl } from "@/lib/tauri";
+import { openUrl, onOAuthCallbackReceived } from "@/lib/tauri";
 import toast from "react-hot-toast";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -524,17 +524,40 @@ export function SetupWizard({ integrationType, isMcp, onClose, onComplete }: Set
       const authUrl = await startOAuth.mutateAsync({
         integrationType,
         redirectUri,
+        clientId: clientId || undefined,
+        clientSecret: clientSecret || undefined,
       });
 
       setOAuthState(integrationType, authUrl);
-      await openUrl(authUrl);
 
-      // Wait for callback (in a real implementation, this would listen for the callback)
-      toast.success("Complete authorization in your browser, then return here");
+      // Subscribe to the callback before opening the browser so we don't miss it.
+      const unlisten = await onOAuthCallbackReceived(async (payload) => {
+        unlisten();
+        if (!payload.success) {
+          setError(payload.error);
+          failOAuth(payload.error);
+          setIsLoading(false);
+          return;
+        }
+        try {
+          await handleCallback.mutateAsync({ state: payload.state, code: payload.code });
+          completeOAuth();
+          toast.success(`${config.name} connected successfully!`);
+          onComplete?.();
+          setTimeout(onClose, 1000);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "Failed to complete OAuth";
+          setError(msg);
+          failOAuth(msg);
+        } finally {
+          setIsLoading(false);
+        }
+      });
+
+      await openUrl(authUrl);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to start OAuth flow");
       failOAuth(e instanceof Error ? e.message : "Failed");
-    } finally {
       setIsLoading(false);
     }
   };

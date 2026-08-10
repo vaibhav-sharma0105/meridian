@@ -136,6 +136,8 @@ pub struct OAuthState {
     pub state: String,
     pub code_verifier: Option<String>,
     pub redirect_uri: String,
+    pub client_id: Option<String>,
+    pub client_secret: Option<String>,
     pub created_at: String,
 }
 
