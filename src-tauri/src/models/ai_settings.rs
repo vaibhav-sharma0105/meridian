@@ -63,6 +63,9 @@ pub struct AppNotification {
     pub desktop: bool,
     pub is_read: bool,
     pub created_at: String,
+    /// Message Center entry holding the full result, when one exists. Drives
+    /// the "View full result" link in NotificationCenter.
+    pub message_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -17,16 +17,13 @@ Skill execution results, integration digests, and important AI chat responses cu
 ## Capabilities
 
 ### New Capabilities
-- `message-center`: Persistent storage and UI for skill results, digests, and pinned content
-- `role-inference`: Pattern-based detection of user role (Tech Lead, IC, PM, Manager)
-- `role-adjustment`: Inline [Change] link in My Activity for quick role switching without settings
-- `productivity-patterns`: Time-of-day learning for task type productivity
-- `optimal-scheduling`: Suggest timing based on learned productivity patterns
+- `message-center`: Persistent storage and UI for skill results, digests, and pinned content. Also covers the notification deep link ("View full result") into Message Center — see Requirement: Message Storage.
+- `role-inference`: Pattern-based detection of user role (Tech Lead, IC, PM, Manager). Also covers inline role adjustment (the [Change] affordance in My Activity), role-based My Activity ordering, and role-weighted suggestions — see Requirement: Role-Based Personalization.
+- `productivity-patterns`: Time-of-day learning for task type productivity. Also covers optimal scheduling suggestions — see Requirement: Optimal Scheduling.
 
 ### Modified Capabilities
-- `notifications`: Add deep link to Message Center for full result viewing
-- `suggestions`: Weight suggestions based on inferred role
-- `my-activity-dashboard`: Filter and prioritize based on role
+
+None. Earlier drafts of this proposal listed `role-adjustment`, `optimal-scheduling`, `notifications`, `suggestions`, and `my-activity-dashboard` as separate capabilities, but each is specified as a requirement or scenario inside one of the three capabilities above. They are folded in so that the declared capability list matches the delta specs under `specs/` and archives cleanly.
 
 ## Technical Specifications
 

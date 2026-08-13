@@ -1173,6 +1173,57 @@ pub async fn execute_skill_sandboxed(
                 ],
             );
         }
+
+        // Surface produced files in the Message Center so they are browsable and
+        // so orphan cleanup has references to track. Paths are stored relative to
+        // `created_files/` where possible — absolute paths would not survive a
+        // restore onto a machine with a different home directory.
+        if !result.output_files.is_empty() {
+            let created_files_root = dirs_next::home_dir()
+                .map(|h| h.join(".meridian").join("created_files"));
+
+            let file_refs: Vec<String> = result
+                .output_files
+                .iter()
+                .map(|f| {
+                    created_files_root
+                        .as_ref()
+                        .and_then(|root| f.path.strip_prefix(root).ok())
+                        .map(|rel| rel.to_string_lossy().to_string())
+                        .unwrap_or_else(|| f.path.to_string_lossy().to_string())
+                })
+                .collect();
+
+            let succeeded = result.exit_code == 0;
+            let output_preview = if result.stdout.trim().is_empty() {
+                None
+            } else {
+                Some(result.stdout.clone())
+            };
+
+            let _ = crate::messages::repository::create_message(
+                &conn,
+                crate::messages::models::CreateMessageInput {
+                    project_id: None,
+                    message_type: "skill_result".to_string(),
+                    title: format!(
+                        "{} — {} file{}{}",
+                        skill.name,
+                        file_refs.len(),
+                        if file_refs.len() == 1 { "" } else { "s" },
+                        if succeeded { "" } else { " (failed)" }
+                    ),
+                    content: output_preview,
+                    source_id: run_id.clone(),
+                    source_type: Some("skill_run".to_string()),
+                    // Generated files are always worth keeping — this mirrors the
+                    // AiChat/has_files auto-pin rule in messages::routing.
+                    auto_pinned: Some(true),
+                    pinned_reason: Some("file_attachment".to_string()),
+                    file_refs: Some(file_refs),
+                },
+            );
+        }
     }
 
     Ok(result)

@@ -12,7 +12,23 @@ pub async fn get_attention_items(
 ) -> Result<Vec<AttentionItem>, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     let filters = filters.unwrap_or_default();
-    repository::list_attention_items(&conn, &filters)
+    let items = repository::list_attention_items(&conn, &filters)?;
+
+    // Reorder by role once the user has confirmed one. An unconfirmed or
+    // missing profile leaves the repository's severity/recency order alone.
+    let profile = match crate::role::repository::get_user_profile(&conn) {
+        Ok(p) => p,
+        Err(_) => return Ok(items),
+    };
+    if !profile.role_confirmed {
+        return Ok(items);
+    }
+    let role = match profile.inferred_role.clone() {
+        Some(r) => r,
+        None => return Ok(items),
+    };
+
+    crate::role::ordering::order_activity_items(&conn, items, &role, &profile)
 }
 
 #[tauri::command]

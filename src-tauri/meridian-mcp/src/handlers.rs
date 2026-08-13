@@ -483,6 +483,69 @@ fn handle_tools_list() -> Result<Value, RpcError> {
                 "required": []
             }),
         },
+        // Message Center tools (Phase 10)
+        ToolDefinition {
+            name: "create_report".to_string(),
+            description: "Create a report stored in the Message Center for the user to read later. Requires MCP write permission.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "description": "Report title"
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "Report body in markdown"
+                    },
+                    "project_id": {
+                        "type": "string",
+                        "description": "Optional project to scope the report to"
+                    }
+                },
+                "required": ["title", "content"]
+            }),
+        },
+        ToolDefinition {
+            name: "get_reports".to_string(),
+            description: "Get reports previously stored in the Message Center.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "project_id": {
+                        "type": "string",
+                        "description": "Filter to a single project"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results (default: 10)"
+                    }
+                },
+                "required": []
+            }),
+        },
+        ToolDefinition {
+            name: "draft_message".to_string(),
+            description: "Store a drafted message in the Message Center for the user to review before sending. Does not send anything. Requires MCP write permission.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "description": "Short label for the draft"
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "Draft body"
+                    },
+                    "recipient_hint": {
+                        "type": "string",
+                        "description": "Who the draft is intended for, for the user's context"
+                    }
+                },
+                "required": ["title", "content"]
+            }),
+        },
     ];
 
     Ok(json!({ "tools": tools }))
@@ -519,6 +582,10 @@ fn handle_tools_call(params: Option<Value>) -> Result<Value, RpcError> {
         "queue_skill" => tool_queue_skill(args),
         "get_skill_result" => tool_get_skill_result(args),
         "bulk_create_tasks" => tool_bulk_create_tasks(args),
+        // Message Center tools (Phase 10)
+        "create_report" => tool_create_report(args),
+        "get_reports" => tool_get_reports(args),
+        "draft_message" => tool_draft_message(args),
         _ => Err(RpcError::invalid_params(&format!("unknown tool: {}", name))),
     }?;
 
@@ -860,6 +927,177 @@ fn check_rate_limit() -> Result<(), RpcError> {
         });
     }
     Ok(())
+}
+
+// ─── Message Center tools (Phase 10) ─────────────────────────────────────────
+
+/// Writes a `message_center` row plus a notification linked to it, matching the
+/// `MessageCenterWithNotification` routing rule the in-app producers follow.
+/// Both halves are required or the entry is undiscoverable from notifications.
+fn insert_message_with_notification(
+    conn: &rusqlite::Connection,
+    message_type: &str,
+    title: &str,
+    content: &str,
+    project_id: Option<&str>,
+    source_type: &str,
+    notification_body: &str,
+) -> Result<String, RpcError> {
+    let id = uuid::Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO message_center
+            (id, project_id, message_type, title, content, source_type,
+             auto_pinned, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, datetime('now'), datetime('now'))",
+        rusqlite::params![id, project_id, message_type, title, content, source_type],
+    )
+    .map_err(|e| RpcError::internal_error(&e.to_string()))?;
+
+    conn.execute(
+        "INSERT INTO notifications (id, type, title, body, project_id, message_id, severity, desktop)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'info', 0)",
+        rusqlite::params![
+            uuid::Uuid::new_v4().to_string(),
+            message_type,
+            title,
+            notification_body,
+            project_id,
+            id
+        ],
+    )
+    .map_err(|e| RpcError::internal_error(&e.to_string()))?;
+
+    Ok(id)
+}
+
+fn tool_create_report(args: Value) -> Result<Value, RpcError> {
+    check_rate_limit()?;
+    let conn = get_connection()?;
+    check_permission(&conn, "create_report")?;
+
+    let title = args
+        .get("title")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| RpcError::invalid_params("missing title"))?;
+    let content = args
+        .get("content")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| RpcError::invalid_params("missing content"))?;
+    let project_id = args.get("project_id").and_then(|v| v.as_str());
+
+    let id = insert_message_with_notification(
+        &conn,
+        "digest",
+        title,
+        content,
+        project_id,
+        "mcp",
+        "View full report",
+    )?;
+
+    log_mcp_action(
+        &conn,
+        "mcp_create_report",
+        "message",
+        &id,
+        &format!("Created report: {}", title),
+    );
+
+    Ok(json!({ "success": true, "message_id": id }))
+}
+
+fn tool_get_reports(args: Value) -> Result<Value, RpcError> {
+    check_rate_limit()?;
+    let conn = get_connection()?;
+
+    let project_id = args.get("project_id").and_then(|v| v.as_str());
+    let limit = args.get("limit").and_then(|v| v.as_i64()).unwrap_or(10);
+
+    // Reports are the MCP-authored subset of Message Center content; skill
+    // results and integration syncs are excluded so an agent reading back its
+    // own reports does not get unrelated traffic.
+    let mut sql = String::from(
+        "SELECT id, project_id, message_type, title, content, created_at
+         FROM message_center
+         WHERE deleted_at IS NULL AND source_type = 'mcp'",
+    );
+    if project_id.is_some() {
+        sql.push_str(" AND project_id = ?1");
+    }
+    sql.push_str(" ORDER BY created_at DESC LIMIT ");
+    sql.push_str(&limit.clamp(1, 100).to_string());
+
+    let mut stmt = conn
+        .prepare(&sql)
+        .map_err(|e| RpcError::internal_error(&e.to_string()))?;
+
+    let map_row = |row: &rusqlite::Row<'_>| {
+        Ok(json!({
+            "id": row.get::<_, String>(0)?,
+            "project_id": row.get::<_, Option<String>>(1)?,
+            "message_type": row.get::<_, String>(2)?,
+            "title": row.get::<_, String>(3)?,
+            "content": row.get::<_, Option<String>>(4)?,
+            "created_at": row.get::<_, String>(5)?,
+        }))
+    };
+
+    let reports: Vec<Value> = if let Some(pid) = project_id {
+        stmt.query_map(rusqlite::params![pid], map_row)
+            .map_err(|e| RpcError::internal_error(&e.to_string()))?
+            .filter_map(|r| r.ok())
+            .collect()
+    } else {
+        stmt.query_map([], map_row)
+            .map_err(|e| RpcError::internal_error(&e.to_string()))?
+            .filter_map(|r| r.ok())
+            .collect()
+    };
+
+    Ok(json!({ "reports": reports, "count": reports.len() }))
+}
+
+fn tool_draft_message(args: Value) -> Result<Value, RpcError> {
+    check_rate_limit()?;
+    let conn = get_connection()?;
+    check_permission(&conn, "draft_message")?;
+
+    let title = args
+        .get("title")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| RpcError::invalid_params("missing title"))?;
+    let content = args
+        .get("content")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| RpcError::invalid_params("missing content"))?;
+    let recipient_hint = args.get("recipient_hint").and_then(|v| v.as_str());
+
+    // The recipient is context for the user, not an address — this tool never
+    // sends anything, it only parks a draft for review.
+    let body = match recipient_hint {
+        Some(hint) => format!("**Draft for:** {}\n\n{}", hint, content),
+        None => content.to_string(),
+    };
+
+    let id = insert_message_with_notification(
+        &conn,
+        "pinned_chat",
+        title,
+        &body,
+        None,
+        "mcp",
+        "Review draft",
+    )?;
+
+    log_mcp_action(
+        &conn,
+        "mcp_draft_message",
+        "message",
+        &id,
+        &format!("Drafted message: {}", title),
+    );
+
+    Ok(json!({ "success": true, "message_id": id, "sent": false }))
 }
 
 fn check_permission(conn: &rusqlite::Connection, permission: &str) -> Result<(), RpcError> {
@@ -1319,13 +1557,22 @@ fn tool_bulk_create_tasks(args: Value) -> Result<Value, RpcError> {
         let input = CreateTaskInput {
             project_id: project_id.to_string(),
             meeting_id: None,
+            parent_task_id: None,
             title: title.unwrap().to_string(),
             description: task_input.get("description").and_then(|v| v.as_str()).map(String::from),
             assignee: task_input.get("assignee").and_then(|v| v.as_str()).map(String::from),
+            assignee_confidence: None,
+            assignee_source_quote: None,
             due_date: task_input.get("due_date").and_then(|v| v.as_str()).map(String::from),
-            priority: task_input.get("priority").and_then(|v| v.as_i64()).map(|p| p as i32),
-            source: Some("mcp_bulk".to_string()),
-            source_id: None,
+            due_confidence: None,
+            due_source_quote: None,
+            priority: task_input.get("priority").and_then(|v| v.as_str()).map(String::from),
+            confidence_score: None,
+            tags: None,
+            kanban_column: None,
+            notes: None,
+            is_duplicate: None,
+            duplicate_of_id: None,
         };
 
         match repositories::tasks::create_task(&conn, &input) {

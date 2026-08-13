@@ -7,7 +7,7 @@ use crate::ai::litellm::LiteLLMClient;
 use crate::commands::ai::{get_api_key_from_db, get_litellm_client_pub};
 use crate::db::repositories::{
     ai_settings as ai_repo, documents as docs_repo, meetings as meetings_repo,
-    projects as projects_repo, tasks as tasks_repo,
+    notifications as notifications_repo, projects as projects_repo, tasks as tasks_repo,
 };
 use crate::governance::{
     approval as governance_approval,
@@ -826,6 +826,53 @@ pub fn complete_skill_run(
         }
     } else {
         skills_repo::set_run_output(conn, run_id, &result.output, result.duration_ms)?;
+
+        // Auto-route completed skill results to Message Center
+        if let Ok(run) = skills_repo::get_skill_run(conn, run_id) {
+            if let Ok(skill) = skills_repo::get_skill(conn, &run.skill_id) {
+                let content = crate::messages::routing::Content::SkillResult(
+                    crate::messages::routing::SkillResultContent {
+                        has_output: !result.output.is_empty(),
+                        important: false,
+                        skill_name: skill.name.clone(),
+                    },
+                );
+                if crate::messages::routing::should_create_message(&content) {
+                    let auto_pin_reason = crate::messages::routing::should_auto_pin(&content);
+                    let message = crate::messages::repository::create_message(
+                        conn,
+                        crate::messages::models::CreateMessageInput {
+                            project_id: None,
+                            message_type: "skill_result".to_string(),
+                            title: format!("{} Result", skill.name),
+                            content: Some(result.output.clone()),
+                            source_id: Some(run_id.to_string()),
+                            source_type: Some("skill_run".to_string()),
+                            auto_pinned: Some(auto_pin_reason.is_some()),
+                            pinned_reason: auto_pin_reason,
+                            file_refs: None,
+                        },
+                    );
+
+                    // Routing resolves skill results to
+                    // `MessageCenterWithNotification` — the notification half is
+                    // what makes the stored result discoverable.
+                    if let Ok(message) = message {
+                        let _ = notifications_repo::create_notification_for_message(
+                            conn,
+                            "skill_result",
+                            &format!("{} finished", skill.name),
+                            "View full result",
+                            None,
+                            None,
+                            &message.id,
+                            "info",
+                            false,
+                        );
+                    }
+                }
+            }
+        }
     }
 
     Ok(())

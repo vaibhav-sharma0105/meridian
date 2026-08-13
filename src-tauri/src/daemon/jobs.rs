@@ -16,6 +16,7 @@ use crate::suggestions::models::CreateSuggestionInput;
 use crate::suggestions::repository as suggestions_repo;
 use crate::attention::repository as attention_repo;
 use crate::vectors::qdrant::{get_collection_name_with_dimension, QdrantClient, VectorPayload};
+use chrono::Timelike;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -314,6 +315,11 @@ pub fn process_job_sync(
         "compute_attention_items" => process_compute_attention_items_job(conn, &job.id),
         "cleanup_integration_cache" => process_cleanup_integration_cache_job(conn, &job.id),
         "process_skill_queue" => process_skill_queue_job(conn, &job.id),
+        "cleanup_messages" => cleanup_messages_job(conn, &job.id),
+        "generate_digest" => generate_digest_job(conn, &job.id, "daily"),
+        "generate_weekly_digest" => generate_digest_job(conn, &job.id, "weekly"),
+        "infer_role" => infer_role_job(conn, &job.id),
+        "aggregate_productivity" => aggregate_productivity_job(conn, &job.id),
         _ => JobResult {
             success: false,
             chunks_embedded: None,
@@ -1307,20 +1313,66 @@ pub async fn process_sync_integration_job(
             let _ = integration_repo::update_integration_last_sync(conn, &payload.integration_id);
             let _ = integration_repo::update_integration_status(conn, &payload.integration_id, "connected", None);
 
-            // Create notification if there were new items
-            if items_synced > 0 {
-                let _ = notif_repo::create_notification_full(
+            // Route the sync through the Message Center rules. `IntegrationSync`
+            // with new items resolves to MessageCenterWithNotification, so the
+            // message is created first and the notification links to it. A
+            // no-op sync resolves to NotificationOnly and gets a plain
+            // notification with nothing to link to.
+            let sync_content = crate::messages::routing::Content::IntegrationSync(
+                crate::messages::routing::IntegrationSyncContent {
+                    new_items: items_synced as usize,
+                    integration_name: integration.name.clone(),
+                },
+            );
+            if crate::messages::routing::should_create_message(&sync_content) {
+                let message = crate::messages::repository::create_message(
                     conn,
-                    "integration_sync",
-                    &format!("{} sync complete", integration.name),
-                    &format!("Synced {} items from {}", items_synced, integration.name),
-                    None,
-                    None,
-                    None,
-                    Some(&integration.id),
-                    "info",
-                    false,
+                    crate::messages::models::CreateMessageInput {
+                        project_id: None,
+                        message_type: "integration_sync".to_string(),
+                        title: format!("{} sync — {} new items", integration.name, items_synced),
+                        content: Some(format!(
+                            "Synced {} items from {}.",
+                            items_synced, integration.name
+                        )),
+                        source_id: Some(integration.id.clone()),
+                        source_type: Some("integration".to_string()),
+                        auto_pinned: Some(false),
+                        pinned_reason: None,
+                        file_refs: None,
+                    },
                 );
+
+                match message {
+                    Ok(message) => {
+                        let _ = notif_repo::create_notification_for_message(
+                            conn,
+                            "integration_sync",
+                            &format!("{} sync complete", integration.name),
+                            &format!("Synced {} items from {}", items_synced, integration.name),
+                            None,
+                            Some(&integration.id),
+                            &message.id,
+                            "info",
+                            false,
+                        );
+                    }
+                    Err(_) => {
+                        // Message storage failed — still tell the user the sync ran.
+                        let _ = notif_repo::create_notification_full(
+                            conn,
+                            "integration_sync",
+                            &format!("{} sync complete", integration.name),
+                            &format!("Synced {} items from {}", items_synced, integration.name),
+                            None,
+                            None,
+                            None,
+                            Some(&integration.id),
+                            "info",
+                            false,
+                        );
+                    }
+                }
             }
 
             // Create notifications for errors
@@ -2579,6 +2631,368 @@ pub fn init_skill_queue_jobs(conn: &Connection) {
         .unwrap_or_default();
     if pending.is_empty() {
         schedule_next_skill_queue_check(conn);
+    }
+}
+
+// ─── Message Center Jobs ───────────────────────────────────────────────────
+
+pub fn cleanup_messages_job(conn: &Connection, job_id: &str) -> JobResult {
+    if let Err(e) = jobs_repo::update_job_status(conn, job_id, "running", None, None) {
+        return JobResult {
+            success: false,
+            chunks_embedded: None,
+            error: Some(format!("Failed to update job status: {}", e)),
+        };
+    }
+
+    // Opt-in archival runs alongside retention; disabled by default, so this is
+    // a no-op for users who have not turned it on.
+    if let Err(e) = crate::messages::archive::archive_old_files(conn) {
+        eprintln!("File archival failed: {}", e);
+    }
+
+    match crate::messages::retention::cleanup_expired_messages(conn) {
+        Ok(stats) => {
+            schedule_next_message_cleanup(conn);
+            JobResult {
+                success: true,
+                chunks_embedded: Some((stats.soft_deleted + stats.hard_deleted) as usize),
+                error: None,
+            }
+        }
+        Err(e) => {
+            schedule_next_message_cleanup(conn);
+            JobResult {
+                success: false,
+                chunks_embedded: None,
+                error: Some(e),
+            }
+        }
+    }
+}
+
+fn schedule_next_message_cleanup(conn: &Connection) {
+    // Run message cleanup daily at 4 AM UTC
+    let now = chrono::Utc::now();
+    let next_run = if now.hour() < 4 {
+        now.date_naive()
+            .and_hms_opt(4, 0, 0)
+            .unwrap()
+            .and_utc()
+    } else {
+        (now + chrono::Duration::days(1))
+            .date_naive()
+            .and_hms_opt(4, 0, 0)
+            .unwrap()
+            .and_utc()
+    };
+    let _ = jobs_repo::create_job_scheduled(
+        conn,
+        "cleanup_messages",
+        None,
+        1,
+        &next_run.to_rfc3339(),
+    );
+}
+
+pub fn init_message_cleanup_jobs(conn: &Connection) {
+    let pending = jobs_repo::get_pending_jobs_by_type(conn, "cleanup_messages")
+        .unwrap_or_default();
+    if pending.is_empty() {
+        schedule_next_message_cleanup(conn);
+    }
+}
+
+// ─── Digest Jobs ───────────────────────────────────────────────────────────
+
+/// Builds a daily digest, stores it in the Message Center, and links a
+/// notification to it. `Content::Digest` routes to
+/// `MessageCenterWithNotification`, so both halves are created here.
+pub fn generate_digest_job(conn: &Connection, job_id: &str, period: &str) -> JobResult {
+    if let Err(e) = jobs_repo::update_job_status(conn, job_id, "running", None, None) {
+        return JobResult {
+            success: false,
+            chunks_embedded: None,
+            error: Some(format!("Failed to update job status: {}", e)),
+        };
+    }
+
+    let stats = match crate::messages::digest::collect_stats(conn, period) {
+        Ok(s) => s,
+        Err(e) => {
+            reschedule_digest(conn, period);
+            return JobResult {
+                success: false,
+                chunks_embedded: None,
+                error: Some(e),
+            };
+        }
+    };
+
+    // Nothing happened in the window — skip rather than post an empty digest.
+    if stats.is_empty() {
+        reschedule_digest(conn, period);
+        return JobResult {
+            success: true,
+            chunks_embedded: Some(0),
+            error: None,
+        };
+    }
+
+    let summary = crate::messages::digest::render_markdown(&stats, period);
+    let content = crate::messages::routing::Content::Digest(
+        crate::messages::routing::DigestContent {
+            digest_type: period.to_string(),
+            summary: summary.clone(),
+        },
+    );
+
+    if !crate::messages::routing::should_create_message(&content) {
+        reschedule_digest(conn, period);
+        return JobResult {
+            success: true,
+            chunks_embedded: Some(0),
+            error: None,
+        };
+    }
+
+    let title = crate::messages::digest::title_for(period);
+    let message = crate::messages::repository::create_message(
+        conn,
+        crate::messages::models::CreateMessageInput {
+            project_id: None,
+            message_type: "digest".to_string(),
+            title: title.clone(),
+            content: Some(summary),
+            source_id: None,
+            source_type: Some("digest".to_string()),
+            auto_pinned: Some(false),
+            pinned_reason: None,
+            file_refs: None,
+        },
+    );
+
+    let result = match message {
+        Ok(message) => {
+            let _ = notif_repo::create_notification_for_message(
+                conn,
+                "digest",
+                &title,
+                "View full digest",
+                None,
+                None,
+                &message.id,
+                "info",
+                false,
+            );
+            JobResult {
+                success: true,
+                chunks_embedded: Some(1),
+                error: None,
+            }
+        }
+        Err(e) => JobResult {
+            success: false,
+            chunks_embedded: None,
+            error: Some(e),
+        },
+    };
+
+    reschedule_digest(conn, period);
+    result
+}
+
+fn reschedule_digest(conn: &Connection, period: &str) {
+    if period == "weekly" {
+        schedule_next_weekly_digest(conn);
+    } else {
+        schedule_next_digest(conn);
+    }
+}
+
+/// Weekly digest runs Monday 07:00 UTC — an hour after the daily job so the two
+/// never collide, and at the start of the week when a look-back is most useful.
+fn schedule_next_weekly_digest(conn: &Connection) {
+    use chrono::Datelike;
+    let now = chrono::Utc::now();
+    // Days until next Monday; if today is Monday before 07:00, run today.
+    let days_ahead = match now.weekday().num_days_from_monday() {
+        0 if now.hour() < 7 => 0,
+        0 => 7,
+        d => 7 - d as i64,
+    };
+    let next_run = (now + chrono::Duration::days(days_ahead as i64))
+        .date_naive()
+        .and_hms_opt(7, 0, 0)
+        .unwrap()
+        .and_utc();
+    let _ = jobs_repo::create_job_scheduled(
+        conn,
+        "generate_weekly_digest",
+        None,
+        1,
+        &next_run.to_rfc3339(),
+    );
+}
+
+pub fn init_weekly_digest_jobs(conn: &Connection) {
+    let pending =
+        jobs_repo::get_pending_jobs_by_type(conn, "generate_weekly_digest").unwrap_or_default();
+    if pending.is_empty() {
+        schedule_next_weekly_digest(conn);
+    }
+}
+
+fn schedule_next_digest(conn: &Connection) {
+    // Run daily at 6 AM UTC — after the 4 AM message cleanup, so a digest is
+    // never created and then immediately swept by retention.
+    let now = chrono::Utc::now();
+    let next_run = if now.hour() < 6 {
+        now.date_naive().and_hms_opt(6, 0, 0).unwrap().and_utc()
+    } else {
+        (now + chrono::Duration::days(1))
+            .date_naive()
+            .and_hms_opt(6, 0, 0)
+            .unwrap()
+            .and_utc()
+    };
+    let _ = jobs_repo::create_job_scheduled(conn, "generate_digest", None, 1, &next_run.to_rfc3339());
+}
+
+pub fn init_digest_jobs(conn: &Connection) {
+    let pending = jobs_repo::get_pending_jobs_by_type(conn, "generate_digest").unwrap_or_default();
+    if pending.is_empty() {
+        schedule_next_digest(conn);
+    }
+}
+
+// ─── Role Inference Jobs ───────────────────────────────────────────────────
+
+pub fn infer_role_job(conn: &Connection, job_id: &str) -> JobResult {
+    if let Err(e) = jobs_repo::update_job_status(conn, job_id, "running", None, None) {
+        return JobResult {
+            success: false,
+            chunks_embedded: None,
+            error: Some(format!("Failed to update job status: {}", e)),
+        };
+    }
+
+    match crate::role::repository::run_role_inference(conn) {
+        Ok(_) => {
+            // Surface role drift as a notification — the daemon has no AppHandle,
+            // so it cannot emit Tauri events. The frontend also polls
+            // `get_role_drift_alert` directly for the in-app banner.
+            if let Ok(Some(alert)) = crate::role::repository::check_role_drift(conn) {
+                let already_notified = notif_repo::get_notifications(conn)
+                    .unwrap_or_default()
+                    .iter()
+                    .any(|n| n.notification_type == "role_drift");
+
+                if !already_notified {
+                    let _ = notif_repo::create_notification_full(
+                        conn,
+                        "role_drift",
+                        "Your role may have changed",
+                        &format!(
+                            "Recent activity looks more like {} than {}.",
+                            alert.suggested_role, alert.previous_role
+                        ),
+                        None,
+                        None,
+                        None,
+                        None,
+                        "info",
+                        false,
+                    );
+                }
+            }
+
+            schedule_next_role_inference(conn);
+            JobResult {
+                success: true,
+                chunks_embedded: None,
+                error: None,
+            }
+        }
+        Err(e) => {
+            schedule_next_role_inference(conn);
+            JobResult {
+                success: false,
+                chunks_embedded: None,
+                error: Some(e),
+            }
+        }
+    }
+}
+
+fn schedule_next_role_inference(conn: &Connection) {
+    // Run role inference daily
+    let next_run = chrono::Utc::now() + chrono::Duration::days(1);
+    let _ = jobs_repo::create_job_scheduled(
+        conn,
+        "infer_role",
+        None,
+        1,
+        &next_run.to_rfc3339(),
+    );
+}
+
+pub fn init_role_inference_jobs(conn: &Connection) {
+    let pending = jobs_repo::get_pending_jobs_by_type(conn, "infer_role")
+        .unwrap_or_default();
+    if pending.is_empty() {
+        schedule_next_role_inference(conn);
+    }
+}
+
+// ─── Productivity Pattern Aggregation Jobs ─────────────────────────────────
+
+pub fn aggregate_productivity_job(conn: &Connection, job_id: &str) -> JobResult {
+    if let Err(e) = jobs_repo::update_job_status(conn, job_id, "running", None, None) {
+        return JobResult {
+            success: false,
+            chunks_embedded: None,
+            error: Some(format!("Failed to update job status: {}", e)),
+        };
+    }
+
+    match crate::productivity::patterns::aggregate_patterns(conn) {
+        Ok(patterns) => {
+            schedule_next_productivity_aggregation(conn);
+            JobResult {
+                success: true,
+                chunks_embedded: Some(patterns.total_completions as usize),
+                error: None,
+            }
+        }
+        Err(e) => {
+            schedule_next_productivity_aggregation(conn);
+            JobResult {
+                success: false,
+                chunks_embedded: None,
+                error: Some(e),
+            }
+        }
+    }
+}
+
+fn schedule_next_productivity_aggregation(conn: &Connection) {
+    // Run productivity aggregation every 6 hours
+    let next_run = chrono::Utc::now() + chrono::Duration::hours(6);
+    let _ = jobs_repo::create_job_scheduled(
+        conn,
+        "aggregate_productivity",
+        None,
+        2,
+        &next_run.to_rfc3339(),
+    );
+}
+
+pub fn init_productivity_jobs(conn: &Connection) {
+    let pending = jobs_repo::get_pending_jobs_by_type(conn, "aggregate_productivity")
+        .unwrap_or_default();
+    if pending.is_empty() {
+        schedule_next_productivity_aggregation(conn);
     }
 }
 

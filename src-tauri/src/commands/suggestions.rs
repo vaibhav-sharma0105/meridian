@@ -17,7 +17,21 @@ pub async fn get_pending_suggestions(
     project_id: Option<String>,
 ) -> Result<Vec<Suggestion>, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    repository::get_pending_suggestions(&conn, project_id.as_deref())
+    let suggestions = repository::get_pending_suggestions(&conn, project_id.as_deref())?;
+
+    // Weight by role once the user has confirmed one; an unconfirmed or missing
+    // profile leaves the repository's severity/recency order alone.
+    let profile = match crate::role::repository::get_user_profile(&conn) {
+        Ok(p) => p,
+        Err(_) => return Ok(suggestions),
+    };
+    if !profile.role_confirmed {
+        return Ok(suggestions);
+    }
+    match profile.inferred_role.as_deref() {
+        Some(role) => Ok(crate::role::weighting::weight_suggestions(suggestions, role)),
+        None => Ok(suggestions),
+    }
 }
 
 #[derive(serde::Serialize)]

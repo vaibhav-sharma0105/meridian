@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Bell, Settings, Settings2, Plus, LayoutList, Zap, Shield, Activity,
+  Bell, Settings, Settings2, Plus, LayoutList, Zap, Shield, Activity, Inbox,
   Sun, Moon, Monitor, Link2, Sparkles, ChevronDown, ChevronRight, ArchiveRestore,
 } from "lucide-react";
 import { useProjectStore } from "@/stores/projectStore";
@@ -105,6 +105,13 @@ export default function Sidebar() {
           onClick={() => { setActiveProject(null); setActiveView("governance"); }}
           badge={pendingApprovalCount > 0 ? pendingApprovalCount : undefined}
           testId="sidebar-governance"
+        />
+        <NavItem
+          icon={<Inbox className="w-[17px] h-[17px]" />}
+          label="Messages"
+          active={activeView === "messages"}
+          onClick={() => { setActiveProject(null); setActiveView("messages"); }}
+          testId="sidebar-messages"
         />
       </div>
 

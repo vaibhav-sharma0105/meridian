@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Send, Copy, CheckCheck, User, AlertCircle, Settings, Sparkles, Wand2, Zap, CheckCircle2 } from "lucide-react";
+import { Send, Copy, CheckCheck, User, AlertCircle, Settings, Sparkles, Wand2, Zap, CheckCircle2, Pin } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { useAI, UnifiedSkill } from "@/hooks/useAI";
 import { useUIStore } from "@/stores/uiStore";
+import { usePinFromSource } from "@/hooks/useMessages";
 import { ChatToSkillPreview } from "@/components/skills/ChatToSkillPreview";
 import { SkillPicker, SkillBadge } from "./SkillPicker";
 import { MAX_CHAT_CHARS } from "@/lib/constants";
@@ -60,8 +61,10 @@ export default function AIChatPanel({ projectId, fullPage = false }: Props) {
     executeSkill,
   } = useAI(projectId);
 
+  const pinFromSource = usePinFromSource();
   const [input, setInput] = useState("");
   const [copied, setCopied] = useState<number | null>(null);
+  const [pinned, setPinned] = useState<number | null>(null);
   const [skillExtractMsg, setSkillExtractMsg] = useState<number | null>(null);
   const [showSkillPicker, setShowSkillPicker] = useState(false);
   const [selectedSkill, setSelectedSkill] = useState<UnifiedSkill | null>(null);
@@ -176,6 +179,19 @@ export default function AIChatPanel({ projectId, fullPage = false }: Props) {
     await navigator.clipboard.writeText(text);
     setCopied(idx);
     setTimeout(() => setCopied(null), 2000);
+  };
+
+  const handlePin = async (text: string, idx: number) => {
+    const title = text.slice(0, 100) + (text.length > 100 ? "..." : "");
+    pinFromSource.mutate({
+      sourceType: "ai_chat",
+      sourceId: `chat_${Date.now()}_${idx}`,
+      title,
+      content: text,
+      projectId: projectId ?? undefined,
+    });
+    setPinned(idx);
+    setTimeout(() => setPinned(null), 2000);
   };
 
   const isEmpty = messages.length === 0 && !chatError;
@@ -301,6 +317,13 @@ export default function AIChatPanel({ projectId, fullPage = false }: Props) {
                       title="Copy"
                     >
                       {copied === i ? <CheckCheck className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                    <button
+                      onClick={() => handlePin(msg.content, i)}
+                      className="text-zinc-400 hover:text-indigo-500 dark:hover:text-indigo-400 p-0.5"
+                      title="Pin to Message Center"
+                    >
+                      {pinned === i ? <CheckCheck className="w-3.5 h-3.5 text-emerald-500" /> : <Pin className="w-3.5 h-3.5" />}
                     </button>
                     <button
                       onClick={() => setSkillExtractMsg(skillExtractMsg === i ? null : i)}

@@ -327,3 +327,31 @@ And clicking it allows quick role switching without navigating to settings
 Given a role-based view is active
 When the user hovers over the role indicator
 Then a tooltip explains the current view (e.g., "Showing Tech Lead view — focusing on reviews and team blockers")
+
+#### Scenario: Suggestions are weighted by role
+Given the user's confirmed role is "Manager"
+And an `overdue_task` suggestion and a `meeting_followup` suggestion share the same severity
+When suggestions are listed
+Then the `meeting_followup` suggestion is ordered before the `overdue_task` suggestion
+And the weights applied are those in the Suggestion Weighting table
+
+#### Scenario: Suggestion weighting respects severity
+Given the user's confirmed role is "IC"
+And a `meeting_followup` suggestion has severity "critical"
+And an `overdue_task` suggestion has severity "warning"
+When suggestions are listed
+Then the critical suggestion is ordered first
+And role weighting only reorders suggestions within the same severity
+
+#### Scenario: Unweighted suggestion types keep their order
+Given the user's confirmed role is "Tech Lead"
+And a suggestion has a type absent from the Suggestion Weighting table
+When suggestions are listed
+Then that suggestion is treated as weight 1.0
+And its relative order against other unweighted suggestions is unchanged
+
+#### Scenario: No confirmed role leaves suggestions unweighted
+Given the user has not confirmed a role
+When suggestions are listed
+Then no role weighting is applied
+And suggestions keep their severity and recency order

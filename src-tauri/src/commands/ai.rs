@@ -308,7 +308,7 @@ pub async fn chat_with_project(
     app_handle: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
-    let (settings, api_key, project, open_tasks, done_tasks, meetings, doc_results, integration_items, token_budget) = {
+    let (settings, api_key, project, open_tasks, done_tasks, meetings, doc_results, integration_items, token_budget, center_messages) = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         let settings = ai_repo::get_active_settings(&conn)?
             .ok_or_else(|| "No AI provider configured".to_string())?;
@@ -362,18 +362,39 @@ pub async fn chat_with_project(
             .and_then(|s| s.parse().ok())
             .unwrap_or(4000);
 
-        (settings, api_key, project, open_tasks, done_tasks, meetings, doc_results, integration_items, token_budget)
+        // Message Center entries inside the AI context window. The window is the
+        // user's `ai_context_days` preference — Message Center itself retains
+        // content far longer (see the dual retention model), so this query is
+        // what keeps old saved content out of the prompt.
+        let ai_context_days: i64 = conn
+            .query_row(
+                "SELECT ai_context_days FROM user_profile WHERE id = 'default'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(30);
+
+        let center_messages = crate::messages::get_messages_for_ai_context(
+            &conn,
+            Some(&project_id),
+            ai_context_days,
+        )
+        .unwrap_or_default();
+
+        (settings, api_key, project, open_tasks, done_tasks, meetings, doc_results, integration_items, token_budget, center_messages)
     };
 
     let litellm = get_litellm_client(&settings, &api_key);
 
-    // Build base context (without integration data)
-    let base_context = extractor::build_project_context(
+    // Build base context (without integration data, which gets its own budget below)
+    let base_context = extractor::build_project_context_full(
         &project.name,
         &open_tasks,
         &done_tasks,
         &meetings,
         &doc_results,
+        &[],
+        &center_messages,
     );
 
     // Build integration context with token budget and relevance scoring

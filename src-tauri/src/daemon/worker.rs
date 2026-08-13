@@ -1,4 +1,9 @@
-use crate::daemon::jobs::{init_skill_jobs, init_attention_jobs, init_cache_cleanup_jobs, init_skill_queue_jobs, process_job_sync, JobContext, JobResult};
+use crate::daemon::jobs::{
+    init_skill_jobs, init_attention_jobs, init_cache_cleanup_jobs, init_skill_queue_jobs,
+    init_message_cleanup_jobs, init_role_inference_jobs, init_productivity_jobs,
+    init_digest_jobs, init_weekly_digest_jobs,
+    process_job_sync, JobContext, JobResult,
+};
 use crate::db::repositories::jobs as jobs_repo;
 use crate::vectors::qdrant::QdrantClient;
 use rusqlite::Connection;
@@ -48,11 +53,16 @@ impl Worker {
     pub async fn run(&self, conn: &Connection) {
         self.running.store(true, Ordering::SeqCst);
 
-        // Initialize skill polling jobs on startup
+        // Initialize polling jobs on startup
         init_skill_jobs(conn);
         init_attention_jobs(conn);
         init_cache_cleanup_jobs(conn);
         init_skill_queue_jobs(conn);
+        init_message_cleanup_jobs(conn);
+        init_role_inference_jobs(conn);
+        init_productivity_jobs(conn);
+        init_digest_jobs(conn);
+        init_weekly_digest_jobs(conn);
 
         let qdrant = QdrantClient::new(self.config.qdrant_url.as_deref());
 

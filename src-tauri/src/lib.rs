@@ -10,9 +10,12 @@ pub mod documents;
 pub mod drafts;
 pub mod governance;
 pub mod integrations;
+pub mod messages;
 pub mod models;
 pub mod patterns;
 pub mod plans;
+pub mod productivity;
+pub mod role;
 pub mod sensitive;
 pub mod skills;
 pub mod suggestions;
@@ -318,6 +321,37 @@ pub fn run() {
             commands::attention::get_attention_items,
             commands::attention::get_attention_count,
             commands::attention::dismiss_attention_item,
+            // Messages (Phase 10)
+            commands::messages::get_messages,
+            commands::messages::get_message,
+            commands::messages::pin_message,
+            commands::messages::create_message,
+            commands::messages::delete_message,
+            commands::messages::restore_message,
+            commands::messages::get_storage_stats,
+            commands::messages::get_messages_for_ai_context,
+            commands::messages::cleanup_messages,
+            commands::messages::get_deleted_messages,
+            // Role (Phase 10)
+            commands::role::get_user_profile,
+            commands::role::confirm_role,
+            commands::role::change_role,
+            commands::role::get_role_inference_status,
+            commands::role::dismiss_role_drift_alert,
+            commands::role::get_role_drift_alert,
+            commands::role::run_role_inference,
+            commands::role::update_retention_settings,
+            commands::role::update_user_identity,
+            // Productivity (Phase 10)
+            commands::productivity::get_productivity_insights,
+            commands::productivity::get_time_suggestion,
+            commands::productivity::get_time_suggestion_for_category,
+            commands::productivity::update_productivity_settings,
+            commands::productivity::get_productivity_settings,
+            commands::productivity::export_productivity_data,
+            commands::productivity::clear_productivity_data,
+            commands::productivity::aggregate_productivity_patterns,
+            commands::productivity::get_meeting_batching_suggestion,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

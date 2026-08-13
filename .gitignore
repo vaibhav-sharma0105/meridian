@@ -15,3 +15,8 @@ dist-ssr
 
 src-tauri/target
 src-tauri/binaries
+
+# Test artifacts
+test-results
+playwright-report
+.playwright-mcp

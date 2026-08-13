@@ -14,7 +14,17 @@
       "Bash(cargo test *)",
       "Bash(curl -s http://localhost:1420)",
       "Bash(openspec status *)",
-      "Bash(openspec instructions *)"
+      "Bash(openspec instructions *)",
+      "Bash(rm -f /tmp/test_migrations.db)",
+      "Bash(sqlite3 /tmp/test_migrations.db)",
+      "Bash(sqlite3 /tmp/test_migrations.db \".schema integration_project_mapping\")",
+      "Bash(sqlite3 /tmp/test_migrations.db \".schema attention_items\")",
+      "Bash(sqlite3 /tmp/test_migrations.db \"PRAGMA table_info\\(skills\\);\")",
+      "Bash(sqlite3 /tmp/test_migrations.db \"PRAGMA table_info\\(integration_cache\\);\")",
+      "Bash(sqlite3 /tmp/test_migrations.db \"SELECT key, value FROM app_settings WHERE key IN \\('cache_retention_days','attention_refresh_minutes','ai_integration_context_tokens'\\);\")",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(openspec validate *)"
     ]
   },
   "enabledMcpjsonServers": [

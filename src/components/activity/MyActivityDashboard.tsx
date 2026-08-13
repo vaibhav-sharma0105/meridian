@@ -4,6 +4,10 @@ import { useAttentionItems, useDismissAttention } from "@/hooks/useAttention";
 import type { AttentionFilters as AttentionFiltersType } from "@/lib/tauri";
 import { AttentionItem } from "./AttentionItem";
 import { AttentionFilters } from "./AttentionFilters";
+import { RoleIndicator } from "@/components/role/RoleIndicator";
+import { RoleConfirmation } from "@/components/role/RoleConfirmation";
+import { RoleDriftAlert } from "@/components/role/RoleDriftAlert";
+import { useInferenceStatus, useRoleDriftAlert } from "@/hooks/useRole";
 
 interface SectionProps {
   title: string;
@@ -98,9 +102,20 @@ export function MyActivityDashboard() {
   const [filters, setFilters] = useState<AttentionFiltersType>({});
   const { data: items, isLoading, error } = useAttentionItems(filters);
   const dismissMutation = useDismissAttention();
+  const { data: inferenceStatus } = useInferenceStatus();
+  const { data: driftAlert } = useRoleDriftAlert();
+
+  const [showRoleConfirmation, setShowRoleConfirmation] = useState(false);
+  const [driftDismissed, setDriftDismissed] = useState(false);
 
   const handleDismiss = async (id: string) => {
     await dismissMutation.mutateAsync(id);
+  };
+
+  const handleRoleIndicatorClick = () => {
+    if (inferenceStatus?.type === "PendingConfirmation") {
+      setShowRoleConfirmation(true);
+    }
   };
 
   if (isLoading) {
@@ -125,13 +140,35 @@ export function MyActivityDashboard() {
   return (
     <div className="h-full flex flex-col">
       <div className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800">
-        <h2 className="text-lg font-semibold text-zinc-800 dark:text-zinc-200">
-          My Activity
-        </h2>
-        <p className="text-xs text-zinc-500">
-          Items that need your attention across all projects
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-zinc-800 dark:text-zinc-200">
+              My Activity
+            </h2>
+            <p className="text-xs text-zinc-500">
+              Items that need your attention across all projects
+            </p>
+          </div>
+          <RoleIndicator onClick={handleRoleIndicatorClick} />
+        </div>
       </div>
+
+      {showRoleConfirmation && inferenceStatus?.type === "PendingConfirmation" && (
+        <RoleConfirmation
+          inferredRole={inferenceStatus.inferred}
+          confidence={inferenceStatus.confidence}
+          onClose={() => setShowRoleConfirmation(false)}
+        />
+      )}
+
+      {driftAlert && !driftDismissed && (
+        <RoleDriftAlert
+          currentRole={driftAlert.previous_role}
+          inferredRole={driftAlert.suggested_role}
+          confidence={driftAlert.confidence}
+          onClose={() => setDriftDismissed(true)}
+        />
+      )}
 
       <AttentionFilters filters={filters} onChange={setFilters} />
 

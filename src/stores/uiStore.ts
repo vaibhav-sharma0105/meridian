@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 type Theme = "light" | "dark" | "system";
 type ViewMode = "list" | "kanban" | "table";
-type ActiveView = "tasks" | "meetings" | "documents" | "analytics" | "chat" | "skills" | "governance" | "activity" | "integrations";
+type ActiveView = "tasks" | "meetings" | "documents" | "analytics" | "chat" | "skills" | "governance" | "activity" | "integrations" | "messages";
 
 interface UIStore {
   theme: Theme;
@@ -20,6 +20,8 @@ interface UIStore {
   ingestModalOpen: boolean;
   skillEditorData: Record<string, unknown> | null;
   linkPickerTaskId: string | null;
+  /** Message the user deep-linked to from a notification's "View full result". */
+  focusedMessageId: string | null;
   // Actions
   setTheme: (theme: Theme) => void;
   setLanguage: (lang: string) => void;
@@ -35,6 +37,8 @@ interface UIStore {
   setIngestModalOpen: (open: boolean) => void;
   setSkillEditorData: (data: Record<string, unknown> | null) => void;
   setLinkPickerTaskId: (taskId: string | null) => void;
+  openMessageCenter: (messageId?: string) => void;
+  setFocusedMessageId: (id: string | null) => void;
 }
 
 export const useUIStore = create<UIStore>((set) => ({
@@ -53,6 +57,7 @@ export const useUIStore = create<UIStore>((set) => ({
   ingestModalOpen: false,
   skillEditorData: null,
   linkPickerTaskId: null,
+  focusedMessageId: null,
 
   setTheme: (theme) => set({ theme }),
   setLanguage: (language) => set({ language }),
@@ -63,6 +68,14 @@ export const useUIStore = create<UIStore>((set) => ({
     set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   setActiveView: (activeView) =>
     set({ activeView, selectedTaskId: null, selectedMeetingId: null }),
+  openMessageCenter: (messageId) =>
+    set({
+      activeView: "messages",
+      selectedTaskId: null,
+      selectedMeetingId: null,
+      focusedMessageId: messageId ?? null,
+    }),
+  setFocusedMessageId: (focusedMessageId) => set({ focusedMessageId }),
   setSelectedTask: (selectedTaskId) =>
     set({ selectedTaskId, selectedMeetingId: null }),
   setSelectedMeeting: (selectedMeetingId) =>

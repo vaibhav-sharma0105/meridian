@@ -13,6 +13,7 @@ import {
   Trash2,
   Zap,
   Clock,
+  Inbox,
 } from "lucide-react";
 import * as api from "@/lib/tauri";
 import toast from "react-hot-toast";
@@ -32,6 +33,8 @@ const DEFAULT_PERMISSIONS: McpPermissions = {
   delete_task: false,
   create_meeting_note: false,
   run_skill: false,
+  create_report: false,
+  draft_message: false,
   rate_limit_per_minute: 100,
 };
 
@@ -70,6 +73,15 @@ const PERMISSION_GROUPS = [
     icon: <Zap className="w-4 h-4" />,
     permissions: [
       { key: "run_skill", label: "Run Skills", risk: "high" },
+    ],
+  },
+  {
+    title: "Message Center",
+    description: "Allow AI tools to leave reports and drafts for you to review",
+    icon: <Inbox className="w-4 h-4" />,
+    permissions: [
+      { key: "create_report", label: "Create Reports", risk: "medium" },
+      { key: "draft_message", label: "Draft Messages", risk: "medium" },
     ],
   },
 ];

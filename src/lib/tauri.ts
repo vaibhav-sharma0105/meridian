@@ -195,6 +195,8 @@ export interface AppNotification {
   desktop: boolean;
   is_read: boolean;
   created_at: string;
+  /** Message Center entry holding the full result; drives "View full result". */
+  message_id: string | null;
 }
 
 export interface ChatMessage {
@@ -248,6 +250,159 @@ export interface UpdateCheckResult {
 export interface OllamaStatus {
   running: boolean;
   models: string[];
+}
+
+// ─── Message Center Types ─────────────────────────────────────────────────────
+
+export interface Message {
+  id: string;
+  project_id: string | null;
+  /** Mirrors the Rust `MessageType` enum — extend both together. */
+  message_type: "skill_result" | "digest" | "pinned_chat" | "integration_sync";
+  title: string;
+  content: string | null;
+  source_id: string | null;
+  source_type: string | null;
+  auto_pinned: boolean;
+  pinned_reason: string | null;
+  file_refs: string[] | null;
+  ai_visible_until: string | null;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateMessageInput {
+  project_id?: string;
+  message_type: string;
+  title: string;
+  content?: string;
+  source_id?: string;
+  source_type?: string;
+  auto_pinned?: boolean;
+  pinned_reason?: string;
+  file_refs?: string[];
+}
+
+export interface MessageFilters {
+  project_id?: string;
+  message_type?: string;
+  search?: string;
+  include_deleted?: boolean;
+}
+
+export interface PaginatedMessages {
+  messages: Message[];
+  total: number;
+  page: number;
+  per_page: number;
+}
+
+export interface StorageStats {
+  total_messages: number;
+  total_files: number;
+  storage_bytes: number;
+  oldest_message: string | null;
+  newest_message: string | null;
+}
+
+export interface CleanupStats {
+  soft_deleted: number;
+  hard_deleted: number;
+  files_removed: number;
+}
+
+// ─── Role Types ───────────────────────────────────────────────────────────────
+
+export interface RoleScores {
+  tech_lead: number;
+  ic: number;
+  pm: number;
+  manager: number;
+}
+
+export interface RoleClassification {
+  primary: string;
+  secondary: string | null;
+  confidence: number;
+}
+
+export type InferenceStatus =
+  | { type: "Learning"; message: string; progress: number }
+  | { type: "PendingConfirmation"; inferred: string; confidence: number }
+  | { type: "Confirmed"; role: string; secondary: string | null };
+
+export interface UserProfile {
+  id: string;
+  inferred_role: string | null;
+  secondary_role: string | null;
+  custom_role_description: string | null;
+  role_confirmed: boolean;
+  role_confirmed_at: string | null;
+  role_scores: RoleScores | null;
+  last_inference_at: string | null;
+  productivity_patterns: ProductivityPatterns | null;
+  productivity_tracking_enabled: boolean;
+  ai_context_days: number;
+  message_retention: string;
+  archive_old_files: boolean;
+  archive_after_days: number;
+  display_name: string | null;
+  user_email: string | null;
+  user_aliases: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+// ─── Productivity Types ───────────────────────────────────────────────────────
+
+export interface ProductivityPatterns {
+  task_completions_by_hour: Record<string, number[]>;
+  peak_hours: Record<string, number[]>;
+  low_productivity_hours: number[];
+  total_completions: number;
+  last_aggregation: string | null;
+  tracking_enabled: boolean;
+}
+
+export type ProductivityStatus =
+  | { type: "Ready" }
+  | { type: "Learning"; completions_needed: number }
+  | { type: "Disabled" };
+
+export interface ProductivityInsights {
+  patterns: ProductivityPatterns;
+  status: ProductivityStatus;
+  storage_warning: string | null;
+}
+
+/** Mirrors the Rust `TimeSuggestion` struct exactly — `confidence` is an enum, not a number. */
+export interface TimeSuggestion {
+  suggested_hour: number;
+  reason: string;
+  confidence: TimeSuggestionConfidence;
+}
+
+export type TimeSuggestionConfidence = "High" | "Default" | "Low";
+
+export interface BatchingSuggestion {
+  message: string;
+  /** Contiguous hours the meetings could collapse into, when one is found. */
+  suggested_block: number[] | null;
+  freed_hours: number;
+}
+
+export interface ProductivityExport {
+  peak_hours: Record<string, number[]>;
+  total_data_points: number;
+  tracking_since: string;
+}
+
+/** Mirrors the Rust `ProductivitySettings` struct taken by `update_productivity_settings`. */
+export interface ProductivitySettings {
+  tracking_enabled: boolean;
+  show_suggestions: boolean;
+  data_retention_days: number;
 }
 
 // ─── Projects ────────────────────────────────────────────────────────────────
@@ -1689,6 +1844,8 @@ export interface McpPermissions {
   delete_task: boolean;
   create_meeting_note: boolean;
   run_skill: boolean;
+  create_report: boolean;
+  draft_message: boolean;
   rate_limit_per_minute: number;
 }
 
@@ -2132,3 +2289,170 @@ export const searchCachedIntegrationItems = (
     project_id: projectId,
     limit,
   });
+
+// ─── Message Center ───────────────────────────────────────────────────────────
+
+export const createMessage = (input: CreateMessageInput) =>
+  invoke<Message>("create_message", { input });
+
+export const getMessage = (id: string) =>
+  invoke<Message>("get_message", { id });
+
+export const getMessages = (
+  filters?: MessageFilters,
+  page?: number,
+  perPage?: number
+) =>
+  invoke<PaginatedMessages>("get_messages", {
+    filters,
+    page: page ?? 1,
+    per_page: perPage ?? 20,
+  });
+
+export const getMessagesForAiContext = (
+  projectId?: string,
+  aiContextDays?: number
+) =>
+  invoke<Message[]>("get_messages_for_ai_context", {
+    project_id: projectId,
+    ai_context_days: aiContextDays ?? 30,
+  });
+
+export const softDeleteMessage = (id: string) =>
+  invoke<void>("delete_message", { id });
+
+export const restoreMessage = (id: string) =>
+  invoke<void>("restore_message", { id });
+
+export const getDeletedMessages = (limit?: number) =>
+  invoke<Message[]>("get_deleted_messages", { limit });
+
+export const pinFromSource = (
+  sourceType: string,
+  sourceId: string,
+  title: string,
+  content?: string,
+  projectId?: string
+) =>
+  invoke<Message>("pin_message", {
+    source_type: sourceType,
+    source_id: sourceId,
+    title,
+    content,
+    project_id: projectId,
+  });
+
+export const getStorageStats = () =>
+  invoke<StorageStats>("get_storage_stats", {});
+
+export const runMessageCleanup = () =>
+  invoke<CleanupStats>("cleanup_messages", {});
+
+// ─── User Role ────────────────────────────────────────────────────────────────
+
+export const getUserProfile = () =>
+  invoke<UserProfile>("get_user_profile", {});
+
+export const getInferenceStatus = () =>
+  invoke<InferenceStatus>("get_role_inference_status", {});
+
+export const confirmRole = (role: string, customDescription?: string) =>
+  invoke<UserProfile>("confirm_role", {
+    role,
+    custom_description: customDescription,
+  });
+
+export const changeRole = (role: string, customDescription?: string) =>
+  invoke<UserProfile>("change_role", {
+    role,
+    custom_description: customDescription,
+  });
+
+export const dismissDriftAlert = () =>
+  invoke<void>("dismiss_role_drift_alert", {});
+
+export const runRoleInference = () =>
+  invoke<void>("run_role_inference", {});
+
+/**
+ * Retention + AI-context-window settings live on `user_profile`, not in the
+ * ProductivitySettings struct. Separate command, separate wrapper.
+ */
+export const updateRetentionSettings = (opts: {
+  aiContextDays?: number;
+  messageRetention?: string;
+  productivityTrackingEnabled?: boolean;
+  archiveOldFiles?: boolean;
+  archiveAfterDays?: number;
+}) =>
+  invoke<UserProfile>("update_retention_settings", {
+    ai_context_days: opts.aiContextDays,
+    message_retention: opts.messageRetention,
+    productivity_tracking_enabled: opts.productivityTrackingEnabled,
+    archive_old_files: opts.archiveOldFiles,
+    archive_after_days: opts.archiveAfterDays,
+  });
+
+/**
+ * Identifies who "me" is. Role-based My Activity ordering needs this to tell
+ * the user's own items apart from their team's; without it, ordering falls
+ * back to severity + recency. Omitted fields are left unchanged.
+ */
+export const updateUserIdentity = (opts: {
+  displayName?: string;
+  userEmail?: string;
+  userAliases?: string[];
+}) =>
+  invoke<UserProfile>("update_user_identity", {
+    display_name: opts.displayName,
+    user_email: opts.userEmail,
+    user_aliases: opts.userAliases,
+  });
+
+// ─── Productivity ─────────────────────────────────────────────────────────────
+
+export const getProductivityInsights = () =>
+  invoke<ProductivityInsights>("get_productivity_insights", {});
+
+/** Suggestion for a task category ("focus_work" | "meetings" | "quick_tasks"). */
+export const getTimeSuggestion = (category: string) =>
+  invoke<TimeSuggestion | null>("get_time_suggestion_for_category", { category });
+
+/** Suggestion for a specific task — backend derives the category from the task row. */
+export const getTimeSuggestionForTask = (taskId: string) =>
+  invoke<TimeSuggestion | null>("get_time_suggestion", { task_id: taskId });
+
+/**
+ * Batching suggestion for a fragmented meeting day. `date` defaults to today
+ * (local) — the backend reads meeting hours from `meetings.meeting_at` itself.
+ */
+export const getMeetingBatchingSuggestion = (date?: string) =>
+  invoke<BatchingSuggestion | null>("get_meeting_batching_suggestion", { date });
+
+export const updateProductivitySettings = (settings: ProductivitySettings) =>
+  invoke<void>("update_productivity_settings", { settings });
+
+export const getProductivitySettings = () =>
+  invoke<ProductivitySettings>("get_productivity_settings", {});
+
+export const clearProductivityData = () =>
+  invoke<void>("clear_productivity_data", {});
+
+export const exportProductivityData = () =>
+  invoke<ProductivityExport>("export_productivity_data", {});
+
+export const aggregateProductivityPatterns = () =>
+  invoke<void>("aggregate_productivity_patterns", {});
+
+export interface RoleDriftAlert {
+  previous_role: string;
+  suggested_role: string;
+  confidence: number;
+}
+
+/**
+ * Polled, not subscribed: drift is computed by the daemon worker, which has no
+ * AppHandle and therefore cannot emit Tauri events.
+ */
+export const getRoleDriftAlert = () =>
+  invoke<RoleDriftAlert | null>("get_role_drift_alert", {});

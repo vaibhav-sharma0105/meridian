@@ -20,6 +20,8 @@ import { SkillsPage } from "@/components/skills/SkillsPage";
 import { GovernancePage } from "@/components/governance/GovernancePage";
 import { MyActivityDashboard } from "@/components/activity";
 import { IntegrationBrowser } from "@/components/integrations/IntegrationBrowser";
+import { MessageCenterView } from "@/components/messages/MessageCenterView";
+import { MeetingBatchingSuggestion } from "@/components/productivity/MeetingBatchingSuggestion";
 
 const VIEW_ICONS = {
   list: LayoutList,
@@ -58,6 +60,11 @@ export default function MainCanvas() {
   // Activity view is global (no project needed)
   if (activeView === "activity") {
     return <MyActivityDashboard />;
+  }
+
+  // Messages view is global (no project needed)
+  if (activeView === "messages") {
+    return <MessageCenterView />;
   }
 
   if (!activeProjectId && activeView !== "tasks") {
@@ -212,6 +219,7 @@ export default function MainCanvas() {
 
         {activeView === "meetings" && (
           <div className="p-5 space-y-3">
+            {meetings.length > 0 && <MeetingBatchingSuggestion />}
             {meetings.length === 0 ? (
               <EmptyState
                 title={t("meetings.noMeetings")}

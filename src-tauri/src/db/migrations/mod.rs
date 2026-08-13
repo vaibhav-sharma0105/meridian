@@ -18,6 +18,10 @@ pub mod v017_expertise_learning;
 pub mod v018_integration_visibility;
 pub mod v019_phase8_completion;
 pub mod v020_skills_automation;
+pub mod v021_message_center_role;
+pub mod v022_user_identity_and_message_links;
+pub mod v023_file_archival;
+pub mod v024_productivity_settings;
 
 pub struct Migration {
     pub version: i32,
@@ -105,6 +109,22 @@ pub fn get_all_migrations() -> Vec<Migration> {
         Migration {
             version: 20,
             sql: v020_skills_automation::SQL,
+        },
+        Migration {
+            version: 21,
+            sql: v021_message_center_role::SQL,
+        },
+        Migration {
+            version: 22,
+            sql: v022_user_identity_and_message_links::SQL,
+        },
+        Migration {
+            version: 23,
+            sql: v023_file_archival::SQL,
+        },
+        Migration {
+            version: 24,
+            sql: v024_productivity_settings::SQL,
         },
     ]
 }

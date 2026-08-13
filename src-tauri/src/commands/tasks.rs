@@ -58,6 +58,24 @@ pub async fn create_task(
         task.assignee.as_deref(),
     );
 
+    // Record role observations
+    if task.assignee.is_some() && task.assignee.as_deref() != Some("") {
+        // Creating a task for someone else suggests leadership role
+        let _ = crate::role::repository::record_role_observation(
+            &conn,
+            "creates_tasks_for_others",
+            &task.id,
+        );
+    }
+
+    // Bug tasks suggest IC work
+    if task.title.to_lowercase().contains("bug")
+        || task.title.to_lowercase().contains("fix")
+        || task.title.to_lowercase().contains("issue")
+    {
+        let _ = crate::role::repository::record_role_observation(&conn, "works_on_bugs", &task.id);
+    }
+
     Ok(task)
 }
 
@@ -100,6 +118,15 @@ pub async fn update_task(
             let old_assignee = old.assignee.as_deref().unwrap_or("");
             if new_assignee != old_assignee {
                 record_assignee_observation(&conn, &task, old_assignee, new_assignee);
+
+                // Being assigned a task suggests IC role
+                if !new_assignee.is_empty() {
+                    let _ = crate::role::repository::record_role_observation(
+                        &conn,
+                        "receives_assignments",
+                        &task.id,
+                    );
+                }
             }
         }
     }
@@ -115,6 +142,29 @@ fn extract_keywords(title: &str) -> Vec<String> {
         .filter(|w| w.len() > 2 && !stopwords.contains(w))
         .map(|s| s.to_string())
         .collect()
+}
+
+fn categorize_task(title: &str, description: Option<&str>) -> String {
+    let text = format!("{} {}", title.to_lowercase(), description.unwrap_or("").to_lowercase());
+
+    // Meeting-related keywords
+    if text.contains("meeting") || text.contains("call") || text.contains("sync")
+        || text.contains("standup") || text.contains("review") || text.contains("1:1")
+        || text.contains("1-on-1") || text.contains("retro")
+    {
+        return "meetings".to_string();
+    }
+
+    // Quick task keywords
+    if text.contains("email") || text.contains("respond") || text.contains("reply")
+        || text.contains("quick") || text.contains("fix typo") || text.contains("update doc")
+        || text.contains("slack") || text.contains("message")
+    {
+        return "quick_tasks".to_string();
+    }
+
+    // Default to focus work
+    "focus_work".to_string()
 }
 
 /// Records a task_completion pattern observation, fires the skill-trigger
@@ -138,6 +188,10 @@ fn record_completion_observation(conn: &rusqlite::Connection, task: &Task) {
     );
 
     let _ = EventDispatcher::fire_task_completed(conn, &task.id, &task.project_id, &task.title);
+
+    // Record productivity observation for time-based patterns
+    let category = categorize_task(&task.title, task.description.as_deref());
+    let _ = crate::productivity::patterns::record_completion_with_time(conn, &task.id, &category);
 
     // Learn expertise: completing a task nudges its assignee(s) toward the
     // task's keywords, promoted after repeated hits.

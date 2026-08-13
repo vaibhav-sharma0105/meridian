@@ -8,6 +8,8 @@ import ModelPicker from "./ModelPicker";
 import DaemonStatus from "@/components/settings/DaemonStatus";
 import AuditLogViewer from "@/components/settings/AuditLogViewer";
 import { LearningSettings } from "@/components/patterns";
+import { ProductivityInsights } from "@/components/productivity/ProductivityInsights";
+import { IdentitySettings } from "@/components/role/IdentitySettings";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 
 interface Props {
@@ -42,6 +44,8 @@ export default function AISettings({ open, onClose }: Props) {
   const [ollamaStatus, setOllamaStatus] = useState<"idle" | "checking" | "running" | "offline">("idle");
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [learningOpen, setLearningOpen] = useState(false);
+  const [productivityOpen, setProductivityOpen] = useState(false);
+  const [identityOpen, setIdentityOpen] = useState(false);
   const [showReembedConfirm, setShowReembedConfirm] = useState(false);
   const [pendingEmbeddingProvider, setPendingEmbeddingProvider] = useState<string | null>(null);
   const [documentsNeedingReembed, setDocumentsNeedingReembed] = useState(0);
@@ -384,6 +388,52 @@ export default function AISettings({ open, onClose }: Props) {
             {learningOpen && (
               <div className="mt-4">
                 <LearningSettings />
+              </div>
+            )}
+          </div>
+
+          {/* Productivity section */}
+          <div className="border-t border-zinc-100 dark:border-zinc-800 pt-4">
+            <button
+              onClick={() => setProductivityOpen(!productivityOpen)}
+              className="flex items-center gap-2 w-full text-left"
+            >
+              {productivityOpen ? (
+                <ChevronDown className="w-4 h-4 text-zinc-400" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-zinc-400" />
+              )}
+              <h3 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
+                Productivity
+              </h3>
+            </button>
+
+            {productivityOpen && (
+              <div className="mt-4">
+                <ProductivityInsights />
+              </div>
+            )}
+          </div>
+
+          {/* Identity section — drives role-based My Activity ordering */}
+          <div className="border-t border-zinc-100 dark:border-zinc-800 pt-4">
+            <button
+              onClick={() => setIdentityOpen(!identityOpen)}
+              className="flex items-center gap-2 w-full text-left"
+            >
+              {identityOpen ? (
+                <ChevronDown className="w-4 h-4 text-zinc-400" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-zinc-400" />
+              )}
+              <h3 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
+                Your Identity
+              </h3>
+            </button>
+
+            {identityOpen && (
+              <div className="mt-4">
+                <IdentitySettings />
               </div>
             )}
           </div>

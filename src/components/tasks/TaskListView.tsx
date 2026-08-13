@@ -7,6 +7,7 @@ import TaskCard from "./TaskCard";
 import EmptyState from "@/components/shared/EmptyState";
 import { LayoutList } from "lucide-react";
 import { WorkflowSuggestionsList, SmartDefaultBadge } from "@/components/patterns";
+import { TimeSuggestion } from "@/components/productivity/TimeSuggestion";
 import * as api from "@/lib/tauri";
 import type { Task } from "@/lib/tauri";
 
@@ -179,6 +180,7 @@ export default function TaskListView({ projectId }: Props) {
               )}
             </div>
           )}
+          <TimeSuggestion />
         </div>
       ) : (
         filtered.length > 0 && (

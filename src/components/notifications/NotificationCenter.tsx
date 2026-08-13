@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { X, Bell, CheckCheck, AlertTriangle, Info, AlertCircle, Github, Plug } from "lucide-react";
+import { X, Bell, CheckCheck, AlertTriangle, Info, AlertCircle, Github, Plug, ArrowUpRight } from "lucide-react";
 import { useNotificationStore } from "@/stores/notificationStore";
 import { useProjectStore } from "@/stores/projectStore";
+import { useUIStore } from "@/stores/uiStore";
 import { usePendingImports } from "@/hooks/usePendingImports";
 import PendingImportCard from "./PendingImportCard";
 import { SuggestionsList } from "@/components/suggestions/SuggestionsList";
@@ -58,6 +59,7 @@ export default function NotificationCenter({ open, onClose }: Props) {
   const { notifications, markAllRead, dismiss, markRead } = useNotificationStore();
   const { pendingImports, approveImport, dismissImport } = usePendingImports();
   const { projects } = useProjectStore();
+  const openMessageCenter = useUIStore((s) => s.openMessageCenter);
   const [approvalRun, setApprovalRun] = useState<SkillRun | null>(null);
 
   const handleNotificationClick = async (notif: typeof notifications[0]) => {
@@ -185,6 +187,22 @@ export default function NotificationCenter({ open, onClose }: Props) {
                         <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
                           Click to review
                         </p>
+                      )}
+                      {(notif as AppNotification).message_id && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            markRead(notif.id);
+                            openMessageCenter(
+                              (notif as AppNotification).message_id ?? undefined
+                            );
+                            onClose();
+                          }}
+                          className="flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 mt-1 font-medium"
+                        >
+                          View full result
+                          <ArrowUpRight className="w-3 h-3" />
+                        </button>
                       )}
                     </div>
                     <button

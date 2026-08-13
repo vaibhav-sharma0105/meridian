@@ -17,4 +17,25 @@ export const test = base.extend<MeridianFixtures>({
   },
 });
 
+/**
+ * Mounts the app with per-test mock overrides.
+ *
+ * Use this instead of the `mockedPage` fixture when a test needs a different
+ * backend response — overrides are baked into the init script at build time,
+ * so they cannot be changed after `mockedPage` has already navigated.
+ *
+ *   test("...", async ({ page }) => {
+ *     await mountWithMocks(page, { get_role_drift_alert: { ... } });
+ *   });
+ */
+export async function mountWithMocks(
+  page: Page,
+  overrides: Record<string, unknown> = {}
+): Promise<Page> {
+  await page.addInitScript(buildTauriMockScript(overrides));
+  await page.goto("/");
+  await page.waitForSelector("text=Meridian", { timeout: 15000 });
+  return page;
+}
+
 export { expect } from "@playwright/test";

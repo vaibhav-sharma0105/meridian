@@ -117,6 +117,29 @@ pub fn build_project_context_with_integrations(
     doc_chunks: &[crate::models::document::SearchResult],
     integration_items: &[crate::integrations::models::IntegrationCache],
 ) -> String {
+    build_project_context_full(
+        project_name,
+        open_tasks,
+        completed_tasks,
+        meetings,
+        doc_chunks,
+        integration_items,
+        &[],
+    )
+}
+
+/// Full context builder. `messages` are Message Center entries already filtered
+/// to the AI context window by `messages::get_messages_for_ai_context` — this
+/// function does no time filtering of its own.
+pub fn build_project_context_full(
+    project_name: &str,
+    open_tasks: &[crate::models::task::Task],
+    completed_tasks: &[crate::models::task::Task],
+    meetings: &[crate::models::meeting::Meeting],
+    doc_chunks: &[crate::models::document::SearchResult],
+    integration_items: &[crate::integrations::models::IntegrationCache],
+    messages: &[crate::messages::models::Message],
+) -> String {
     let mut ctx = format!("Project: {}\n\n", project_name);
 
     ctx.push_str("=== OPEN TASKS ===\n");
@@ -184,7 +207,44 @@ pub fn build_project_context_with_integrations(
         }
     }
 
+    if !messages.is_empty() {
+        ctx.push_str("\n=== MESSAGE CENTER ===\n");
+        ctx.push_str(
+            "Saved skill results, digests, and pinned conversations from the AI context window.\n",
+        );
+        for msg in messages.iter().take(20) {
+            let pin_marker = if msg.auto_pinned { " [pinned]" } else { "" };
+            ctx.push_str(&format!(
+                "- [{}]{} {} ({})\n",
+                msg.message_type, pin_marker, msg.title, msg.created_at
+            ));
+            if let Some(content) = &msg.content {
+                let preview = truncate_on_char_boundary(content, 400);
+                ctx.push_str(&format!("  {}\n", preview));
+            }
+            if let Some(refs) = &msg.file_refs {
+                if !refs.is_empty() {
+                    ctx.push_str(&format!("  Files: {}\n", refs.join(", ")));
+                }
+            }
+        }
+    }
+
     ctx
+}
+
+/// Truncates to at most `max_bytes`, never splitting a UTF-8 character.
+/// Message Center content is user/LLM-generated and routinely contains
+/// multi-byte characters, so naive slicing would panic.
+fn truncate_on_char_boundary(s: &str, max_bytes: usize) -> String {
+    if s.len() <= max_bytes {
+        return s.to_string();
+    }
+    let mut end = max_bytes;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}...", &s[..end])
 }
 
 /// Estimate token count for a string (rough approximation: ~4 chars per token)
@@ -341,4 +401,112 @@ pub fn build_integration_context_with_budget(
     }
 
     ctx
+}
+
+#[cfg(test)]
+mod message_context_tests {
+    use super::*;
+    use crate::messages::models::Message;
+
+    fn msg(title: &str, content: Option<&str>) -> Message {
+        Message {
+            id: "m1".into(),
+            project_id: Some("p1".into()),
+            message_type: "skill_result".into(),
+            title: title.into(),
+            content: content.map(String::from),
+            source_id: None,
+            source_type: None,
+            auto_pinned: false,
+            pinned_reason: None,
+            file_refs: None,
+            ai_visible_until: None,
+            deleted_at: None,
+            created_at: "2026-08-11T09:00:00Z".into(),
+            updated_at: "2026-08-11T09:00:00Z".into(),
+        }
+    }
+
+    fn ctx_with(messages: &[Message]) -> String {
+        build_project_context_full("Alpha", &[], &[], &[], &[], &[], messages)
+    }
+
+    #[test]
+    fn messages_appear_in_ai_context() {
+        let ctx = ctx_with(&[msg("Weekly Report", Some("Shipped the auth refactor."))]);
+        assert!(ctx.contains("=== MESSAGE CENTER ==="));
+        assert!(ctx.contains("Weekly Report"));
+        assert!(ctx.contains("Shipped the auth refactor."));
+    }
+
+    #[test]
+    fn no_message_section_when_empty() {
+        let ctx = ctx_with(&[]);
+        assert!(!ctx.contains("MESSAGE CENTER"));
+    }
+
+    #[test]
+    fn legacy_builder_still_omits_messages() {
+        // build_project_context delegates with an empty message slice; existing
+        // callers must not suddenly gain a Message Center section.
+        let ctx = build_project_context("Alpha", &[], &[], &[], &[]);
+        assert!(!ctx.contains("MESSAGE CENTER"));
+    }
+
+    #[test]
+    fn pinned_messages_are_marked() {
+        let mut m = msg("Important", Some("body"));
+        m.auto_pinned = true;
+        let ctx = ctx_with(&[m]);
+        assert!(ctx.contains("[pinned]"));
+    }
+
+    #[test]
+    fn file_refs_are_listed() {
+        let mut m = msg("Report", None);
+        m.file_refs = Some(vec!["2026-08-11/report.pdf".into()]);
+        let ctx = ctx_with(&[m]);
+        assert!(ctx.contains("Files: 2026-08-11/report.pdf"));
+    }
+
+    #[test]
+    fn long_content_is_truncated() {
+        let long = "x".repeat(1000);
+        let ctx = ctx_with(&[msg("Long", Some(&long))]);
+        assert!(ctx.contains("..."));
+        assert!(!ctx.contains(&"x".repeat(1000)));
+    }
+
+    #[test]
+    fn multibyte_content_truncates_without_panicking() {
+        // A naive &s[..400] would panic mid-character here. Message Center
+        // content is LLM/user generated, so this is a realistic input.
+        let emoji_heavy = "🚀".repeat(500);
+        let ctx = ctx_with(&[msg("Emoji", Some(&emoji_heavy))]);
+        assert!(ctx.contains("=== MESSAGE CENTER ==="));
+
+        let cjk = "日本語のテキスト".repeat(100);
+        let ctx = ctx_with(&[msg("CJK", Some(&cjk))]);
+        assert!(ctx.contains("CJK"));
+    }
+
+    #[test]
+    fn truncate_helper_respects_char_boundaries() {
+        let s = "🚀🚀🚀";
+        // 400 > len, returned unchanged
+        assert_eq!(truncate_on_char_boundary(s, 400), s);
+        // 5 bytes lands mid-emoji (4 bytes each) -> must back off to 4
+        let out = truncate_on_char_boundary(s, 5);
+        assert_eq!(out, "🚀...");
+    }
+
+    #[test]
+    fn caps_at_twenty_messages() {
+        let many: Vec<Message> = (0..40)
+            .map(|i| msg(&format!("Message {}", i), None))
+            .collect();
+        let ctx = ctx_with(&many);
+        assert!(ctx.contains("Message 19"));
+        assert!(!ctx.contains("Message 20"));
+    }
 }

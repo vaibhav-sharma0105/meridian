@@ -23,6 +23,10 @@ pub struct McpPermissions {
     pub create_meeting_note: bool,
     #[serde(default)]
     pub run_skill: bool,
+    #[serde(default)]
+    pub create_report: bool,
+    #[serde(default)]
+    pub draft_message: bool,
     #[serde(default = "default_rate_limit")]
     pub rate_limit_per_minute: u32,
 }
@@ -46,6 +50,8 @@ impl Default for McpPermissions {
             delete_task: false,
             create_meeting_note: false,
             run_skill: false,
+            create_report: false,
+            draft_message: false,
             rate_limit_per_minute: 100,
         }
     }
@@ -142,6 +148,8 @@ pub fn check_mcp_permission(permissions: &McpPermissions, action: &str) -> bool 
         "delete_task" => permissions.delete_task,
         "create_meeting_note" => permissions.create_meeting_note,
         "run_skill" => permissions.run_skill,
+        "create_report" => permissions.create_report,
+        "draft_message" => permissions.draft_message,
         _ => false,
     }
 }

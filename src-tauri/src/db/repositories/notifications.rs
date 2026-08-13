@@ -18,6 +18,7 @@ fn row_to_notification(row: &rusqlite::Row<'_>) -> rusqlite::Result<AppNotificat
         severity: row.get::<_, Option<String>>(9)?.unwrap_or_else(|| "info".to_string()),
         desktop: desktop != 0,
         created_at: row.get(11)?,
+        message_id: row.get(12).unwrap_or(None),
     })
 }
 
@@ -25,7 +26,7 @@ pub fn get_notifications(conn: &Connection) -> Result<Vec<AppNotification>, Stri
     let mut stmt = conn
         .prepare(
             "SELECT id, type, title, body, task_id, project_id, skill_run_id, integration_id,
-                    is_read, severity, desktop, created_at
+                    is_read, severity, desktop, created_at, message_id
              FROM notifications ORDER BY created_at DESC LIMIT 100",
         )
         .map_err(|e| e.to_string())?;
@@ -59,6 +60,51 @@ pub fn create_notification(
         "info",
         false,
     )
+}
+
+/// Creates a notification that deep-links to a Message Center entry, so the
+/// user can open the full result from the notification. Used wherever routing
+/// resolves to `MessageCenterWithNotification`.
+pub fn create_notification_for_message(
+    conn: &Connection,
+    notification_type: &str,
+    title: &str,
+    body: &str,
+    project_id: Option<&str>,
+    integration_id: Option<&str>,
+    message_id: &str,
+    severity: &str,
+    desktop: bool,
+) -> Result<AppNotification, String> {
+    let id = Uuid::new_v4().to_string();
+    let desktop_int: i32 = if desktop { 1 } else { 0 };
+
+    conn.execute(
+        "INSERT INTO notifications (id, type, title, body, project_id, integration_id,
+                                    message_id, severity, desktop)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        params![
+            id,
+            notification_type,
+            title,
+            body,
+            project_id,
+            integration_id,
+            message_id,
+            severity,
+            desktop_int
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+
+    conn.query_row(
+        "SELECT id, type, title, body, task_id, project_id, skill_run_id, integration_id,
+                is_read, severity, desktop, created_at, message_id
+         FROM notifications WHERE id = ?1",
+        params![id],
+        row_to_notification,
+    )
+    .map_err(|e| e.to_string())
 }
 
 pub fn create_notification_full(
@@ -97,7 +143,7 @@ pub fn create_notification_full(
 
     let result = conn.query_row(
         "SELECT id, type, title, body, task_id, project_id, skill_run_id, integration_id,
-                is_read, severity, desktop, created_at
+                is_read, severity, desktop, created_at, message_id
          FROM notifications WHERE id = ?1",
         params![id],
         row_to_notification,
